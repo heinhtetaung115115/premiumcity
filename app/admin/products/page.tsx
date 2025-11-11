@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { getServiceSupabaseClient } from '@/lib/supabase';
 import {
   addInventoryAction,
   createBankAccountAction,
@@ -8,22 +8,89 @@ import {
   toggleProductStockAction
 } from './actions';
 import { Button, Card, Input, TextArea } from '@/components/ui';
+import type { Product, ProductVariant, BankAccount } from '@/types/entities';
+
+function mapVariant(row: any): ProductVariant {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    name: row.name,
+    price: Number(row.price),
+    isDefault: row.is_default,
+    isActive: row.is_active,
+    position: row.position
+  };
+}
+
+function mapProduct(row: any): Product & { inventoryItems: { id: string; orderItemId: string | null }[] } {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    categoryId: row.category_id,
+    productType: row.product_type,
+    status: row.status,
+    isInStock: row.is_in_stock,
+    inputSchema: row.input_schema,
+    deliveryNote: row.delivery_note,
+    variants: (row.variants ?? []).map(mapVariant),
+    category: row.category ?? null,
+    inventoryItems: (row.inventory_items ?? []).map((item: any) => ({
+      id: item.id,
+      orderItemId: item.order_item_id ?? null
+    }))
+  };
+}
+
+function mapBank(row: any): BankAccount {
+  return {
+    id: row.id,
+    bankName: row.bank_name,
+    accountName: row.account_name,
+    accountNo: row.account_no,
+    instructions: row.instructions ?? null,
+    qrCodeUrl: row.qr_code_url ?? null,
+    isActive: row.is_active
+  };
+}
 
 export default async function AdminProductsPage() {
-  const [categories, products, banks] = await Promise.all([
-    prisma.category.findMany({ orderBy: { name: 'asc' } }),
-    prisma.product.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        variants: {
-          orderBy: { position: 'asc' }
-        },
-        category: true,
-        inventoryItems: true
-      }
-    }),
-    prisma.bankAccount.findMany({ orderBy: { bankName: 'asc' } })
+  const supabase = getServiceSupabaseClient();
+  const [categoriesData, productsData, banksData] = await Promise.all([
+    supabase.from('categories').select('id, name').order('name', { ascending: true }),
+    supabase
+      .from('products')
+      .select(
+        `id, name, slug, description, category_id, product_type, status, is_in_stock, input_schema, delivery_note,
+         category:categories(id, name),
+         variants(*),
+         inventory_items(id, order_item_id)`
+      )
+      .order('created_at', { ascending: false }),
+    supabase.from('bank_accounts').select('*').order('bank_name', { ascending: true })
   ]);
+
+  if (categoriesData.error) {
+    throw categoriesData.error;
+  }
+
+  if (productsData.error) {
+    throw productsData.error;
+  }
+
+  if (banksData.error) {
+    throw banksData.error;
+  }
+
+  const categories = categoriesData.data ?? [];
+  const products = (productsData.data ?? [])
+    .map(mapProduct)
+    .map((product) => ({
+      ...product,
+      variants: product.variants.sort((a, b) => a.position - b.position)
+    }));
+  const banks = (banksData.data ?? []).map(mapBank);
 
   return (
     <div className="space-y-8">
@@ -127,7 +194,7 @@ export default async function AdminProductsPage() {
           <Card key={product.id}>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs uppercase text-slate-500">{product.category.name}</p>
+                <p className="text-xs uppercase text-slate-500">{product.category?.name}</p>
                 <h3 className="text-lg font-medium text-emerald-300">{product.name}</h3>
                 <p className="text-sm text-slate-400">{product.productType}</p>
               </div>

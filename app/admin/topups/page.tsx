@@ -19,7 +19,7 @@ export default async function AdminTopupsPage() {
               <div>
                 <p className="text-sm text-slate-400">{new Date(topup.createdAt).toLocaleString()}</p>
                 <p className="text-lg font-medium text-slate-100">
-                  {topup.user.email} — {formatCurrency(Number(topup.amount))}
+                  {topup.user?.email ?? 'Unknown user'} — {formatCurrency(Number(topup.amount))}
                 </p>
                 <p className="text-sm text-slate-400">{topup.bankName} · ref {topup.referenceHint}</p>
                 {topup.metadata && 'note' in topup.metadata && (

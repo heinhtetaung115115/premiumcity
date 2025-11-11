@@ -2,7 +2,7 @@
 
 import { useFormState } from 'react-dom';
 import { useState } from 'react';
-import type { Product, ProductVariant } from '@prisma/client';
+import type { Product, ProductVariant } from '@/types/entities';
 import { purchaseProduct } from '@/app/product/[slug]/actions';
 import { Button, Input, TextArea } from './ui';
 import type { ProductInputField } from '@/types/product';

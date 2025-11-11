@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import sgMail from '@sendgrid/mail';
 
 type MailOptions = {
   to: string;
@@ -6,28 +6,33 @@ type MailOptions = {
   html: string;
 };
 
-let cachedTransporter: nodemailer.Transporter | null = null;
+let isConfigured = false;
 
-function getTransporter() {
-  if (cachedTransporter) return cachedTransporter;
-  const url = process.env.SMTP_URL;
-  if (!url) {
-    return null;
+function ensureConfigured() {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  if (!apiKey) {
+    return false;
   }
-  cachedTransporter = nodemailer.createTransport(url);
-  return cachedTransporter;
+  if (!isConfigured) {
+    sgMail.setApiKey(apiKey);
+    isConfigured = true;
+  }
+  return true;
 }
 
 export async function sendMail({ to, subject, html }: MailOptions) {
-  const transporter = getTransporter();
-  if (!transporter) {
-    console.info('[mailer] SMTP_URL not configured. Email would be sent to %s: %s', to, subject);
+  if (!ensureConfigured()) {
+    console.info('[mailer] SENDGRID_API_KEY not configured. Email would be sent to %s: %s', to, subject);
     console.info(html);
     return;
   }
-  await transporter.sendMail({
+
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL ?? 'no-reply@premiumcity.local';
+  const fromName = process.env.SENDGRID_FROM_NAME ?? 'PremiumCity';
+
+  await sgMail.send({
     to,
-    from: process.env.MAIL_FROM ?? 'no-reply@premiumcity.local',
+    from: { email: fromEmail, name: fromName },
     subject,
     html
   });

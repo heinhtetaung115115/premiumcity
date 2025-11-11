@@ -1,32 +1,45 @@
 # PremiumCity digital storefront
 
-A Next.js 14 + Prisma implementation of a wallet-first digital goods storefront supporting instant credential delivery, manual subscription fulfillment, wallet top ups, and an admin control panel. Styling is powered by Tailwind CSS utility classes.
+A Next.js 14 storefront for wallet-based digital goods powered by Supabase for persistence/auth data and Twilio SendGrid for transactional email. Styling uses Tailwind CSS utility classes.
 
 ## Features
 
-- Customer registration, login (NextAuth credentials provider)
-- Wallet ledger with top-up submissions and admin approval flow
+- Customer registration & login (NextAuth credentials provider backed by Supabase `users` table)
+- Wallet ledger with Supabase-stored transactions plus top-up submissions and admin approval flow
 - Category-driven catalog with instant/manual product types and variant pricing
 - Instant product stock management with credential vaulting
 - Manual orders capture custom input fields for admin fulfilment
 - Order history with copy-to-clipboard delivery details
 - Admin panel for catalog configuration, bank accounts, inventory upload, top-up review, and order inspection
-- Email notifications via SMTP (falls back to console logging if `SMTP_URL` is not set)
+- Email notifications delivered via Twilio SendGrid (console fallback when not configured)
 
 ## Getting started
 
+1. Make sure you are on the latest `work` branch revision (the project no longer ships a `prisma/` directory or `schema.prisma`). Run `git status` and `git pull` to confirm you have the Supabase version locally.
+
+2. Copy the environment template and populate credentials:
+
 ```bash
 cp .env.example .env
+```
+
+3. Initialise Supabase by running the full schema in the hosted SQL editor. Paste the contents of [`supabase/schema.sql`](supabase/schema.sql) into the SQL editor and execute it **once**; this creates all tables, enums, triggers, and helper RPC functions that the app expects. No Prisma migrations are required.
+
+4. Install dependencies and start the dev server:
+
+```bash
 npm install
-npx prisma migrate dev --name init
 npm run dev
 ```
 
-### Seed an admin user
+4. Manually insert your first admin user in Supabase (replace the email/password accordingly):
 
-```bash
-SEED_ADMIN_EMAIL=admin@example.com SEED_ADMIN_PASSWORD=supersecret npx tsx prisma/seed.ts
+```sql
+insert into public.users (email, password_hash, role)
+values ('admin@example.com', crypt('supersecret', gen_salt('bf')), 'ADMIN');
 ```
+
+> ℹ️ The schema enables the `pgcrypto` extension so `crypt`/`gen_salt` are available.
 
 Log in at `/login` with the seeded credentials to access the admin panel.
 
@@ -34,11 +47,14 @@ Log in at `/login` with the seeded credentials to access the admin panel.
 
 | Variable | Description |
 | --- | --- |
-| `DATABASE_URL` | SQLite connection string (defaults to `file:./dev.db`) |
 | `NEXTAUTH_SECRET` | Secret used by NextAuth JWT sessions |
 | `NEXTAUTH_URL` | Base URL of the deployed site |
-| `SMTP_URL` | SMTP connection string for transactional email (optional) |
-| `MAIL_FROM` | From address for outgoing email (optional) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (used on the client) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key for server actions |
+| `SENDGRID_API_KEY` | Twilio SendGrid API key |
+| `SENDGRID_FROM_EMAIL` | Verified sender email for SendGrid |
+| `SENDGRID_FROM_NAME` | Display name for outgoing email |
 | `ADMIN_ALERT_EMAIL` | Address that receives top-up/manual fulfillment alerts |
 
 ## Manual input schema format
@@ -56,10 +72,10 @@ Products that require customer input should specify JSON array of fields when cr
 
 - Customer wallet top-ups trigger an email to `ADMIN_ALERT_EMAIL`
 - Manual orders trigger admin email and, upon fulfilment, customer delivery email
-- When `SMTP_URL` is not set, payloads log to the console for development
+- When `SENDGRID_API_KEY` is not set, payloads log to the console for development
 
 ## Limitations & next steps
 
 - Payment gateway integration for automated top-up validation is not implemented
 - Admin table search is provided via browser find; dedicated filters or search endpoints can be added
-- Audit logging and fine-grained permissions can be layered on top of the current Prisma data model
+- Additional automation (low-stock alerts, daily sales summaries) can be layered on top of the Supabase functions included in `supabase/schema.sql`

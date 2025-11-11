@@ -23,7 +23,7 @@ export default async function HomePage() {
             <span className="text-lg font-medium text-emerald-400">{category.name}</span>
             <p className="mt-2 text-sm text-slate-400">{category.description ?? 'Curated digital goods.'}</p>
             <span className="mt-4 inline-block text-xs uppercase tracking-wide text-slate-500">
-              {category._count.products} products
+              {category.productCount} products
             </span>
           </Link>
         ))}

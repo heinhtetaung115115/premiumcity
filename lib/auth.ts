@@ -4,12 +4,30 @@ import { compare } from 'bcryptjs';
 import { z } from 'zod';
 import { getServiceSupabaseClient } from './supabase';
 
+const envSecret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
+
+const resolvedSecret =
+  envSecret ?? (process.env.NODE_ENV !== 'production' ? 'development-secret' : undefined);
+
+if (!resolvedSecret) {
+  throw new Error(
+    'NEXTAUTH_SECRET (or AUTH_SECRET) must be configured before building the app. Copy .env.example to .env and set a strong secret.'
+  );
+}
+
+if (!envSecret && process.env.NODE_ENV !== 'production') {
+  console.warn(
+    '[auth] NEXTAUTH_SECRET not set. Falling back to a development-only secret. Configure NEXTAUTH_SECRET before deploying.'
+  );
+}
+
 const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6)
 });
 
 export const authConfig: NextAuthConfig = {
+  secret: resolvedSecret,
   session: {
     strategy: 'jwt'
   },

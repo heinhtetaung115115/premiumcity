@@ -17,7 +17,7 @@ A Next.js 14 storefront for wallet-based digital goods powered by Supabase for p
 
 1. Make sure you are on the latest `work` branch revision (the project no longer ships a `prisma/` directory or `schema.prisma`). Run `git status` and `git pull` to confirm you have the Supabase version locally.
 
-2. Copy the environment template and populate credentials:
+2. Copy the environment template and populate credentials. `NEXTAUTH_SECRET` (or `AUTH_SECRET`) **must** be set before running `npm run build` or deploying; use any long random string for local development:
 
 ```bash
 cp .env.example .env

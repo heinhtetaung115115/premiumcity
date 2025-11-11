@@ -25,14 +25,22 @@ cp .env.example .env
 
 3. Initialise Supabase by running the full schema in the hosted SQL editor. Paste the contents of [`supabase/schema.sql`](supabase/schema.sql) into the SQL editor and execute it **once**; this creates all tables, enums, triggers, and helper RPC functions that the app expects. No Prisma migrations are required.
 
-4. Install dependencies and start the dev server:
+4. (Optional) Verify the Supabase schema with your environment variables set:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co" \
+SUPABASE_SERVICE_ROLE_KEY="service-role-key" \
+npm run verify:supabase
+```
+
+5. Install dependencies and start the dev server:
 
 ```bash
 npm install
 npm run dev
 ```
 
-4. Manually insert your first admin user in Supabase (replace the email/password accordingly):
+6. Manually insert your first admin user in Supabase (replace the email/password accordingly):
 
 ```sql
 insert into public.users (email, password_hash, role)

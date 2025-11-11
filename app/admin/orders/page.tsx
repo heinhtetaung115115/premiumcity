@@ -19,7 +19,7 @@ export default async function AdminOrdersPage() {
               <div>
                 <p className="text-sm text-slate-400">Order #{order.orderNumber}</p>
                 <p className="text-lg font-medium text-slate-100">
-                  {order.user?.email ?? 'Unknown user'} · {new Date(order.createdAt).toLocaleString()}
+                  {order.user.email} · {new Date(order.createdAt).toLocaleString()}
                 </p>
                 <p className="text-sm text-slate-400">Status: {order.status}</p>
               </div>

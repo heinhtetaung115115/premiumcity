@@ -1,7 +1,7 @@
 'use client';
 
 import { useFormState } from 'react-dom';
-import type { BankAccount } from '@/types/entities';
+import type { BankAccount } from '@prisma/client';
 import { requestTopup } from '@/app/topup/actions';
 import { Button, Input, TextArea } from './ui';
 

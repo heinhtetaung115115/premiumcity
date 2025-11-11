@@ -1,7 +1,7 @@
 'use server';
 
 import { hash } from 'bcryptjs';
-import { getServiceSupabaseClient } from '@/lib/supabase';
+import { prisma } from '@/lib/prisma';
 import { registrationSchema } from '@/utils/validators';
 
 export async function registerUser(_: unknown, formData: FormData) {
@@ -18,22 +18,7 @@ export async function registerUser(_: unknown, formData: FormData) {
     };
   }
 
-  const supabase = getServiceSupabaseClient();
-  const email = result.data.email.toLowerCase();
-
-  const { data: existing, error: existingError } = await supabase
-    .from('users')
-    .select('id')
-    .eq('email', email)
-    .maybeSingle();
-
-  if (existingError) {
-    return {
-      success: false,
-      error: existingError.message
-    };
-  }
-
+  const existing = await prisma.user.findUnique({ where: { email: result.data.email.toLowerCase() } });
   if (existing) {
     return {
       success: false,
@@ -41,18 +26,13 @@ export async function registerUser(_: unknown, formData: FormData) {
     };
   }
 
-  const { error } = await supabase.from('users').insert({
-    email,
-    name: result.data.name,
-    password_hash: await hash(result.data.password, 10)
+  await prisma.user.create({
+    data: {
+      email: result.data.email.toLowerCase(),
+      name: result.data.name,
+      passwordHash: await hash(result.data.password, 10)
+    }
   });
-
-  if (error) {
-    return {
-      success: false,
-      error: error.message
-    };
-  }
 
   return { success: true };
 }

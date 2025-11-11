@@ -14,16 +14,12 @@ export async function processTopup(_: unknown, formData: FormData) {
     return { success: false, error: 'Missing parameters' };
   }
 
-  try {
-    if (action === 'approve') {
-      await approveTopup(topupId, session.user.id!);
-    } else if (action === 'reject') {
-      await rejectTopup(topupId, session.user.id!, comment);
-    } else {
-      return { success: false, error: 'Unknown action' };
-    }
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  if (action === 'approve') {
+    await approveTopup(topupId, session.user.id!);
+  } else if (action === 'reject') {
+    await rejectTopup(topupId, session.user.id!, comment);
+  } else {
+    return { success: false, error: 'Unknown action' };
   }
 
   revalidatePath('/admin/topups');

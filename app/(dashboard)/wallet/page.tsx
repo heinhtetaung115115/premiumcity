@@ -28,19 +28,15 @@ export default async function WalletPage({ searchParams }: { searchParams: { top
         <div className="text-4xl font-semibold text-emerald-300">{wallet ? formatCurrency(Number(wallet.walletBalance)) : '—'}</div>
         <p className="mt-2 text-sm text-slate-400">Last 25 transactions</p>
         <ul className="mt-4 space-y-2 text-sm">
-          {wallet && wallet.walletTransactions.length > 0 ? (
-            wallet.walletTransactions.map((tx) => (
-              <li key={tx.id} className="flex items-center justify-between">
-                <span className="text-slate-300">{tx.type}</span>
-                <span className={Number(tx.amount) > 0 ? 'text-emerald-300' : 'text-rose-300'}>
-                  {Number(tx.amount) > 0 ? '+' : ''}
-                  {formatCurrency(Number(tx.amount))}
-                </span>
-              </li>
-            ))
-          ) : (
-            <li>No transactions yet.</li>
-          )}
+          {wallet?.walletTransactions.map((tx) => (
+            <li key={tx.id} className="flex items-center justify-between">
+              <span className="text-slate-300">{tx.type}</span>
+              <span className={Number(tx.amount) > 0 ? 'text-emerald-300' : 'text-rose-300'}>
+                {Number(tx.amount) > 0 ? '+' : ''}
+                {formatCurrency(Number(tx.amount))}
+              </span>
+            </li>
+          )) || <li>No transactions yet.</li>}
         </ul>
       </Card>
       <section className="space-y-3">

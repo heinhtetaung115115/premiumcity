@@ -1,8 +1,9 @@
+import { PrismaAdapter } from '@auth/prisma-adapter';
 import type { NextAuthConfig } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { compare } from 'bcryptjs';
 import { z } from 'zod';
-import { getServiceSupabaseClient } from './supabase';
+import { prisma } from './prisma';
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -10,6 +11,7 @@ const credentialsSchema = z.object({
 });
 
 export const authConfig: NextAuthConfig = {
+  adapter: PrismaAdapter(prisma),
   session: {
     strategy: 'jwt'
   },
@@ -29,22 +31,15 @@ export const authConfig: NextAuthConfig = {
           return null;
         }
 
-        const supabase = getServiceSupabaseClient();
-        const { data: user, error } = await supabase
-          .from('users')
-          .select('id, email, password_hash, name, role')
-          .eq('email', parsed.data.email.toLowerCase())
-          .maybeSingle();
+        const user = await prisma.user.findUnique({
+          where: { email: parsed.data.email.toLowerCase() }
+        });
 
-        if (error) {
-          throw error;
-        }
-
-        if (!user || !user.password_hash) {
+        if (!user) {
           return null;
         }
 
-        const valid = await compare(parsed.data.password, user.password_hash);
+        const valid = await compare(parsed.data.password, user.passwordHash);
         if (!valid) {
           return null;
         }
@@ -53,7 +48,7 @@ export const authConfig: NextAuthConfig = {
           id: user.id,
           email: user.email,
           name: user.name ?? undefined,
-          role: user.role ?? 'CUSTOMER'
+          role: user.role
         };
       }
     })
@@ -64,7 +59,7 @@ export const authConfig: NextAuthConfig = {
         session.user = {
           ...session.user,
           id: token.sub,
-          role: (token.role as string | undefined) ?? 'CUSTOMER'
+          role: token.role as string
         } as typeof session.user & { id: string; role: string };
       }
       return session;

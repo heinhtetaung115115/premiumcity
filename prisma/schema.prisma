@@ -1,0 +1,185 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+}
+
+enum ProductType {
+  INSTANT
+  MANUAL
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum OrderStatus {
+  PENDING_FULFILLMENT
+  FULFILLED
+  CANCELLED
+}
+
+enum WalletTransactionType {
+  TOPUP
+  PURCHASE
+  ADJUSTMENT
+  REFUND
+}
+
+enum TopupStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id                 String               @id @default(cuid())
+  email              String               @unique
+  passwordHash       String
+  name               String?
+  role               UserRole             @default(CUSTOMER)
+  walletBalance      Decimal              @default(0)
+  walletTransactions WalletTransaction[]
+  orders             Order[]
+  topups             TopupRequest[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+}
+
+model WalletTransaction {
+  id           String                 @id @default(cuid())
+  user         User                   @relation(fields: [userId], references: [id])
+  userId       String
+  type         WalletTransactionType
+  amount       Decimal
+  balanceAfter Decimal
+  reference    String?
+  metadata     Json?
+  createdAt    DateTime               @default(now())
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  description String?
+  products    Product[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Product {
+  id             String           @id @default(cuid())
+  name           String
+  slug           String           @unique
+  description    String?
+  category       Category         @relation(fields: [categoryId], references: [id])
+  categoryId     String
+  productType    ProductType
+  status         ProductStatus    @default(ACTIVE)
+  isInStock      Boolean          @default(true)
+  inputSchema    Json?
+  deliveryNote   String?
+  variants       ProductVariant[]
+  inventoryItems InventoryItem[]
+  orderItems     OrderItem[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model ProductVariant {
+  id          String    @id @default(cuid())
+  product     Product   @relation(fields: [productId], references: [id])
+  productId   String
+  name        String
+  price       Decimal
+  isDefault   Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  position    Int       @default(0)
+  inventory   InventoryItem[]
+  orderItems  OrderItem[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model InventoryItem {
+  id           String          @id @default(cuid())
+  product      Product         @relation(fields: [productId], references: [id])
+  productId    String
+  variant      ProductVariant? @relation(fields: [variantId], references: [id])
+  variantId    String?
+  payload      Json
+  note         String?
+  assignedAt   DateTime?
+  orderItem    OrderItem?      @relation(fields: [orderItemId], references: [id])
+  orderItemId  String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model Order {
+  id             String       @id @default(cuid())
+  orderNumber    Int          @default(autoincrement())
+  user           User         @relation(fields: [userId], references: [id])
+  userId         String
+  total          Decimal
+  status         OrderStatus  @default(PENDING_FULFILLMENT)
+  paymentMethod  String       @default("WALLET")
+  manualPayload  Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  orderItems     OrderItem[]
+}
+
+model OrderItem {
+  id              String          @id @default(cuid())
+  order           Order           @relation(fields: [orderId], references: [id])
+  orderId         String
+  product         Product         @relation(fields: [productId], references: [id])
+  productId       String
+  variant         ProductVariant? @relation(fields: [variantId], references: [id])
+  variantId       String?
+  quantity        Int             @default(1)
+  price           Decimal
+  manualInput     Json?
+  deliveredData   Json?
+  deliveryStatus  OrderStatus     @default(PENDING_FULFILLMENT)
+  inventoryItems  InventoryItem[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model TopupRequest {
+  id            String        @id @default(cuid())
+  user          User          @relation(fields: [userId], references: [id])
+  userId        String
+  amount        Decimal
+  bankName      String
+  referenceHint String
+  status        TopupStatus   @default(PENDING)
+  adminComment  String?
+  metadata      Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model BankAccount {
+  id           String   @id @default(cuid())
+  bankName     String
+  accountName  String
+  accountNo    String
+  qrCodeUrl    String?
+  instructions String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

@@ -58,9 +58,11 @@ Log in at `/login` with the seeded credentials to access the admin panel.
 1. Create a new project from this repository in the Vercel dashboard.
 2. In **Project Settings → Environment Variables**, add the variables listed above. Use your production Supabase credentials, set
    `NEXTAUTH_URL` to your Vercel domain (for example `https://premiumcity.vercel.app`), and choose a strong `NEXTAUTH_SECRET`.
-3. Trigger a new deployment. The catalog and product pages are forced to render dynamically so they no longer try to run Supabase
-   queries during the build step, avoiding `SUPABASE_SERVICE_ROLE_KEY` errors when the build environment lacks that secret. The
-   lock to `next-auth@4.18.8` ensures the build keeps using the CommonJS `jose` runtime that Webpack can bundle successfully.
+3. Trigger a new deployment. The repo ships an `.npmrc` with `legacy-peer-deps=true` so Vercel installs succeed despite the
+   `next-auth@4.18.8` peer warning against Next 14; no additional build flags are required. Catalog and product pages are forced
+   to render dynamically so they no longer try to run Supabase queries during the build step, avoiding `SUPABASE_SERVICE_ROLE_KEY`
+   errors when the build environment lacks that secret. The lock to `next-auth@4.18.8` keeps the build on the CommonJS `jose`
+   runtime that Webpack can bundle successfully.
 4. After the first deploy, seed at least one admin user through the Supabase SQL editor or an admin script so you can log in to the
    dashboard in production.
 

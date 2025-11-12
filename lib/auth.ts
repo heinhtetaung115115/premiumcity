@@ -1,5 +1,5 @@
-import type { NextAuthConfig } from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
+import type { NextAuthOptions } from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
 import { compare } from 'bcryptjs';
 import { z } from 'zod';
 import { getServiceSupabaseClient } from './supabase';
@@ -26,7 +26,7 @@ const credentialsSchema = z.object({
   password: z.string().min(6)
 });
 
-export const authConfig: NextAuthConfig = {
+export const authConfig: NextAuthOptions = {
   secret: resolvedSecret,
   session: {
     strategy: 'jwt'
@@ -35,7 +35,7 @@ export const authConfig: NextAuthConfig = {
     signIn: '/login'
   },
   providers: [
-    Credentials({
+    CredentialsProvider({
       name: 'Credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },

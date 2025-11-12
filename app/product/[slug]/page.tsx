@@ -4,6 +4,8 @@ import { ProductPurchaseForm } from '@/components/product-purchase-form';
 import { formatCurrency } from '@/utils/currency';
 import type { ProductInputField } from '@/types/product';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ProductPage({ params }: { params: { slug: string } }) {
   const product = await getProductBySlug(params.slug);
   if (!product) {

@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation';
 import { getCategoryBySlug } from '@/lib/catalog';
 import { formatCurrency } from '@/utils/currency';
 
+export const dynamic = 'force-dynamic';
+
 export default async function CategoryPage({ params }: { params: { slug: string } }) {
   const category = await getCategoryBySlug(params.slug);
   if (!category) {

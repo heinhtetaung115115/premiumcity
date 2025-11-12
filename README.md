@@ -51,6 +51,16 @@ values ('admin@example.com', crypt('supersecret', gen_salt('bf')), 'ADMIN');
 
 Log in at `/login` with the seeded credentials to access the admin panel.
 
+## Deploying to Vercel
+
+1. Create a new project from this repository in the Vercel dashboard.
+2. In **Project Settings → Environment Variables**, add the variables listed above. Use your production Supabase credentials, set
+   `NEXTAUTH_URL` to your Vercel domain (for example `https://premiumcity.vercel.app`), and choose a strong `NEXTAUTH_SECRET`.
+3. Trigger a new deployment. The catalog and product pages are forced to render dynamically so they no longer try to run Supabase
+   queries during the build step, avoiding `SUPABASE_SERVICE_ROLE_KEY` errors when the build environment lacks that secret.
+4. After the first deploy, seed at least one admin user through the Supabase SQL editor or an admin script so you can log in to the
+   dashboard in production.
+
 ## Environment variables
 
 | Variable | Description |

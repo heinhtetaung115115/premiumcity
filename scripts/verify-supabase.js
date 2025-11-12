@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-const { createClient } = require('@supabase/supabase-js');
+
+const REST_ENDPOINT = '/rest/v1';
 
 function getSupabaseUrl() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   if (!url) {
     throw new Error('Set NEXT_PUBLIC_SUPABASE_URL or SUPABASE_URL before running this script.');
   }
-  return url;
+  return url.replace(/\/$/, '');
 }
 
 function getServiceKey() {
@@ -38,53 +39,100 @@ const REQUIRED_FUNCTIONS = [
   'reject_topup'
 ];
 
-async function fetchExistingTables(client) {
-  const { data, error } = await client
-    .from('information_schema.tables')
-    .select('table_name')
-    .eq('table_schema', 'public')
-    .in('table_name', REQUIRED_TABLES);
-  if (error) {
-    throw new Error(`Failed to read table metadata: ${error.message}`);
+function encodeValue(value) {
+  if (value === null || value === undefined) {
+    return 'null';
   }
-  return (data ?? []).map((row) => row.table_name);
+  if (typeof value === 'string') {
+    return encodeURIComponent(value);
+  }
+  return encodeURIComponent(String(value));
 }
 
-async function fetchExistingFunctions(client) {
-  const { data, error } = await client
-    .from('information_schema.routines')
-    .select('routine_name')
-    .eq('specific_schema', 'public')
-    .in('routine_name', REQUIRED_FUNCTIONS);
-  if (error) {
-    throw new Error(`Failed to read routine metadata: ${error.message}`);
+async function restSelect({ table, columns, schema = 'public', filters = [], limit }) {
+  const baseUrl = getSupabaseUrl();
+  const apiKey = getServiceKey();
+  const url = new URL(`${baseUrl}${REST_ENDPOINT}/${table}`);
+
+  url.searchParams.set('select', columns);
+
+  for (const filter of filters) {
+    if (filter.type === 'eq') {
+      url.searchParams.append(filter.column, `eq.${encodeValue(filter.value)}`);
+    } else if (filter.type === 'in') {
+      const encoded = filter.values.map((value) => encodeValue(value)).join(',');
+      url.searchParams.append(filter.column, `in.(${encoded})`);
+    }
   }
-  return (data ?? []).map((row) => row.routine_name);
+
+  if (typeof limit === 'number') {
+    url.searchParams.set('limit', String(limit));
+  }
+
+  const headers = {
+    apikey: apiKey,
+    Authorization: `Bearer ${apiKey}`,
+    Accept: 'application/json'
+  };
+
+  if (schema !== 'public') {
+    headers['Accept-Profile'] = schema;
+  }
+
+  const response = await fetch(url, { headers });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Failed to query ${table}`);
+  }
+
+  const text = await response.text();
+  return text ? JSON.parse(text) : [];
 }
 
-async function ensureExtension(client, name) {
-  const { data, error } = await client
-    .schema('pg_catalog')
-    .from('pg_extension')
-    .select('extname')
-    .eq('extname', name)
-    .limit(1);
-  if (error) {
-    throw new Error(`Failed to confirm ${name} extension: ${error.message}`);
-  }
-  return data.length > 0;
+async function fetchExistingTables() {
+  const rows = await restSelect({
+    table: 'tables',
+    schema: 'information_schema',
+    columns: 'table_name',
+    filters: [
+      { type: 'eq', column: 'table_schema', value: 'public' },
+      { type: 'in', column: 'table_name', values: REQUIRED_TABLES }
+    ]
+  });
+  return rows.map((row) => row.table_name);
+}
+
+async function fetchExistingFunctions() {
+  const rows = await restSelect({
+    table: 'routines',
+    schema: 'information_schema',
+    columns: 'routine_name',
+    filters: [
+      { type: 'eq', column: 'specific_schema', value: 'public' },
+      { type: 'in', column: 'routine_name', values: REQUIRED_FUNCTIONS }
+    ]
+  });
+  return rows.map((row) => row.routine_name);
+}
+
+async function ensureExtension(name) {
+  const rows = await restSelect({
+    table: 'pg_extension',
+    schema: 'pg_catalog',
+    columns: 'extname',
+    filters: [{ type: 'eq', column: 'extname', value: name }],
+    limit: 1
+  });
+  return rows.length > 0;
 }
 
 async function main() {
   try {
-    const client = createClient(getSupabaseUrl(), getServiceKey(), {
-      auth: { persistSession: false }
-    });
-
     const [tables, functions, hasPgcrypto] = await Promise.all([
-      fetchExistingTables(client),
-      fetchExistingFunctions(client),
-      ensureExtension(client, 'pgcrypto')
+      fetchExistingTables(),
+      fetchExistingFunctions(),
+      ensureExtension('pgcrypto')
     ]);
 
     const missingTables = REQUIRED_TABLES.filter((table) => !tables.includes(table));

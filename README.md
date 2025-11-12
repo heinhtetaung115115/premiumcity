@@ -33,9 +33,11 @@ SUPABASE_SERVICE_ROLE_KEY="service-role-key" \
 npm run verify:supabase
 ```
 
-5. Install dependencies and start the dev server:
+5. Install dependencies and start the dev server. If you previously installed packages before pulling the latest branch, remove
+   your local `node_modules` folder first so npm resolves the pinned NextAuth 4.x release shipped with this project:
 
 ```bash
+rm -rf node_modules
 npm install
 npm run dev
 ```
@@ -57,7 +59,8 @@ Log in at `/login` with the seeded credentials to access the admin panel.
 2. In **Project Settings → Environment Variables**, add the variables listed above. Use your production Supabase credentials, set
    `NEXTAUTH_URL` to your Vercel domain (for example `https://premiumcity.vercel.app`), and choose a strong `NEXTAUTH_SECRET`.
 3. Trigger a new deployment. The catalog and product pages are forced to render dynamically so they no longer try to run Supabase
-   queries during the build step, avoiding `SUPABASE_SERVICE_ROLE_KEY` errors when the build environment lacks that secret.
+   queries during the build step, avoiding `SUPABASE_SERVICE_ROLE_KEY` errors when the build environment lacks that secret. The
+   lock to `next-auth@4.18.8` ensures the build keeps using the CommonJS `jose` runtime that Webpack can bundle successfully.
 4. After the first deploy, seed at least one admin user through the Supabase SQL editor or an admin script so you can log in to the
    dashboard in production.
 

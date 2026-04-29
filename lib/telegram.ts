@@ -1,10 +1,6 @@
 // lib/telegram.ts
 // Telegram Bot helper for PremiumCity admin notifications
 // ──────────────────────────────────────────────────────────
-// ENV vars required:
-//   TELEGRAM_BOT_TOKEN   – from @BotFather
-//   TELEGRAM_CHAT_ID     – your personal / group chat ID
-// ──────────────────────────────────────────────────────────
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
@@ -14,7 +10,7 @@ function tgApi(method: string) {
   return `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
 }
 
-// ─── Low-level send ─────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────
 
 type InlineButton = {
   text: string;
@@ -24,18 +20,27 @@ type InlineButton = {
 
 type SendOptions = {
   text: string;
+  chatId?: string | number;
   parseMode?: 'HTML' | 'MarkdownV2';
   buttons?: InlineButton[][];
 };
 
+// ─── Low-level send ─────────────────────────────────────
+
 export async function sendTelegramMessage(opts: SendOptions): Promise<boolean> {
-  if (!BOT_TOKEN || !CHAT_ID) {
-    console.warn('[telegram] BOT_TOKEN or CHAT_ID not set – skipping notification');
+  if (!BOT_TOKEN) {
+    console.warn('[telegram] BOT_TOKEN not set – skipping');
+    return false;
+  }
+
+  const targetChat = opts.chatId || CHAT_ID;
+  if (!targetChat) {
+    console.warn('[telegram] No chat ID – skipping');
     return false;
   }
 
   const body: Record<string, unknown> = {
-    chat_id: CHAT_ID,
+    chat_id: targetChat,
     text: opts.text,
     parse_mode: opts.parseMode ?? 'HTML',
   };
@@ -86,19 +91,26 @@ export async function editMessageText(
   chatId: string | number,
   messageId: number,
   text: string,
-  parseMode: string = 'HTML'
+  parseMode: string = 'HTML',
+  buttons?: InlineButton[][]
 ): Promise<void> {
   if (!BOT_TOKEN) return;
+
+  const body: Record<string, unknown> = {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: parseMode,
+  };
+
+  if (buttons && buttons.length > 0) {
+    body.reply_markup = { inline_keyboard: buttons };
+  }
 
   await fetch(tgApi('editMessageText'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      message_id: messageId,
-      text,
-      parse_mode: parseMode,
-    }),
+    body: JSON.stringify(body),
   }).catch(() => {});
 }
 
@@ -109,6 +121,46 @@ function esc(str: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+// ─── Dashboard menu ─────────────────────────────────────
+
+export function getDashboardButtons(): InlineButton[][] {
+  return [
+    [
+      { text: '📊 Status', callback_data: 'menu:status' },
+      { text: '💰 Pending Top-ups', callback_data: 'menu:topups' },
+    ],
+    [
+      { text: '📦 Pending Orders', callback_data: 'menu:orders' },
+      { text: '🔄 Refresh', callback_data: 'menu:refresh' },
+    ],
+    [
+      { text: '🌐 Open Admin Panel', url: `${SITE_URL}/admin` },
+    ],
+  ];
+}
+
+export function getDashboardText(stats?: {
+  pendingTopups: number;
+  pendingOrders: number;
+}): string {
+  if (!stats) {
+    return [
+      '🏠 <b>PremiumCity Admin Dashboard</b>',
+      '',
+      'Tap a button below to get started.',
+    ].join('\n');
+  }
+
+  return [
+    '🏠 <b>PremiumCity Admin Dashboard</b>',
+    '',
+    `💰 Pending top-ups: <b>${stats.pendingTopups}</b>`,
+    `📦 Pending orders: <b>${stats.pendingOrders}</b>`,
+    '',
+    `🕐 Updated: ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Yangon', hour: '2-digit', minute: '2-digit', hour12: true })}`,
+  ].join('\n');
 }
 
 // ─── Formatted notifications ────────────────────────────
@@ -129,8 +181,6 @@ export async function notifyNewTopup(topup: {
     `🏦 <b>Bank:</b> ${esc(topup.bankName || 'N/A')}`,
     `🔢 <b>Last 4:</b> ${topup.last4}`,
     `📋 <b>Method:</b> ${topup.method || 'account'}`,
-    '',
-    `🔗 <a href="${SITE_URL}/admin/topups">Open Admin Panel</a>`,
   ].join('\n');
 
   return sendTelegramMessage({
@@ -168,8 +218,6 @@ export async function notifyNewManualOrder(order: {
     '',
     `📝 <b>Customer Input:</b>`,
     inputLines,
-    '',
-    `🔗 <a href="${SITE_URL}/admin/orders">Open Admin Panel</a>`,
   ].join('\n');
 
   return sendTelegramMessage({
@@ -185,20 +233,16 @@ export async function notifyPendingSummary(summary: {
   pendingManualOrders: number;
 }): Promise<boolean> {
   if (summary.pendingTopups === 0 && summary.pendingManualOrders === 0) {
-    return false; // nothing pending, don't spam
+    return false;
   }
 
   const text = [
-    '🔔 <b>PremiumCity – Pending Items Reminder</b>',
+    '🔔 <b>Reminder – Pending Items</b>',
     '',
     `💰 Pending top-ups: <b>${summary.pendingTopups}</b>`,
-    `📦 Unfulfilled manual orders: <b>${summary.pendingManualOrders}</b>`,
     '',
     summary.pendingTopups > 0
       ? `👉 <a href="${SITE_URL}/admin/topups">Review Top-ups</a>`
-      : '',
-    summary.pendingManualOrders > 0
-      ? `👉 <a href="${SITE_URL}/admin/orders">Review Orders</a>`
       : '',
   ]
     .filter(Boolean)

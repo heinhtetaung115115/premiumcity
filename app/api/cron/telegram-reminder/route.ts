@@ -54,7 +54,7 @@ export async function GET(req: Request) {
       .select('id')
       .eq('status', 'PENDING');
 
-    const pendingTopups = (topups ?? []).length;
+    const pendingTopups = ((topups ?? []) as any[]).length;
 
     if (pendingTopups === 0) {
       return NextResponse.json({ message: 'No pending top-ups, no notification sent' });

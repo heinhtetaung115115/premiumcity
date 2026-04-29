@@ -292,8 +292,8 @@ async function handleStatusCommand() {
       .eq('status', 'PENDING_FULFILLMENT');
 
     await notifyPendingSummary({
-      pendingTopups: (topups ?? []).length,
-      pendingManualOrders: (orders ?? []).length,
+      pendingTopups: ((topups ?? []) as any[]).length,
+      pendingManualOrders: ((orders ?? []) as any[]).length,
     });
   } catch (err) {
     console.error('[telegram] status command error:', err);

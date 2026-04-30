@@ -611,26 +611,107 @@ export function OrdersListClient({ orders }: OrdersListClientProps) {
                             !isVpn &&
                             !hasCreds &&
                             statusUpper !== 'CANCELLED' && (
-                              <div className="mt-3 flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-950/20 p-3">
-                                <span className="mt-1 h-2 w-2 flex-shrink-0 animate-pulse rounded-full bg-amber-400" />
-                                <div className="space-y-1 text-xs text-amber-100">
-                                  <p className="font-semibold">
-                                    Manual delivery in progress
+                              <div className="mt-3 overflow-hidden rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/40 to-slate-900/60 p-4">
+                                {/* Animated header */}
+                                <div className="flex items-center gap-3">
+                                  <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center">
+                                    <div className="absolute inset-0 rounded-full border-2 border-emerald-500/20" />
+                                    <div
+                                      className="absolute inset-0 rounded-full border-2 border-transparent border-t-emerald-400"
+                                      style={{
+                                        animation: 'pc-spin 1.5s linear infinite',
+                                      }}
+                                    />
+                                    <span className="text-lg">📦</span>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-semibold text-emerald-100">
+                                      We&apos;re preparing your order
+                                    </p>
+                                    <p className="text-[11px] text-emerald-400/60">
+                                      Order received • In progress
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Progress steps with connected vertical line */}
+                                <div className="relative mt-5 ml-1.5">
+                                  {/* Vertical connector line */}
+                                  <div
+                                    className="absolute left-[9px] top-[20px] w-[2px]"
+                                    style={{ height: 'calc(100% - 20px)' }}
+                                  >
+                                    {/* Completed segment (step 1 to step 2) */}
+                                    <div className="h-1/2 w-full bg-emerald-500/60" />
+                                    {/* Pending segment (step 2 to step 3) */}
+                                    <div className="h-1/2 w-full bg-slate-700/50" style={{
+                                      backgroundImage: 'repeating-linear-gradient(to bottom, transparent, transparent 3px, rgb(51 65 85 / 0.5) 3px, rgb(51 65 85 / 0.5) 6px)',
+                                      backgroundColor: 'transparent',
+                                    }} />
+                                  </div>
+
+                                  {/* Step 1: Payment confirmed - completed */}
+                                  <div className="relative flex items-center gap-3 pb-5">
+                                    <div className="z-10 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30">
+                                      <svg className="h-3 w-3 text-slate-950" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    </div>
+                                    <p className="text-xs text-emerald-300">
+                                      Payment confirmed &amp; order received
+                                    </p>
+                                  </div>
+
+                                  {/* Step 2: Preparing - in progress */}
+                                  <div className="relative flex items-center gap-3 pb-5">
+                                    <div className="z-10 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 border-emerald-400 bg-slate-900 shadow-sm shadow-emerald-400/20">
+                                      <span
+                                        className="h-2 w-2 rounded-full bg-emerald-400"
+                                        style={{
+                                          animation: 'pc-pulse 1.5s ease-in-out infinite',
+                                        }}
+                                      />
+                                    </div>
+                                    <p className="text-xs font-medium text-emerald-200">
+                                      Preparing your product...
+                                    </p>
+                                  </div>
+
+                                  {/* Step 3: Delivery - pending */}
+                                  <div className="relative flex items-center gap-3">
+                                    <div className="z-10 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 border-slate-700 bg-slate-900">
+                                      <span className="h-2 w-2 rounded-full bg-slate-600" />
+                                    </div>
+                                    <p className="text-xs text-slate-500">
+                                      Deliver to your account
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Info note */}
+                                <div className="mt-4 rounded-lg bg-slate-950/60 px-3 py-2.5">
+                                  <p className="text-[11px] leading-relaxed text-slate-300">
+                                    📧 You&apos;ll receive an <span className="font-semibold text-emerald-300">email notification</span> once
+                                    your order is delivered. Your login details will
+                                    also appear right here.
                                   </p>
-                                  <p>
-                                    We received your order and will deliver your
-                                    access as soon as possible. Once we finish
-                                    delivery, we will update your login details
-                                    here.
-                                  </p>
-                                  <p className="text-amber-200">
+                                  <p className="mt-1.5 text-[11px] text-slate-500">
                                     Typical delivery time:{' '}
-                                    <span className="font-semibold">
-                                      15 minutes – 8 hours
-                                    </span>{' '}
-                                    after your payment is confirmed.
+                                    <span className="font-medium text-slate-400">
+                                      15 min – 8 hours
+                                    </span>
                                   </p>
                                 </div>
+
+                                <style>{`
+                                  @keyframes pc-spin {
+                                    to { transform: rotate(360deg); }
+                                  }
+                                  @keyframes pc-pulse {
+                                    0%, 100% { opacity: 1; transform: scale(1); }
+                                    50% { opacity: 0.3; transform: scale(0.6); }
+                                  }
+                                `}</style>
                               </div>
                             )}
                         </div>

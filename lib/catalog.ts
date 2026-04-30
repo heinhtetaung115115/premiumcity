@@ -117,6 +117,108 @@ function mapProduct(
 }
 
 /**
+ * Home page – fetch ALL active products across all categories,
+ * with their variants, inventory counts, and category info.
+ */
+export async function getAllProducts() {
+  const supabase = getServiceSupabaseClient();
+
+  // Parallel fetch: categories, products, variants, inventory
+  const [
+    { data: categoryRows, error: catError },
+    { data: productRows, error: prodError },
+  ] = await Promise.all([
+    supabase
+      .from('categories')
+      .select('id,name,slug,description')
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('products')
+      .select(
+        'id,name,slug,description,category_id,product_type,status,is_in_stock,input_schema,delivery_note'
+      )
+      .eq('status', 'ACTIVE')
+      .order('created_at', { ascending: true }),
+  ]);
+
+  if (catError) throw catError;
+  if (prodError) throw prodError;
+
+  const categories = (categoryRows ?? []) as CategoryRow[];
+  const products = (productRows ?? []) as ProductRow[];
+  const productIds = products.map((p) => p.id);
+
+  if (productIds.length === 0) {
+    return { categories: [], products: [] };
+  }
+
+  const [
+    { data: variantRows, error: varError },
+    { data: inventoryRows, error: invError },
+  ] = await Promise.all([
+    supabase
+      .from('product_variants')
+      .select('id,product_id,name,price,is_default,is_active,position,created_at')
+      .in('product_id', productIds),
+    supabase
+      .from('inventory_items')
+      .select('product_id,order_item_id')
+      .in('product_id', productIds),
+  ]);
+
+  if (varError) throw varError;
+  if (invError) throw invError;
+
+  const variants = (variantRows ?? []) as VariantRow[];
+  const inventory = (inventoryRows ?? []) as InventoryRow[];
+
+  // Build maps
+  const variantsByProduct: Record<string, VariantRow[]> = {};
+  for (const v of variants) {
+    if (!v.is_active) continue;
+    if (!variantsByProduct[v.product_id]) {
+      variantsByProduct[v.product_id] = [];
+    }
+    variantsByProduct[v.product_id].push(v);
+  }
+  for (const pid of Object.keys(variantsByProduct)) {
+    variantsByProduct[pid] = sortVariantsForDisplay(variantsByProduct[pid]);
+  }
+
+  const inventoryByProduct: Record<string, number> = {};
+  for (const row of inventory) {
+    if (!row.order_item_id) {
+      inventoryByProduct[row.product_id] =
+        (inventoryByProduct[row.product_id] ?? 0) + 1;
+    }
+  }
+
+  const categoryById: Record<string, { id: string; name: string; slug: string }> = {};
+  for (const c of categories) {
+    categoryById[c.id] = { id: c.id, name: c.name, slug: c.slug };
+  }
+
+  const resultProducts = products.map((p) => {
+    const productVariants = variantsByProduct[p.id] ?? [];
+    const availableCount = inventoryByProduct[p.id] ?? 0;
+    const mapped = mapProduct(p, productVariants, availableCount);
+    return {
+      ...mapped,
+      categoryName: categoryById[p.category_id]?.name ?? 'Other',
+      categorySlug: categoryById[p.category_id]?.slug ?? '',
+    };
+  });
+
+  // Only return categories that have active products
+  const usedCategoryIds = new Set(products.map((p) => p.category_id));
+  const activeCategories = categories
+    .filter((c) => usedCategoryIds.has(c.id))
+    .map((c) => ({ id: c.id, name: c.name, slug: c.slug }));
+
+  return { categories: activeCategories, products: resultProducts };
+}
+
+/**
  * Home page – list categories that have at least one ACTIVE product.
  * We don't care about stock here; if a category has any ACTIVE product, it shows.
  */

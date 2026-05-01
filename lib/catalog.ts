@@ -163,7 +163,9 @@ export async function getAllProducts() {
     supabase
       .from('inventory_items')
       .select('product_id,order_item_id')
-      .in('product_id', productIds),
+      .in('product_id', productIds)
+      .is('order_item_id', null)
+      .limit(10000),
   ]);
 
   if (varError) throw varError;
@@ -187,10 +189,9 @@ export async function getAllProducts() {
 
   const inventoryByProduct: Record<string, number> = {};
   for (const row of inventory) {
-    if (!row.order_item_id) {
-      inventoryByProduct[row.product_id] =
-        (inventoryByProduct[row.product_id] ?? 0) + 1;
-    }
+    // Already filtered to unused items (order_item_id IS NULL) in query
+    inventoryByProduct[row.product_id] =
+      (inventoryByProduct[row.product_id] ?? 0) + 1;
   }
 
   const categoryById: Record<string, { id: string; name: string; slug: string }> = {};
@@ -367,11 +368,13 @@ export async function getCategoryBySlug(slug: string) {
     variantsByProduct[pid] = sortVariantsForDisplay(variantsByProduct[pid]);
   }
 
-  // 4) Inventory for these products
+  // 4) Inventory for these products (only unused items)
   const { data: inventoryRows, error: invError } = await supabase
     .from('inventory_items')
     .select('product_id,order_item_id')
-    .in('product_id', productIds);
+    .in('product_id', productIds)
+    .is('order_item_id', null)
+    .limit(10000);
 
   if (invError) throw invError;
 
@@ -380,10 +383,8 @@ export async function getCategoryBySlug(slug: string) {
   // Build productId -> available count
   const inventoryByProduct: Record<string, number> = {};
   for (const row of inventory) {
-    if (!row.order_item_id) {
-      inventoryByProduct[row.product_id] =
-        (inventoryByProduct[row.product_id] ?? 0) + 1;
-    }
+    inventoryByProduct[row.product_id] =
+      (inventoryByProduct[row.product_id] ?? 0) + 1;
   }
 
   // 5) Combine everything

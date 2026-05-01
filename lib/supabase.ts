@@ -7,7 +7,8 @@ type QueryResponse<T = unknown> = {
 
 type Filter =
   | { type: 'eq'; column: string; value: unknown }
-  | { type: 'in'; column: string; values: unknown[] };
+  | { type: 'in'; column: string; values: unknown[] }
+  | { type: 'is'; column: string; value: null | boolean };
 
 type Order = { column: string; ascending: boolean };
 
@@ -116,6 +117,8 @@ class SupabaseRestClient {
       } else if (filter.type === 'in') {
         const encoded = filter.values.map((value) => encodeValue(value)).join(',');
         url.searchParams.append(filter.column, `in.(${encoded})`);
+      } else if (filter.type === 'is') {
+        url.searchParams.append(filter.column, `is.${encodeValue(filter.value)}`);
       }
     }
 
@@ -207,6 +210,11 @@ class SupabaseSelectQuery {
 
   in(column: string, values: unknown[]) {
     this.filters.push({ type: 'in', column, values });
+    return this;
+  }
+
+  is(column: string, value: null | boolean) {
+    this.filters.push({ type: 'is', column, value });
     return this;
   }
 

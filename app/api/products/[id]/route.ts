@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getProductBySlug } from '@/lib/catalog';
 
-export async function GET(_: Request, { params }: { params: { slug: string } }) {
-  const product = await getProductBySlug(params.slug);
+export async function GET(_: Request, { params }: { params: { id: string } }) {
+  const product = await getProductBySlug(params.id);
   if (!product) {
     return new NextResponse('Not found', { status: 404 });
   }

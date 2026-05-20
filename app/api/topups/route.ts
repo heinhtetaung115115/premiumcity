@@ -92,7 +92,8 @@ export async function POST(req: Request) {
       method,
       status: 'PENDING'
     })
-    .single();
+    .select('id')
+    .maybeSingle();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
@@ -103,62 +104,66 @@ export async function POST(req: Request) {
   const userName =
     (session.user as any).name || userEmail || null;
 
-  // ----- USER EMAIL -----
-  try {
-    const { html, text } = tplTopupSubmitted(userName, amount, last4);
+  // For KBZ auto-verify (method='qr'), skip ALL notifications.
+  // The verify-slip route handles everything for KBZ.
+  const isKbzAuto = method === 'qr';
 
-    await sendEmail({
-      to: userEmail,
-      subject: 'We received your top-up request',
-      text,
-      html
-    });
-  } catch (err) {
-    console.error('Failed to send user topup email', err);
-  }
-
-  // ----- ADMIN EMAIL -----
-  try {
-    const admins = getAdminRecipients();
-    if (admins.length > 0) {
-      // Build a human-readable payment description
-      const paymentInfo =
-        method === 'qr'
-          ? `QR payment to ${bankName || 'Unknown bank'}`
-          : `Account transfer to ${bankName || 'Unknown bank'}${accountNo ? ` (${accountNo})` : ''}`;
-
-      const { html, text } = tplTopupAdminNotify(
-        userEmail,
-        amount,
-        last4,
-        (data as any)?.id ?? null,
-        paymentInfo
-      );
-
+  if (!isKbzAuto) {
+    // ----- USER EMAIL (manual topups only) -----
+    try {
+      const { html, text } = tplTopupSubmitted(userName, amount, last4);
       await sendEmail({
-        to: admins,
-        subject: 'New top-up submitted',
+        to: userEmail,
+        subject: 'We received your top-up request',
         text,
         html
       });
+    } catch (err) {
+      console.error('Failed to send user topup email', err);
     }
-  } catch (err) {
-    console.error('Failed to send admin topup email', err);
+
+    // ----- ADMIN EMAIL (manual topups only) -----
+    try {
+      const admins = getAdminRecipients();
+      if (admins.length > 0) {
+        const paymentInfo =
+          method === 'qr'
+            ? `QR payment to ${bankName || 'Unknown bank'}`
+            : `Account transfer to ${bankName || 'Unknown bank'}${accountNo ? ` (${accountNo})` : ''}`;
+
+        const { html, text } = tplTopupAdminNotify(
+          userEmail,
+          amount,
+          last4,
+          (data as any)?.id ?? null,
+          paymentInfo
+        );
+
+        await sendEmail({
+          to: admins,
+          subject: 'New top-up submitted',
+          text,
+          html
+        });
+      }
+    } catch (err) {
+      console.error('Failed to send admin topup email', err);
+    }
+
+    // ----- TELEGRAM NOTIFICATION (manual topups only) -----
+    try {
+      await notifyNewTopup({
+        id: (data as any)?.id ?? '',
+        userEmail,
+        amount,
+        last4,
+        bankName: bankName || undefined,
+        method: method || undefined,
+      });
+    } catch (err) {
+      console.error('Failed to send Telegram topup notification', err);
+    }
   }
 
-  // ----- TELEGRAM NOTIFICATION -----
-  try {
-    await notifyNewTopup({
-      id: (data as any)?.id ?? '',
-      userEmail,
-      amount,
-      last4,
-      bankName: bankName || undefined,
-      method: method || undefined,
-    });
-  } catch (err) {
-    console.error('Failed to send Telegram topup notification', err);
-  }
-
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, topupId: (data as any)?.id ?? null });
 }

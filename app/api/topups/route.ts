@@ -126,10 +126,7 @@ export async function POST(req: Request) {
     try {
       const admins = getAdminRecipients();
       if (admins.length > 0) {
-        const paymentInfo =
-          method === 'qr'
-            ? `QR payment to ${bankName || 'Unknown bank'}`
-            : `Account transfer to ${bankName || 'Unknown bank'}${accountNo ? ` (${accountNo})` : ''}`;
+        const paymentInfo = `Account transfer to ${bankName || 'Unknown bank'}${accountNo ? ` (${accountNo})` : ''}`;
 
         const { html, text } = tplTopupAdminNotify(
           userEmail,

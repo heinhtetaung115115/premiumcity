@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { listPendingManualDeliveries } from '@/lib/orders';
 import { listPendingTopupsForAdmin } from '@/lib/wallet';
 import { processTopup } from './topups/actions';
+import { dismissManualDeliveryAction } from './orders/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,11 @@ async function approveTopupFormAction(formData: FormData): Promise<void> {
 async function rejectTopupFormAction(formData: FormData): Promise<void> {
   'use server';
   await processTopup(formData);
+}
+
+async function dismissDeliveryFormAction(formData: FormData): Promise<void> {
+  'use server';
+  await dismissManualDeliveryAction(formData);
 }
 
 export default async function AdminHomePage() {
@@ -77,12 +83,24 @@ export default async function AdminHomePage() {
                       {d.userEmail ?? 'Unknown customer'} · {timeAgo(d.createdAt)}
                     </p>
                   </div>
-                  <Link
-                    href={`/admin/orders?orderId=${d.orderId}`}
-                    className="inline-flex items-center justify-center rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:border-emerald-400 hover:text-emerald-300"
-                  >
-                    Go deliver
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/admin/orders?orderId=${d.orderId}`}
+                      className="inline-flex items-center justify-center rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:border-emerald-400 hover:text-emerald-300"
+                    >
+                      Go deliver
+                    </Link>
+                    <form action={dismissDeliveryFormAction}>
+                      <input type="hidden" name="orderItemId" value={d.orderItemId} />
+                      <button
+                        type="submit"
+                        className="inline-flex items-center justify-center rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:border-rose-400 hover:text-rose-300"
+                        title="Mark as delivered (already handled via Telegram)"
+                      >
+                        Mark done
+                      </button>
+                    </form>
+                  </div>
                 </div>
               </Card>
             ))}

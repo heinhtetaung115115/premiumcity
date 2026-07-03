@@ -268,3 +268,86 @@ export async function fulfillManualItemAction(formData: FormData) {
 
   return { success: true };
 }
+
+/**
+ * Dismiss a manual delivery from the pending list.
+ * Use when the order was already delivered outside the system (e.g. via Telegram).
+ * Marks the item as delivered by inserting a note, without sending an email.
+ */
+export async function dismissManualDeliveryAction(formData: FormData) {
+  await requireAdmin();
+
+  const orderItemId = String(formData.get('orderItemId') ?? '').trim();
+  if (!orderItemId) {
+    return { success: false, error: 'Missing order item id' };
+  }
+
+  const supabase = getServiceSupabaseClient();
+
+  // Load the item to get product_id and confirm it's manual
+  const { data: rawItem, error: itemError } = await supabase
+    .from('order_items')
+    .select('id,order_id,product_id,product_type')
+    .eq('id', orderItemId)
+    .maybeSingle();
+
+  if (itemError) {
+    return { success: false, error: itemError.message };
+  }
+  if (!rawItem) {
+    return { success: false, error: 'Order item not found' };
+  }
+
+  const item = rawItem as OrderItemRow;
+  if (item.product_type !== 'MANUAL') {
+    return { success: false, error: 'This item is not a manual product' };
+  }
+
+  // Insert a delivery record marking it delivered outside the system.
+  // This removes it from the pending manual deliveries list.
+  const { error: invError } = await supabase.from('inventory_items').insert({
+    product_id: item.product_id,
+    order_item_id: item.id,
+    payload: { type: 'note', note: 'Delivered manually (outside system, e.g. Telegram)' },
+  });
+
+  if (invError) {
+    return { success: false, error: invError.message };
+  }
+
+  // Mark the order item and order as completed if all manual items are done
+  const { data: siblingItems } = await supabase
+    .from('order_items')
+    .select('id')
+    .eq('order_id', item.order_id)
+    .eq('product_type', 'MANUAL');
+
+  const manualIds = ((siblingItems ?? []) as { id: string }[]).map((r) => r.id);
+
+  if (manualIds.length > 0) {
+    const { data: fulfilledRows } = await supabase
+      .from('inventory_items')
+      .select('order_item_id')
+      .in('order_item_id', manualIds);
+
+    const fulfilled = new Set(
+      ((fulfilledRows ?? []) as { order_item_id: string | null }[])
+        .map((r) => r.order_item_id)
+        .filter(Boolean)
+    );
+
+    const hasUnfulfilled = manualIds.some((id) => !fulfilled.has(id));
+    if (!hasUnfulfilled) {
+      await supabase
+        .from('orders')
+        .update({ status: 'COMPLETED' })
+        .eq('id', item.order_id);
+    }
+  }
+
+  revalidatePath('/admin');
+  revalidatePath('/admin/orders');
+  revalidatePath('/orders');
+
+  return { success: true };
+}

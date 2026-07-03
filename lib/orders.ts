@@ -1101,13 +1101,34 @@ export async function listPendingManualDeliveries(limit = 50): Promise<PendingMa
 
   const { data: itemRows, error: itemError } = await supabase
     .from('order_items')
-    .select('id,order_id,product_name,variant_name,quantity,manual_input,product_type,created_at')
+    .select('id,order_id,variant_id,product_name,variant_name,quantity,manual_input,product_type,created_at')
     .eq('product_type', 'MANUAL')
     .order('created_at', { ascending: false })
     .limit(500);
 
   if (itemError) throw itemError;
-  const items = (itemRows ?? []) as any[];
+  const allItems = (itemRows ?? []) as any[];
+  if (allItems.length === 0) return [];
+
+  // Exclude VPN items — these are auto-delivered via the Outline API,
+  // not true manual deliveries. VPN items have a variant with vpn_plan_id set.
+  const variantIds = Array.from(
+    new Set(allItems.map((i) => i.variant_id).filter(Boolean))
+  ) as string[];
+
+  const vpnVariantIds = new Set<string>();
+  if (variantIds.length > 0) {
+    const { data: variantRows, error: variantError } = await supabase
+      .from('product_variants')
+      .select('id,vpn_plan_id')
+      .in('id', variantIds);
+    if (variantError) throw variantError;
+    for (const v of (variantRows ?? []) as any[]) {
+      if (v.vpn_plan_id) vpnVariantIds.add(v.id);
+    }
+  }
+
+  const items = allItems.filter((i) => !i.variant_id || !vpnVariantIds.has(i.variant_id));
   if (items.length === 0) return [];
 
   const itemIds = items.map((i) => i.id as string);

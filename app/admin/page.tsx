@@ -1,5 +1,6 @@
 // app/admin/page.tsx
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { requireAdmin } from '@/lib/session';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ async function rejectTopupFormAction(formData: FormData): Promise<void> {
 async function dismissDeliveryFormAction(formData: FormData): Promise<void> {
   'use server';
   await dismissManualDeliveryAction(formData);
+  redirect('/admin');
 }
 
 export default async function AdminHomePage() {

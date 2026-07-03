@@ -303,3 +303,135 @@ export async function toggleProductStatusAction(formData: FormData) {
  * continue to work without changes.
  */
 export { toggleProductStatusAction as toggleProductStockAction };
+
+/**
+ * Edit an existing product's core fields in place (name, description,
+ * delivery note, manual input fields). Category/delivery-type intentionally
+ * left immutable here to avoid orphaning existing orders/inventory that
+ * assume the original type.
+ */
+export async function updateProductAction(formData: FormData) {
+  await requireAdmin();
+
+  const productId = String(formData.get('productId') ?? '').trim();
+  const name = String(formData.get('name') ?? '').trim();
+  const manualFieldsRaw = String(formData.get('manualFields') ?? '').trim();
+
+  if (!productId || !name) {
+    return { success: false, error: 'Name is required' };
+  }
+
+  let inputSchema: ProductInputField[] | null = null;
+  if (manualFieldsRaw) {
+    if (manualFieldsRaw.startsWith('[')) {
+      try {
+        inputSchema = JSON.parse(manualFieldsRaw) as ProductInputField[];
+      } catch {
+        return { success: false, error: 'Manual fields JSON is invalid' };
+      }
+    } else {
+      inputSchema = buildSchemaFromCsv(manualFieldsRaw);
+    }
+  }
+
+  const supabase = getServiceSupabaseClient();
+  const { error } = await supabase
+    .from('products')
+    .update({
+      name,
+      description: String(formData.get('description') ?? ''),
+      delivery_note: String(formData.get('deliveryNote') ?? ''),
+      input_schema: inputSchema
+    })
+    .eq('id', productId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath('/admin/products');
+  revalidatePath('/');
+  redirect('/admin/products?m=product_updated');
+}
+
+/** Edit an existing variant's name/price/default flag. */
+export async function updateVariantAction(formData: FormData) {
+  await requireAdmin();
+
+  const variantId = String(formData.get('variantId') ?? '');
+  const productId = String(formData.get('productId') ?? '');
+  const name = String(formData.get('variantName') ?? '').trim();
+  const price = Number(formData.get('price') ?? '0');
+  const isDefault = formData.get('isDefault') === 'on';
+
+  if (!variantId || !name || !Number.isFinite(price) || price <= 0) {
+    return { success: false, error: 'Variant name and positive price required' };
+  }
+
+  const supabase = getServiceSupabaseClient();
+
+  if (isDefault && productId) {
+    const { error: unsetError } = await supabase
+      .from('product_variants')
+      .update({ is_default: false })
+      .eq('product_id', productId);
+    if (unsetError) return { success: false, error: unsetError.message };
+  }
+
+  const { error } = await supabase
+    .from('product_variants')
+    .update({ name, price, is_default: isDefault })
+    .eq('id', variantId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath('/admin/products');
+  redirect('/admin/products?m=variant_updated');
+}
+
+/** Remove a variant that's no longer needed (e.g. created by mistake). */
+export async function deleteVariantAction(formData: FormData) {
+  await requireAdmin();
+
+  const variantId = String(formData.get('variantId') ?? '').trim();
+  if (!variantId) return { success: false, error: 'Missing variant id' };
+
+  const supabase = getServiceSupabaseClient();
+  const { error } = await supabase.from('product_variants').delete().eq('id', variantId);
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath('/admin/products');
+  redirect('/admin/products?m=variant_deleted');
+}
+
+/**
+ * Remove an unused (undelivered) inventory credential — e.g. a bad
+ * email/password pasted by mistake. Refuses to delete anything already
+ * attached to an order, since that would erase a customer's delivered
+ * access.
+ */
+export async function deleteInventoryItemAction(formData: FormData) {
+  await requireAdmin();
+
+  const inventoryItemId = String(formData.get('inventoryItemId') ?? '').trim();
+  if (!inventoryItemId) return { success: false, error: 'Missing inventory item id' };
+
+  const supabase = getServiceSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .delete()
+    .eq('id', inventoryItemId)
+    .is('order_item_id', null)
+    .select('id')
+    .maybeSingle();
+
+  if (error) return { success: false, error: error.message };
+  if (!data) {
+    return {
+      success: false,
+      error: 'Cannot delete — this credential has already been delivered to a customer.'
+    };
+  }
+
+  revalidatePath('/admin/products');
+  redirect('/admin/products?m=inventory_deleted');
+}

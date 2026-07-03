@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Copy, Bell } from 'lucide-react';
+import { credentialToRows } from '@/lib/deliveryTypes';
 
 type OrdersListClientProps = {
   orders: any[];
@@ -99,10 +100,8 @@ function CredentialsBlock({ credentials }: { credentials: any[] }) {
 
       <div className="space-y-2">
         {credentials.map((cred, idx) => {
-          const c = cred || {};
-          const entries = Object.entries(c) as [string, any][];
-
-          if (!entries.length) return null;
+          const rows = credentialToRows(cred);
+          if (!rows.length) return null;
 
           return (
             <div key={idx} className="rounded-lg bg-slate-950/80 px-3 py-2">
@@ -111,38 +110,27 @@ function CredentialsBlock({ credentials }: { credentials: any[] }) {
               </p>
 
               <div className="space-y-2">
-                {entries.map(([key, value]) => {
-                  if (value == null || value === '') return null;
-
-                  const isNote =
-                    ['note', 'remark', 'remarks', 'comment'].includes(
-                      key.toLowerCase()
-                    );
-
-                  const displayValue = String(value);
-
-                  return (
-                    <div
-                      key={key}
-                      className="flex items-start justify-between gap-2"
-                    >
-                      <div className="min-w-0">
-                        <span className="text-[11px] uppercase text-slate-500">
-                          {key}
-                        </span>
-                        <p className="break-all text-sm text-emerald-100">
-                          {displayValue}
-                        </p>
-                      </div>
-
-                      {!isNote && (
-                        <div className="flex-shrink-0">
-                          <CopyButton value={displayValue} />
-                        </div>
-                      )}
+                {rows.map((row) => (
+                  <div
+                    key={row.label}
+                    className="flex items-start justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <span className="text-[11px] uppercase text-slate-500">
+                        {row.label}
+                      </span>
+                      <p className="break-all text-sm text-emerald-100">
+                        {row.value}
+                      </p>
                     </div>
-                  );
-                })}
+
+                    {row.copyable && (
+                      <div className="flex-shrink-0">
+                        <CopyButton value={row.value} />
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           );

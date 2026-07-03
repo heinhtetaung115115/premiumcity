@@ -11,6 +11,7 @@ import {
 } from '@/lib/email';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { notifyNewTopup } from '@/lib/telegram';
+import { MAX_TOPUP_AMOUNT, MIN_TOPUP_AMOUNT } from '@/utils/validators';
 
 type Body = {
   amount: number;
@@ -40,8 +41,16 @@ export async function POST(req: Request) {
 
   const { amount, last4, bankAccountId, method, bankName, accountNo } = body;
 
-  if (!amount || amount <= 0 || !Number.isFinite(amount)) {
-    return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
+  if (
+    !amount ||
+    !Number.isFinite(amount) ||
+    amount < MIN_TOPUP_AMOUNT ||
+    amount > MAX_TOPUP_AMOUNT
+  ) {
+    return NextResponse.json(
+      { error: `Amount must be between ${MIN_TOPUP_AMOUNT.toLocaleString()} and ${MAX_TOPUP_AMOUNT.toLocaleString()} MMK` },
+      { status: 400 }
+    );
   }
 
   if (!last4 || !/^\d{4}$/.test(last4)) {

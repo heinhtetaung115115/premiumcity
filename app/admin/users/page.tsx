@@ -4,6 +4,7 @@ import { requireAdmin } from '@/lib/session';
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import { listOrdersForUser } from '@/lib/orders';
 import { Input, Button } from '@/components/ui';
+import { credentialToRows } from '@/lib/deliveryTypes';
 
 type PageProps = {
   searchParams?: {
@@ -250,11 +251,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                   <ul className="space-y-1">
                                     {item.credentials.map(
                                       (cred: any, idx: number) => {
-                                        const c = cred || {};
-                                        const hasStandard =
-                                          'email' in c ||
-                                          'password' in c ||
-                                          'note' in c;
+                                        const rows = credentialToRows(cred);
                                         return (
                                           <li
                                             key={idx}
@@ -263,38 +260,21 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                             <p className="text-[11px] text-slate-400">
                                               Credential #{idx + 1}
                                             </p>
-                                            {hasStandard ? (
+                                            {rows.length > 0 ? (
                                               <ul className="mt-1 space-y-0.5 text-[11px] text-slate-300">
-                                                {'email' in c && (
-                                                  <li>
+                                                {rows.map((row) => (
+                                                  <li key={row.label}>
                                                     <span className="text-slate-500">
-                                                      email:
+                                                      {row.label}:
                                                     </span>{' '}
-                                                    {String(c.email)}
+                                                    {row.value}
                                                   </li>
-                                                )}
-                                                {'password' in c && (
-                                                  <li>
-                                                    <span className="text-slate-500">
-                                                      password:
-                                                    </span>{' '}
-                                                    {String(c.password)}
-                                                  </li>
-                                                )}
-                                                {'note' in c &&
-                                                  c.note && (
-                                                    <li>
-                                                      <span className="text-slate-500">
-                                                        note:
-                                                      </span>{' '}
-                                                      {String(c.note)}
-                                                    </li>
-                                                  )}
+                                                ))}
                                               </ul>
                                             ) : (
                                               <pre className="mt-1 whitespace-pre-wrap text-[11px] text-slate-300">
                                                 {JSON.stringify(
-                                                  c,
+                                                  cred,
                                                   null,
                                                   2
                                                 )}

@@ -108,7 +108,7 @@ export async function registerUser(_: unknown, formData: FormData) {
   }
 
   // 5) Create new user
-  const password_hash = await hash(password, 10);
+  const password_hash = await hash(password, 12);
 
   const { error } = await supabase.from('users').insert({
     email,

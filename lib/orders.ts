@@ -1080,6 +1080,91 @@ export async function listOrdersForUser(
   return result;
 }
 
+export type PendingManualDelivery = {
+  orderItemId: string;
+  orderId: string;
+  createdAt: string;
+  productName: string;
+  variantName: string | null;
+  quantity: number;
+  manualInput: Record<string, string> | null;
+  userEmail: string | null;
+};
+
+/**
+ * Admin dashboard: manual order items that still need a credential
+ * delivered (product_type = MANUAL and no inventory_items row attached
+ * yet). Used to power the "needs delivery" queue on the admin home page.
+ */
+export async function listPendingManualDeliveries(limit = 50): Promise<PendingManualDelivery[]> {
+  const supabase = getServiceSupabaseClient();
+
+  const { data: itemRows, error: itemError } = await supabase
+    .from('order_items')
+    .select('id,order_id,product_name,variant_name,quantity,manual_input,product_type,created_at')
+    .eq('product_type', 'MANUAL')
+    .order('created_at', { ascending: true })
+    .limit(500);
+
+  if (itemError) throw itemError;
+  const items = (itemRows ?? []) as any[];
+  if (items.length === 0) return [];
+
+  const itemIds = items.map((i) => i.id as string);
+
+  const { data: credRows, error: credError } = await supabase
+    .from('inventory_items')
+    .select('order_item_id')
+    .in('order_item_id', itemIds);
+  if (credError) throw credError;
+
+  const delivered = new Set(
+    ((credRows ?? []) as any[]).map((r) => r.order_item_id).filter(Boolean)
+  );
+
+  const pendingItems = items.filter((i) => !delivered.has(i.id)).slice(0, limit);
+  if (pendingItems.length === 0) return [];
+
+  const orderIds = Array.from(new Set(pendingItems.map((i) => i.order_id as string)));
+  const { data: orderRows, error: orderError } = await supabase
+    .from('orders')
+    .select('id,user_id')
+    .in('id', orderIds);
+  if (orderError) throw orderError;
+
+  const orderById: Record<string, any> = {};
+  for (const o of (orderRows ?? []) as any[]) orderById[o.id] = o;
+
+  const userIds = Array.from(
+    new Set(Object.values(orderById).map((o: any) => o.user_id).filter(Boolean))
+  );
+
+  let userById: Record<string, any> = {};
+  if (userIds.length > 0) {
+    const { data: userRows, error: userError } = await supabase
+      .from('users')
+      .select('id,email')
+      .in('id', userIds);
+    if (userError) throw userError;
+    for (const u of (userRows ?? []) as any[]) userById[u.id] = u;
+  }
+
+  return pendingItems.map((item) => {
+    const order = orderById[item.order_id];
+    const user = order ? userById[order.user_id] : null;
+    return {
+      orderItemId: item.id,
+      orderId: item.order_id,
+      createdAt: item.created_at,
+      productName: item.product_name,
+      variantName: item.variant_name ?? null,
+      quantity: item.quantity,
+      manualInput: (item.manual_input ?? null) as Record<string, string> | null,
+      userEmail: user?.email ?? null,
+    };
+  });
+}
+
 /**
  * Admin: list orders with optional filters by orderId or userEmail
  */

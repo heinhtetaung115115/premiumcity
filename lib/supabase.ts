@@ -14,7 +14,7 @@ type Order = { column: string; ascending: boolean };
 
 type RequestOptions = {
   table: string;
-  method: 'GET' | 'POST' | 'PATCH';
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   select?: string | null;
   filters?: Filter[];
   orders?: Order[];
@@ -75,6 +75,9 @@ class SupabaseRestClient {
       },
       update(values: unknown) {
         return new SupabaseUpdateQuery(self, table, values, schema);
+      },
+      delete() {
+        return new SupabaseDeleteQuery(self, table, schema);
       }
     };
   }
@@ -379,6 +382,82 @@ class SupabaseUpdateQuery {
         method: 'PATCH',
         select: this.returningColumns,
         body: this.values,
+        schema: this.schema,
+        single: this.singleMode,
+        filters: this.filters
+      });
+    }
+    return this.execution;
+  }
+
+  then<TResult1 = QueryResponse, TResult2 = never>(
+    onfulfilled?: ((value: QueryResponse) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+  ) {
+    return this.execute().then(onfulfilled as any, onrejected as any);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null
+  ) {
+    return this.execute().catch(onrejected as any);
+  }
+
+  finally(onfinally?: (() => void) | null) {
+    return this.execute().finally(onfinally ?? undefined);
+  }
+}
+
+// Delete query builder — mirrors SupabaseUpdateQuery but issues DELETE with
+// no request body.
+class SupabaseDeleteQuery {
+  private filters: Filter[] = [];
+  private returningColumns: string | null = null;
+  private singleMode: 'single' | 'maybe' | undefined;
+  private execution: Promise<QueryResponse> | null = null;
+
+  constructor(
+    private client: SupabaseRestClient,
+    private table: string,
+    private schema?: string
+  ) {}
+
+  eq(column: string, value: unknown) {
+    this.filters.push({ type: 'eq', column, value });
+    return this;
+  }
+
+  in(column: string, values: unknown[]) {
+    this.filters.push({ type: 'in', column, values });
+    return this;
+  }
+
+  is(column: string, value: null | boolean) {
+    this.filters.push({ type: 'is', column, value });
+    return this;
+  }
+
+  select(columns: string) {
+    this.returningColumns = columns;
+    return this;
+  }
+
+  maybeSingle() {
+    this.singleMode = 'maybe';
+    return this.execute();
+  }
+
+  single() {
+    this.singleMode = 'single';
+    return this.execute();
+  }
+
+  private execute() {
+    if (!this.execution) {
+      this.execution = this.client.request({
+        table: this.table,
+        method: 'DELETE',
+        select: this.returningColumns,
         schema: this.schema,
         single: this.singleMode,
         filters: this.filters

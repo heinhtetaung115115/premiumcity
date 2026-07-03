@@ -1103,7 +1103,7 @@ export async function listPendingManualDeliveries(limit = 50): Promise<PendingMa
     .from('order_items')
     .select('id,order_id,product_name,variant_name,quantity,manual_input,product_type,created_at')
     .eq('product_type', 'MANUAL')
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(500);
 
   if (itemError) throw itemError;

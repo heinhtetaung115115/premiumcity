@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fulfillManualItemAction } from './actions';
+import { DeliveryForm } from './DeliveryForm';
+import { credentialToRows } from '@/lib/deliveryTypes';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -197,9 +199,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                               </p>
                               <ul className="space-y-1">
                                 {item.credentials.map((cred: any, idx: number) => {
-                                  const c = cred || {};
-                                  const hasStandard = 'email' in c || 'password' in c || 'note' in c;
-
+                                  const rows = credentialToRows(cred);
                                   return (
                                     <li
                                       key={idx}
@@ -208,30 +208,18 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                                       <p className="text-[11px] text-slate-400">
                                         Credential #{idx + 1}
                                       </p>
-                                      {hasStandard ? (
+                                      {rows.length > 0 ? (
                                         <ul className="mt-1 space-y-0.5 text-[11px] text-slate-300">
-                                          {'email' in c && (
-                                            <li>
-                                              <span className="text-slate-500">email:</span>{' '}
-                                              {String(c.email)}
+                                          {rows.map((row) => (
+                                            <li key={row.label}>
+                                              <span className="text-slate-500">{row.label}:</span>{' '}
+                                              {row.value}
                                             </li>
-                                          )}
-                                          {'password' in c && (
-                                            <li>
-                                              <span className="text-slate-500">password:</span>{' '}
-                                              {String(c.password)}
-                                            </li>
-                                          )}
-                                          {'note' in c && c.note && (
-                                            <li>
-                                              <span className="text-slate-500">note:</span>{' '}
-                                              {String(c.note)}
-                                            </li>
-                                          )}
+                                          ))}
                                         </ul>
                                       ) : (
                                         <pre className="mt-1 whitespace-pre-wrap text-[11px] text-slate-300">
-                                          {JSON.stringify(c, null, 2)}
+                                          {JSON.stringify(cred, null, 2)}
                                         </pre>
                                       )}
                                     </li>
@@ -247,32 +235,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                               <p className="mb-2 text-xs font-semibold text-slate-300">
                                 Fulfill manual product
                               </p>
-                              <form action={fulfillManualItemFormAction} className="grid gap-2 md:grid-cols-3">
-                                <input type="hidden" name="orderItemId" value={item.id} />
-                                <div className="space-y-1">
-                                  <label className="text-[11px] uppercase text-slate-500">
-                                    Email (optional)
-                                  </label>
-                                  <Input name="email" placeholder="customer@example.com" className="h-8 text-xs" />
-                                </div>
-                                <div className="space-y-1">
-                                  <label className="text-[11px] uppercase text-slate-500">
-                                    Password (optional)
-                                  </label>
-                                  <Input name="password" placeholder="password" className="h-8 text-xs" />
-                                </div>
-                                <div className="space-y-1 md:col-span-3 lg:col-span-1">
-                                  <label className="text-[11px] uppercase text-slate-500">
-                                    Note (optional)
-                                  </label>
-                                  <Input name="note" placeholder="Profile, region, extra notes…" className="h-8 text-xs" />
-                                </div>
-                                <div className="md:col-span-3 flex justify-end pt-1">
-                                  <Button type="submit" className="px-3 py-1.5 text-xs">
-                                    Save &amp; deliver
-                                  </Button>
-                                </div>
-                              </form>
+                              <DeliveryForm orderItemId={item.id} action={fulfillManualItemFormAction} />
                             </div>
                           )}
                         </li>

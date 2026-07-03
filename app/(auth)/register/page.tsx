@@ -141,9 +141,9 @@ export default function RegisterPage() {
               id="password"
               name="password"
               type="password"
-              placeholder="••••••"
+              placeholder="At least 8 characters, with a letter and a number"
               required
-              minLength={6}
+              minLength={8}
             />
           </div>
 

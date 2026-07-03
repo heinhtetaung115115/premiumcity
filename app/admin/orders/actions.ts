@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/session';
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import { sendEmail, tplManualDeliveryToUser } from '@/lib/email';
+import type { DeliveryType } from '@/lib/deliveryTypes';
 
 /* -----------------------------
    Correct type definitions
@@ -29,16 +30,44 @@ export async function fulfillManualItemAction(formData: FormData) {
   await requireAdmin();
 
   const orderItemId = String(formData.get('orderItemId') ?? '').trim();
+  const deliveryType = (String(formData.get('deliveryType') ?? '').trim() ||
+    'EMAIL_PASSWORD') as DeliveryType;
+
   const email = String(formData.get('email') ?? '').trim();
   const password = String(formData.get('password') ?? '').trim();
   const note = String(formData.get('note') ?? '').trim();
+  const key = String(formData.get('key') ?? '').trim();
+  const inviteLink = String(formData.get('inviteLink') ?? '').trim();
 
   if (!orderItemId) {
     return { success: false, error: 'Missing order item id' };
   }
 
-  if (!email && !password && !note) {
-    return { success: false, error: 'Provide at least one credential field' };
+  let payload: Record<string, unknown>;
+
+  switch (deliveryType) {
+    case 'KEY':
+      if (!key) return { success: false, error: 'Key is required' };
+      payload = { type: 'key', key };
+      break;
+    case 'INVITE_LINK':
+      if (!inviteLink) return { success: false, error: 'Invite link is required' };
+      payload = { type: 'invite_link', inviteLink };
+      break;
+    case 'NOTE':
+      if (!note) return { success: false, error: 'Note is required' };
+      payload = { type: 'note', note };
+      break;
+    case 'EMAIL_PASSWORD':
+    default:
+      if (!email && !password && !note) {
+        return { success: false, error: 'Provide at least one of email, password, or note' };
+      }
+      payload = { type: 'email_password' };
+      if (email) payload.email = email;
+      if (password) payload.password = password;
+      if (note) payload.note = note;
+      break;
   }
 
   const supabase = getServiceSupabaseClient();
@@ -64,14 +93,6 @@ export async function fulfillManualItemAction(formData: FormData) {
   if (item.product_type !== 'MANUAL') {
     return { success: false, error: 'This item is not a manual product' };
   }
-
-  // --------------------------------------
-  // 2) Prepare payload
-  // --------------------------------------
-  const payload: any = {};
-  if (email) payload.email = email;
-  if (password) payload.password = password;
-  if (note) payload.note = note;
 
   // --------------------------------------
   // 3) Insert credentials row

@@ -1,6 +1,9 @@
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import { checkRateLimit } from "./rate-limit";
+
+const isProd = process.env.NODE_ENV === "production";
 
 async function fetchUserByEmail(email: string) {
   const url =
@@ -18,7 +21,7 @@ async function fetchUserByEmail(email: string) {
   });
 
   if (!res.ok) {
-    console.error("AUTH_DEBUG supabase REST error:", res.status, await res.text());
+    console.error("AUTH: supabase REST error looking up user:", res.status);
     return null;
   }
 
@@ -31,15 +34,26 @@ async function fetchUserByEmail(email: string) {
   return rows?.[0] ?? null;
 }
 
+function getRequestIp(req: { headers?: Record<string, string> } | undefined): string {
+  const headers = req?.headers ?? {};
+  return (
+    headers["cf-connecting-ip"]?.trim() ||
+    headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+    headers["x-real-ip"]?.trim() ||
+    "unknown"
+  );
+}
+
 export const authConfig: NextAuthOptions = {
-  debug: true,
+  debug: false,
   logger: {
-    error: (code, metadata) => console.error("NEXTAUTH_ERROR:", code, metadata),
+    error: (code, metadata) => console.error("NEXTAUTH_ERROR:", code, (metadata as any)?.message ?? ""),
     warn: (code) => console.warn("NEXTAUTH_WARN:", code),
-    debug: (code, metadata) => console.log("NEXTAUTH_DEBUG:", code, metadata),
+    debug: () => {},
   },
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   secret: process.env.NEXTAUTH_SECRET,
+  useSecureCookies: isProd,
   providers: [
     Credentials({
       name: "Credentials",
@@ -47,21 +61,46 @@ export const authConfig: NextAuthOptions = {
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      authorize: async (credentials) => {
+      // This is the ONLY place that actually authenticates a login. Rate
+      // limiting here is enforced server-side no matter how the request was
+      // made, so it can't be bypassed by calling the credentials callback
+      // directly and skipping the client-side /api/auth/login-guard
+      // pre-check (which only exists for fast UX feedback).
+      authorize: async (credentials, req) => {
         try {
           if (!credentials?.email || !credentials?.password) return null;
 
-          const user = await fetchUserByEmail(credentials.email);
-          console.log("AUTH_DEBUG fetched user:", user?.email ?? null);
+          const email = credentials.email.toLowerCase().trim();
+          const ip = getRequestIp(req as any);
+
+          const [emailRl, ipRl] = await Promise.all([
+            checkRateLimit({
+              key: `login:email:${email}`,
+              route: "login-authorize",
+              windowInSeconds: 15 * 60,
+              maxRequests: 8,
+            }),
+            checkRateLimit({
+              key: `login:ip:${ip}`,
+              route: "login-authorize",
+              windowInSeconds: 15 * 60,
+              maxRequests: 40,
+            }),
+          ]);
+
+          if (!emailRl.allowed || !ipRl.allowed) {
+            return null;
+          }
+
+          const user = await fetchUserByEmail(email);
           if (!user) return null;
 
           const ok = await bcrypt.compare(credentials.password, user.password_hash);
-          console.log("AUTH_DEBUG password_ok:", ok);
           if (!ok) return null;
 
           return { id: String(user.id), email: user.email, role: user.role } as any;
         } catch (e) {
-          console.error("AUTH_DEBUG authorize exception:", e);
+          console.error("AUTH: authorize exception:", (e as Error)?.message);
           return null;
         }
       },
@@ -83,5 +122,4 @@ export const authConfig: NextAuthOptions = {
       return session;
     },
   },
-  // pages: { signIn: "/login" }, // keep default page for now while debugging
 };

@@ -5,7 +5,11 @@ import {
   createCategoryAction,
   createProductAction,
   createVariantAction,
-  toggleProductStockAction
+  toggleProductStockAction,
+  updateProductAction,
+  updateVariantAction,
+  deleteVariantAction,
+  deleteInventoryItemAction
 } from './actions';
 import { Button, Card, Input, TextArea } from '@/components/ui';
 import type { Product, ProductVariant, BankAccount } from '@/types/entities';
@@ -24,7 +28,14 @@ function mapVariant(row: any): ProductVariant {
 
 function mapProduct(
   row: any
-): Product & { inventoryItems: { id: string; orderItemId: string | null }[] } {
+): Product & {
+  inventoryItems: {
+    id: string;
+    orderItemId: string | null;
+    variantId: string | null;
+    payload: Record<string, unknown> | null;
+  }[];
+} {
   return {
     id: row.id,
     name: row.name,
@@ -40,7 +51,9 @@ function mapProduct(
     category: row.category ?? null,
     inventoryItems: (row.inventory_items ?? []).map((item: any) => ({
       id: item.id,
-      orderItemId: item.order_item_id ?? null
+      orderItemId: item.order_item_id ?? null,
+      variantId: item.variant_id ?? null,
+      payload: item.payload ?? null
     }))
   };
 }
@@ -76,6 +89,14 @@ function Banner({ code }: { code?: string }) {
       ? 'Product marked out of stock.'
       : code === 'bank_added'
       ? 'Bank account saved.'
+      : code === 'product_updated'
+      ? 'Product updated.'
+      : code === 'variant_updated'
+      ? 'Variant updated.'
+      : code === 'variant_deleted'
+      ? 'Variant deleted.'
+      : code === 'inventory_deleted'
+      ? 'Credential deleted.'
       : null;
   if (!msg) return null;
   return (
@@ -100,7 +121,7 @@ export default async function AdminProductsPage({
     supabase
       .from('products')
       .select(
-        'id,name,slug,description,category_id,product_type,status,is_in_stock,input_schema,delivery_note,category:categories(id,name),variants:product_variants!product_id(*),inventory_items!product_id(id,order_item_id)'
+        'id,name,slug,description,category_id,product_type,status,is_in_stock,input_schema,delivery_note,category:categories(id,name),variants:product_variants!product_id(*),inventory_items!product_id(id,order_item_id,variant_id,payload)'
       )
       .order('created_at', { ascending: false }),
     supabase
@@ -321,6 +342,43 @@ email,password,note
                 </div>
               </summary>
 
+              {/* Edit product details */}
+              <div className="mt-4 border-t border-slate-800 pt-4">
+                <p className="mb-2 text-xs uppercase text-slate-500">Edit product</p>
+                <form action={updateProductAction as any} className="grid gap-2 md:grid-cols-2">
+                  <input type="hidden" name="productId" value={product.id} />
+                  <Input name="name" defaultValue={product.name} placeholder="Product name" required className="text-sm" />
+                  <TextArea
+                    name="deliveryNote"
+                    defaultValue={product.deliveryNote ?? ''}
+                    placeholder="Delivery note (shown to customers)"
+                    rows={2}
+                    className="md:row-span-2 text-sm"
+                  />
+                  <TextArea
+                    name="description"
+                    defaultValue={product.description ?? ''}
+                    placeholder="Description"
+                    rows={2}
+                    className="text-sm"
+                  />
+                  <TextArea
+                    name="manualFields"
+                    defaultValue={
+                      product.inputSchema ? JSON.stringify(product.inputSchema) : ''
+                    }
+                    placeholder="Manual input fields (JSON array or CSV ids) — leave blank for none"
+                    rows={2}
+                    className="text-sm"
+                  />
+                  <div className="md:col-span-2">
+                    <Button type="submit" variant="secondary" className="text-xs">
+                      Save changes
+                    </Button>
+                  </div>
+                </form>
+              </div>
+
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
                   <p className="text-xs uppercase text-slate-500">Variants</p>
@@ -328,11 +386,42 @@ email,password,note
                     {product.variants.map((variant) => (
                       <li
                         key={variant.id}
-                        className="rounded border border-slate-800 px-3 py-2"
+                        className="space-y-2 rounded border border-slate-800 px-3 py-2"
                       >
-                        {variant.name} ·{' '}
-                        {Number(variant.price).toFixed(2)} MMK{' '}
-                        {variant.isDefault && '(default)'}
+                        <form
+                          action={updateVariantAction as any}
+                          className="flex flex-wrap items-center gap-2"
+                        >
+                          <input type="hidden" name="variantId" value={variant.id} />
+                          <input type="hidden" name="productId" value={product.id} />
+                          <Input
+                            name="variantName"
+                            defaultValue={variant.name}
+                            className="h-8 w-32 text-xs"
+                            required
+                          />
+                          <Input
+                            name="price"
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            defaultValue={variant.price}
+                            className="h-8 w-24 text-xs"
+                            required
+                          />
+                          <label className="inline-flex items-center gap-1 text-[11px] uppercase text-slate-400">
+                            <input type="checkbox" name="isDefault" defaultChecked={variant.isDefault} /> Default
+                          </label>
+                          <Button type="submit" variant="secondary" className="h-8 px-2 text-xs">
+                            Save
+                          </Button>
+                        </form>
+                        <form action={deleteVariantAction as any}>
+                          <input type="hidden" name="variantId" value={variant.id} />
+                          <Button type="submit" variant="ghost" className="h-7 px-2 text-xs text-rose-300 hover:text-rose-200">
+                            Delete variant
+                          </Button>
+                        </form>
                       </li>
                     ))}
                     {product.variants.length === 0 && (
@@ -369,14 +458,44 @@ email,password,note
                     <p className="text-xs uppercase text-slate-500">
                       Inventory
                     </p>
-                    <p className="text-sm text-slate-400">
-                      {
-                        product.inventoryItems.filter(
-                          (item) => !item.orderItemId
-                        ).length
-                      }{' '}
-                      in stock
-                    </p>
+                    {(() => {
+                      const unused = product.inventoryItems.filter((item) => !item.orderItemId);
+                      return (
+                        <>
+                          <p className="text-sm text-slate-400">{unused.length} in stock</p>
+                          {unused.length > 0 && (
+                            <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs text-slate-300">
+                              {unused.map((item) => {
+                                const preview = item.payload
+                                  ? Object.entries(item.payload)
+                                      .filter(([k]) => k !== 'type')
+                                      .map(([, v]) => String(v))
+                                      .join(' · ')
+                                  : '';
+                                return (
+                                  <li
+                                    key={item.id}
+                                    className="flex items-center justify-between gap-2 rounded border border-slate-800 px-2 py-1"
+                                  >
+                                    <span className="truncate">{preview || 'credential'}</span>
+                                    <form action={deleteInventoryItemAction as any}>
+                                      <input type="hidden" name="inventoryItemId" value={item.id} />
+                                      <Button
+                                        type="submit"
+                                        variant="ghost"
+                                        className="h-6 flex-shrink-0 px-1.5 text-[11px] text-rose-300 hover:text-rose-200"
+                                      >
+                                        Delete
+                                      </Button>
+                                    </form>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </>
+                      );
+                    })()}
                     <form
                       action={addInventoryAction as any}
                       className="mt-3 space-y-2 text-sm"

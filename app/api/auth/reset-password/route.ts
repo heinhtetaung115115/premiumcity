@@ -4,6 +4,8 @@ export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { passwordSchema } from '@/utils/validators';
 
 type PasswordResetTokenRow = {
   id: string;
@@ -15,6 +17,31 @@ type PasswordResetTokenRow = {
 
 export async function POST(request: Request) {
   try {
+    const ip =
+      request.headers.get('cf-connecting-ip')?.trim() ||
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip')?.trim() ||
+      'unknown';
+
+    const rl = await checkRateLimit({
+      key: ip,
+      route: 'reset-password',
+      windowInSeconds: 10 * 60,
+      maxRequests: 20,
+    });
+
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Too many attempts. Please try again later.' },
+        {
+          status: 429,
+          headers: rl.retryAfterSeconds
+            ? { 'Retry-After': String(rl.retryAfterSeconds) }
+            : undefined,
+        }
+      );
+    }
+
     const body = await request.json().catch(() => ({}));
 
     const rawToken = body.token;
@@ -30,9 +57,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (newPassword.length < 8) {
+    const passwordCheck = passwordSchema.safeParse(newPassword);
+    if (!passwordCheck.success) {
       return NextResponse.json(
-        { error: 'Password must be at least 8 characters.' },
+        { error: passwordCheck.error.issues[0]?.message ?? 'Invalid password.' },
         { status: 400 }
       );
     }
@@ -73,7 +101,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const passwordHash = await bcrypt.hash(newPassword, 12);
 
     const { error: updateError } = await supabase
       .from('users')

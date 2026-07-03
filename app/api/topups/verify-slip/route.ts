@@ -4,8 +4,9 @@ import { getServiceSupabaseClient } from '@/lib/supabase';
 import { getServerSession } from 'next-auth';
 import { authConfig } from '@/lib/auth';
 import { verifyKbzSlip } from '@/lib/slip-verify';
-import { approveTopup } from '@/lib/wallet';
+import { approveTopup, rejectTopup, TopupAlreadyProcessedError } from '@/lib/wallet';
 import { notifyNewTopup } from '@/lib/telegram';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,24 @@ export async function POST(req: Request) {
   const session = await getServerSession(authConfig);
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Each attempt calls the Claude vision API (real cost) and is a potential
+  // probe against the fraud checks, so throttle per user.
+  const rl = await checkRateLimit({
+    key: String(session.user.id),
+    route: 'verify-slip',
+    windowInSeconds: 10 * 60,
+    maxRequests: 12,
+  });
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Too many verification attempts. Please wait a few minutes and try again.' },
+      {
+        status: 429,
+        headers: rl.retryAfterSeconds ? { 'Retry-After': String(rl.retryAfterSeconds) } : undefined,
+      }
+    );
   }
 
   let body: { topupId: string; imageBase64: string; mediaType?: string };
@@ -50,11 +69,15 @@ export async function POST(req: Request) {
 
   // ── Duplicate check ──
   const checkDuplicate = async (tid: string): Promise<boolean> => {
+    // Duplicate transaction IDs only ever come from KBZ auto-verify slips
+    // (method='qr'), so scoping to that method keeps this query cheap and
+    // correct regardless of how many manual (non-KBZ) topups accumulate.
     const { data: rows } = await supabase
       .from('topups')
       .select('id,metadata,status')
+      .eq('method', 'qr')
       .order('created_at', { ascending: false })
-      .limit(1000);
+      .limit(5000);
 
     if (!rows) {
       console.log('[duplicate-check] No rows returned');
@@ -153,6 +176,9 @@ export async function POST(req: Request) {
         reason_en: 'Payment verified and approved.',
       });
     } catch (err: any) {
+      if (err instanceof TopupAlreadyProcessedError) {
+        return NextResponse.json({ status: 'manual_review', reason_mm: '', reason_en: 'Already processed.' });
+      }
       console.error('[verify-slip] auto-approve failed:', err);
     }
   }
@@ -160,8 +186,12 @@ export async function POST(req: Request) {
   // ── AUTO REJECT (no email for KBZ, user sees result in UI) ──
   if (result.decision === 'REJECT') {
     try {
-      await supabase.from('topups').update({ status: 'REJECTED' }).eq('id', topupId);
-    } catch {}
+      await rejectTopup(topupId, result.reason, true);
+    } catch (err) {
+      if (!(err instanceof TopupAlreadyProcessedError)) {
+        console.error('[verify-slip] auto-reject failed:', err);
+      }
+    }
 
     let reason_mm = 'ငွေဖြည့်သွင်းမှု မအောင်မြင်ပါ';
     let reason_en = 'Payment verification failed.';

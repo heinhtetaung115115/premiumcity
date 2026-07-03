@@ -63,6 +63,66 @@ export async function getWalletOverview(userId: string): Promise<WalletOverview>
   return { balance: Number((wallet as any).balance ?? 0), walletTransactions };
 }
 
+export type PendingTopupAdminView = {
+  id: string;
+  userId: string;
+  userEmail: string | null;
+  amount: number;
+  method: 'qr' | 'account';
+  last4: string;
+  createdAt: string;
+  bankName: string | null;
+  accountNo: string | null;
+};
+
+/**
+ * Admin dashboard: top-ups awaiting manual review, newest-need-attention
+ * (oldest) first.
+ */
+export async function listPendingTopupsForAdmin(limit = 50): Promise<PendingTopupAdminView[]> {
+  const supabase = getServiceSupabaseClient();
+
+  const { data: topupRows, error } = await supabase
+    .from('topups')
+    .select('id,user_id,bank_account_id,amount,last4,method,status,created_at')
+    .eq('status', 'PENDING')
+    .order('created_at', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+
+  const topups = (topupRows ?? []) as any[];
+  if (topups.length === 0) return [];
+
+  const userIds = Array.from(new Set(topups.map((t) => t.user_id)));
+  const bankIds = Array.from(new Set(topups.map((t) => t.bank_account_id).filter(Boolean)));
+
+  const [{ data: userRows, error: userError }, bankRes] = await Promise.all([
+    supabase.from('users').select('id,email').in('id', userIds),
+    bankIds.length > 0
+      ? supabase.from('bank_accounts').select('id,bank_name,account_no').in('id', bankIds)
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ]);
+  if (userError) throw userError;
+  if ((bankRes as any).error) throw (bankRes as any).error;
+
+  const userById: Record<string, any> = {};
+  for (const u of (userRows ?? []) as any[]) userById[u.id] = u;
+  const bankById: Record<string, any> = {};
+  for (const b of ((bankRes as any).data ?? []) as any[]) bankById[b.id] = b;
+
+  return topups.map((t) => ({
+    id: t.id,
+    userId: t.user_id,
+    userEmail: userById[t.user_id]?.email ?? null,
+    amount: Number(t.amount),
+    method: t.method,
+    last4: t.last4,
+    createdAt: t.created_at,
+    bankName: bankById[t.bank_account_id]?.bank_name ?? null,
+    accountNo: bankById[t.bank_account_id]?.account_no ?? null,
+  }));
+}
+
 export async function listTopupRequests(userId: string): Promise<TopupRequest[]> {
   const supabase = getServiceSupabaseClient();
   const { data, error } = await supabase.from('topups').select('id,amount,last4,status,created_at,method')
@@ -122,51 +182,82 @@ export async function submitTopupRequest(payload: SubmitTopupPayload): Promise<v
   }
 }
 
+export class TopupAlreadyProcessedError extends Error {
+  constructor() {
+    super('This top-up has already been processed.');
+    this.name = 'TopupAlreadyProcessedError';
+  }
+}
+
 /**
  * Approve a top-up.
+ *
+ * Race-safety: the topup is "claimed" first via a conditional UPDATE that
+ * only succeeds `WHERE status = 'PENDING'`. Postgres evaluates that
+ * check-and-write as a single atomic statement, so if two approval requests
+ * land at the same time (double click, or the admin UI and the KBZ
+ * auto-verify path both firing), only one of them can win the claim — the
+ * other gets 0 rows back and bails out via TopupAlreadyProcessedError
+ * *before* touching the wallet balance. This prevents double-crediting.
+ *
  * @param skipEmail - if true, skip sending approval email (used by KBZ auto-verify)
  */
 export async function approveTopup(topupId: string, skipEmail = false): Promise<void> {
   const supabase = getServiceSupabaseClient();
 
-  const { data: topup, error: topupError } = await supabase
-    .from('topups').select('id,user_id,amount,status,last4').eq('id', topupId).maybeSingle();
-  if (topupError) throw topupError;
-  if (!topup) throw new Error('Top-up not found');
-  const t = topup as any;
-  if (t.status !== 'PENDING') return;
+  // 1) Atomically claim this topup. Only one concurrent caller can win.
+  const { data: claimed, error: claimError } = await supabase
+    .from('topups')
+    .update({ status: 'APPROVED' })
+    .eq('id', topupId)
+    .eq('status', 'PENDING')
+    .select('id,user_id,amount,last4')
+    .maybeSingle();
 
+  if (claimError) throw claimError;
+  if (!claimed) {
+    // Either the topup doesn't exist, or someone else already processed it.
+    throw new TopupAlreadyProcessedError();
+  }
+
+  const t = claimed as any;
   const userId = t.user_id as string;
   const amount = Number(t.amount);
 
-  const { data: walletRow, error: walletError } = await supabase
-    .from('wallets').select('id,balance').eq('user_id', userId).maybeSingle();
-  if (walletError) throw walletError;
+  try {
+    const { data: walletRow, error: walletError } = await supabase
+      .from('wallets').select('id,balance').eq('user_id', userId).maybeSingle();
+    if (walletError) throw walletError;
 
-  let walletId: string;
-  let currentBalance = 0;
+    let walletId: string;
+    let currentBalance = 0;
 
-  if (!walletRow) {
-    const { data: newWallet, error: createWalletError } = await supabase
-      .from('wallets').insert({ user_id: userId, balance: amount }).select('id,balance').maybeSingle();
-    if (createWalletError) throw createWalletError;
-    walletId = (newWallet as any).id;
-    currentBalance = Number((newWallet as any).balance ?? amount);
-  } else {
-    walletId = (walletRow as any).id;
-    currentBalance = Number((walletRow as any).balance ?? 0);
-    const { error: updError } = await supabase.from('wallets').update({ balance: currentBalance + amount }).eq('id', walletId);
-    if (updError) throw updError;
-    currentBalance = currentBalance + amount;
+    if (!walletRow) {
+      const { data: newWallet, error: createWalletError } = await supabase
+        .from('wallets').insert({ user_id: userId, balance: amount }).select('id,balance').maybeSingle();
+      if (createWalletError) throw createWalletError;
+      walletId = (newWallet as any).id;
+      currentBalance = Number((newWallet as any).balance ?? amount);
+    } else {
+      walletId = (walletRow as any).id;
+      currentBalance = Number((walletRow as any).balance ?? 0);
+      const { error: updError } = await supabase.from('wallets').update({ balance: currentBalance + amount }).eq('id', walletId);
+      if (updError) throw updError;
+      currentBalance = currentBalance + amount;
+    }
+
+    const { error: txError } = await supabase.from('wallet_transactions').insert({
+      wallet_id: walletId, amount, direction: 'CREDIT', description: 'Top-up approved'
+    });
+    if (txError) throw txError;
+  } catch (err) {
+    // The topup is already marked APPROVED but we failed to credit the
+    // wallet — revert the claim so the top-up goes back to PENDING and can
+    // be retried, instead of silently leaving the user uncredited.
+    console.error('approveTopup: crediting wallet failed, reverting status to PENDING', err);
+    await supabase.from('topups').update({ status: 'PENDING' }).eq('id', topupId).eq('status', 'APPROVED');
+    throw err;
   }
-
-  const { error: txError } = await supabase.from('wallet_transactions').insert({
-    wallet_id: walletId, amount, direction: 'CREDIT', description: 'Top-up approved'
-  });
-  if (txError) throw txError;
-
-  const { error: statusError } = await supabase.from('topups').update({ status: 'APPROVED' }).eq('id', topupId);
-  if (statusError) throw statusError;
 
   // Email to user — skip for KBZ auto-verify
   if (!skipEmail) {
@@ -177,7 +268,7 @@ export async function approveTopup(topupId: string, skipEmail = false): Promise<
     const userName: string = (userRow as any)?.name ?? '';
     if (userEmail) {
       try {
-        const { html, text } = tplTopupApproved(userName || userEmail, amount, currentBalance);
+        const { html, text } = tplTopupApproved(userName || userEmail, amount);
         await sendEmail({ to: userEmail, subject: 'Your top-up was approved', text, html });
       } catch (err) { console.error('Failed to send top-up approved email', err); }
     }
@@ -186,23 +277,32 @@ export async function approveTopup(topupId: string, skipEmail = false): Promise<
 
 /**
  * Reject a top-up.
+ *
+ * Uses the same atomic conditional-update claim as approveTopup, so a
+ * reject racing an approve (or two rejects racing each other) can only
+ * apply once.
+ *
  * @param skipEmail - if true, skip sending rejection email (used by KBZ auto-verify)
  */
 export async function rejectTopup(topupId: string, reason?: string, skipEmail = false): Promise<void> {
   const supabase = getServiceSupabaseClient();
 
-  const { data: topup, error: topupError } = await supabase
-    .from('topups').select('id,user_id,amount,status').eq('id', topupId).maybeSingle();
-  if (topupError) throw topupError;
-  if (!topup) throw new Error('Top-up not found');
-  const t = topup as any;
-  if (t.status !== 'PENDING') return;
+  const { data: claimed, error: claimError } = await supabase
+    .from('topups')
+    .update({ status: 'REJECTED' })
+    .eq('id', topupId)
+    .eq('status', 'PENDING')
+    .select('id,user_id,amount')
+    .maybeSingle();
 
+  if (claimError) throw claimError;
+  if (!claimed) {
+    throw new TopupAlreadyProcessedError();
+  }
+
+  const t = claimed as any;
   const amount = Number(t.amount);
   const userId = t.user_id as string;
-
-  const { error: statusError } = await supabase.from('topups').update({ status: 'REJECTED' }).eq('id', topupId);
-  if (statusError) throw statusError;
 
   // Email to user — skip for KBZ auto-verify
   if (!skipEmail) {

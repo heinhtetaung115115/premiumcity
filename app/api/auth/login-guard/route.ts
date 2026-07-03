@@ -12,14 +12,16 @@ export async function POST(request: Request) {
       request.headers.get('x-real-ip')?.trim() ||
       'unknown';
 
+    // This is a soft, fast-feedback pre-check for the client only. The
+    // authoritative, unbypassable rate limit lives inside authorize() in
+    // lib/auth.ts, since this endpoint can simply be skipped by a scripted
+    // attacker calling NextAuth's credentials callback directly.
     const rl = await checkRateLimit({
       key: ip,
-      route: 'login',
-      windowInSeconds: 10 * 60,   // 10 minutes
-      maxRequests: 200,           // 🔥 Increased from 5 → 200
+      route: 'login-guard',
+      windowInSeconds: 10 * 60, // 10 minutes
+      maxRequests: 30,
     });
-
-    console.log('[login-guard] rate limit result:', rl);
 
     if (!rl.allowed) {
       return NextResponse.json(

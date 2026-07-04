@@ -33,10 +33,8 @@ export function WelcomeRewardPopup({ show }: Props) {
           <p className="mt-1 text-xs text-slate-300">A little gift to get you started</p>
         </div>
         <div className="px-6 py-5">
-          <p className="mb-4 text-sm leading-relaxed text-slate-300">
-            Complete your profile by adding your <span className="text-emerald-300">name</span> and a{' '}
-            <span className="text-emerald-300">profile photo</span>, then claim your one-time{' '}
-            <span className="font-semibold text-amber-300">1,000 KS</span> bonus.
+          <p className="mb-4 text-center text-sm leading-relaxed text-slate-200">
+            Profile ပြည့်စုံအောင်လုပ်ခြင်းဖြင့် အခမဲ့ 1000ks ရယူပါ
           </p>
           <div className="space-y-2">
             <Link

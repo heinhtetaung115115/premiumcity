@@ -9,6 +9,7 @@ import {
   claimProfileRewardAction,
 } from './actions';
 import { PRESET_AVATARS } from '@/components/preset-avatars';
+import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 
 type Props = {
   email: string;
@@ -25,6 +26,7 @@ export function AccountClient({ email, name, avatarUrl, createdAt, balance, rewa
   const [currentBalance, setCurrentBalance] = useState(balance);
   const [claimed, setClaimed] = useState(rewardClaimed);
   const [claiming, setClaiming] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
   const [claimMsg, setClaimMsg] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
@@ -148,23 +150,31 @@ export function AccountClient({ email, name, avatarUrl, createdAt, balance, rewa
   async function handleClaimReward() {
     setClaimMsg(null);
     if (!profileComplete) {
-      setClaimMsg('Add both your name and profile photo first.');
+      setClaimMsg('အမည်နှင့် ပရိုဖိုင်ဓာတ်ပုံ အရင်ထည့်ပါ။');
       return;
     }
     setClaiming(true);
     const res = await claimProfileRewardAction();
     setClaiming(false);
     if (res.success) {
-      setClaimed(true);
       if (typeof res.newBalance === 'number') setCurrentBalance(res.newBalance);
       setClaimMsg(null);
+      setShowCelebration(true); // 🎉 celebrate first
     } else {
-      setClaimMsg(res.error || 'Could not claim reward.');
+      setClaimMsg(res.error || 'ရယူ၍ မရပါ။ ထပ်စမ်းကြည့်ပါ။');
     }
+  }
+
+  function closeCelebration() {
+    setShowCelebration(false);
+    setClaimed(true); // now hide the banner
   }
 
   return (
     <main className="mx-auto max-w-md px-4 py-6 sm:py-8">
+      {/* 🎉 Celebration overlay on successful claim */}
+      <CelebrationOverlay show={showCelebration} onClose={closeCelebration} amount={1000} />
+
       <h1 className="mb-6 text-xl font-semibold text-slate-50">My Account</h1>
 
       {/* ── Profile completion reward banner ── */}
@@ -172,10 +182,10 @@ export function AccountClient({ email, name, avatarUrl, createdAt, balance, rewa
         <div className="mb-5 overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-500/15 to-emerald-500/10 p-5">
           <div className="mb-2 flex items-center gap-2">
             <span className="text-xl">🎁</span>
-            <p className="text-sm font-semibold text-amber-200">Get free 1,000 KS</p>
+            <p className="text-sm font-semibold text-amber-200">အခမဲ့ ၁,၀၀၀ ကျပ် ရယူပါ</p>
           </div>
           <p className="mb-3 text-xs leading-relaxed text-slate-300">
-            Complete your profile — add your name and a profile photo — to claim a one-time 1,000 KS bonus to your wallet.
+            သင့်ရဲ့ အမည်နှင့် ပရိုဖိုင်ဓာတ်ပုံ ထည့်သွင်းပြီး ၁,၀၀၀ ကျပ် လက်ဆောင်ကို Wallet ထဲ တစ်ကြိမ်တည်း ရယူလိုက်ပါ။
           </p>
           <div className="mb-3 space-y-1.5">
             <div className="flex items-center gap-2 text-xs">
@@ -183,7 +193,7 @@ export function AccountClient({ email, name, avatarUrl, createdAt, balance, rewa
                 {currentName.trim().length >= 2 ? '✓' : '○'}
               </span>
               <span className={currentName.trim().length >= 2 ? 'text-slate-300' : 'text-slate-500'}>
-                Set your display name
+                အမည် ထည့်သွင်းပါ
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs">
@@ -191,7 +201,7 @@ export function AccountClient({ email, name, avatarUrl, createdAt, balance, rewa
                 {currentAvatar ? '✓' : '○'}
               </span>
               <span className={currentAvatar ? 'text-slate-300' : 'text-slate-500'}>
-                Add a profile photo
+                ပရိုဖိုင်ဓာတ်ပုံ ထည့်သွင်းပါ
               </span>
             </div>
           </div>
@@ -204,7 +214,7 @@ export function AccountClient({ email, name, avatarUrl, createdAt, balance, rewa
                 : 'cursor-not-allowed bg-slate-800 text-slate-500'
             }`}
           >
-            {claiming ? 'Claiming…' : profileComplete ? 'Claim 1,000 KS' : 'Complete profile to claim'}
+            {claiming ? 'ရယူနေသည်…' : profileComplete ? '၁,၀၀၀ ကျပ် ရယူမည်' : 'ပရိုဖိုင် ပြည့်စုံမှ ရယူနိုင်မည်'}
           </button>
           {claimMsg && <p className="mt-2 text-xs text-rose-400">{claimMsg}</p>}
         </div>

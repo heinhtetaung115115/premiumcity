@@ -14,7 +14,7 @@ export default function TopupPageClient({ banks, reason, balance = 0 }: Props) {
   const manualBanks = banks.filter((b) => !b.bank_name.toLowerCase().includes('kbz'));
 
   return (
-    <div className="mx-auto max-w-md space-y-5">
+    <div className={`mx-auto space-y-5 ${selected === null ? 'max-w-md' : 'max-w-4xl'}`}>
       {reason === 'insufficient_balance' && (
         <div className="rounded-xl border border-amber-500/60 bg-amber-950/50 px-4 py-3 text-sm text-amber-50">
           <p className="font-semibold">Not enough wallet balance</p>
@@ -22,13 +22,15 @@ export default function TopupPageClient({ banks, reason, balance = 0 }: Props) {
         </div>
       )}
 
-      {/* ── Balance card ── */}
-      <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5">
-        <p className="text-[13px] text-emerald-50/90">Current balance</p>
-        <p className="text-3xl font-semibold text-white">
-          {balance.toLocaleString()} <span className="text-base">KS</span>
-        </p>
-      </div>
+      {/* ── Balance card (only on chooser) ── */}
+      {selected === null && (
+        <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5">
+          <p className="text-[13px] text-emerald-50/90">Current balance</p>
+          <p className="text-3xl font-semibold text-white">
+            {balance.toLocaleString()} <span className="text-base">KS</span>
+          </p>
+        </div>
+      )}
 
       {selected === null && (
         <>

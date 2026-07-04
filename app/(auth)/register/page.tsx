@@ -228,7 +228,9 @@ export default function RegisterPage() {
                 {digits.map((d, i) => (
                   <input
                     key={i}
-                    ref={(el) => (codeRefs.current[i] = el)}
+                    ref={(el) => {
+                      codeRefs.current[i] = el;
+                    }}
                     value={d}
                     onChange={(e) => handleDigit(i, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(i, e)}

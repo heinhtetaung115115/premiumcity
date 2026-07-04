@@ -151,16 +151,7 @@ export function HomeClient({ categories, products, walletBalance, userName }: Pr
     return result;
   }, [products, selectedCategory, sortBy, searchQuery]);
 
-  const countByCategory = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const p of products) {
-      map[p.categoryId] = (map[p.categoryId] ?? 0) + 1;
-    }
-    return map;
-  }, [products]);
-
-  const topCategories = categories.slice(0, 3);
-  const hasMore = categories.length > 3;
+  const topCategories = categories;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
@@ -173,9 +164,11 @@ export function HomeClient({ categories, products, walletBalance, userName }: Pr
           </div>
           <div>
             <p className="text-[11px] text-slate-500">
-              {userName ? `Welcome back, ${userName}` : 'Welcome to'}
+              {userName ? `Welcome back,` : 'Welcome to'}
             </p>
-            <p className="text-base font-semibold text-slate-50">PremiumCity</p>
+            <p className="text-base font-semibold text-slate-50">
+              {userName || 'PremiumCity'}
+            </p>
           </div>
         </div>
       </header>
@@ -222,82 +215,49 @@ export function HomeClient({ categories, products, walletBalance, userName }: Pr
               </button>
             )}
           </div>
-          <div className="grid grid-cols-4 gap-2.5 sm:gap-3">
-            {topCategories.map((cat) => {
-              const active = selectedCategory === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(active ? 'all' : cat.id)}
-                  className="flex flex-col items-center gap-1.5"
-                >
-                  <div
-                    className={`flex aspect-square w-full items-center justify-center rounded-2xl border transition ${
-                      active
-                        ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400'
-                        : 'border-slate-800/80 bg-slate-900/50 text-emerald-400 hover:border-emerald-500/40'
-                    }`}
+          {/* Horizontal swipeable categories */}
+          <div className="-mx-4 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex gap-3">
+              {topCategories.map((cat) => {
+                const active = selectedCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(active ? 'all' : cat.id)}
+                    className="flex w-[68px] flex-shrink-0 flex-col items-center gap-1.5"
                   >
-                    {categoryIcon(cat.name)}
-                  </div>
-                  <span className="line-clamp-1 text-[11px] text-slate-300">{cat.name}</span>
-                </button>
-              );
-            })}
-            {hasMore && (
-              <div className="flex flex-col items-center gap-1.5">
-                <div className="flex aspect-square w-full items-center justify-center rounded-2xl border border-slate-800/80 bg-slate-900/50 text-emerald-400">
-                  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
-                    <circle cx="5" cy="12" r="2" />
-                    <circle cx="12" cy="12" r="2" />
-                    <circle cx="19" cy="12" r="2" />
-                  </svg>
-                </div>
-                <span className="text-[11px] text-slate-300">More</span>
-              </div>
-            )}
+                    <div
+                      className={`flex h-[68px] w-[68px] items-center justify-center rounded-2xl border transition ${
+                        active
+                          ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400'
+                          : 'border-slate-800/80 bg-slate-900/50 text-emerald-400 hover:border-emerald-500/40'
+                      }`}
+                    >
+                      {categoryIcon(cat.name)}
+                    </div>
+                    <span className="line-clamp-1 w-full text-center text-[11px] text-slate-300">
+                      {cat.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
 
-      <div className="mb-5 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-2.5 py-1.5 text-[11px] text-slate-200 backdrop-blur focus:border-emerald-500 focus:outline-none sm:text-xs"
-          >
-            <option value="all">All ({products.length})</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name} ({countByCategory[cat.id] ?? 0})
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-2.5 py-1.5 text-[11px] text-slate-200 backdrop-blur focus:border-emerald-500 focus:outline-none sm:text-xs"
-          >
-            <option value="default">Default</option>
-            <option value="price_low">Price up</option>
-            <option value="price_high">Price down</option>
-            <option value="name_az">A to Z</option>
-            <option value="name_za">Z to A</option>
-          </select>
-        </div>
-
+      {/* Search only */}
+      <div className="mb-5">
         <div className="relative">
           <input
             type="text"
-            placeholder="Search..."
+            placeholder="Search products..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-lg border border-slate-700/60 bg-slate-900/80 py-1.5 pl-8 pr-3 text-[11px] text-slate-200 placeholder:text-slate-600 backdrop-blur focus:border-emerald-500 focus:outline-none sm:w-48 sm:text-xs"
+            className="w-full rounded-xl border border-slate-700/60 bg-slate-900/80 py-2.5 pl-10 pr-3 text-sm text-slate-200 placeholder:text-slate-600 backdrop-blur focus:border-emerald-500 focus:outline-none"
           />
           <svg
-            className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-600"
+            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"

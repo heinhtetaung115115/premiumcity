@@ -38,6 +38,10 @@ export default async function RootLayout({
 
   const isAuthenticated = !!session?.user;
   const isAdmin = session?.user?.role === 'ADMIN';
+  const userName =
+    (session?.user as any)?.name ||
+    (session?.user as any)?.email?.split('@')[0] ||
+    null;
 
   return (
     <html lang="en">
@@ -59,6 +63,7 @@ export default async function RootLayout({
             walletBalance={walletBalance}
             isAuthenticated={isAuthenticated}
             isAdmin={isAdmin}
+            userName={userName}
           />
 
           {/* Main content */}

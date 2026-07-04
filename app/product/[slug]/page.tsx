@@ -51,8 +51,15 @@ export default async function ProductPage({
 
   const categorySlug = product.category?.slug ?? null;
 
+  // Admin-controlled tags: array of { key, value }
+  const tags: { key: string; value: string }[] = Array.isArray((product as any).tags)
+    ? (product as any).tags.filter(
+        (t: any) => t && typeof t.key === 'string' && typeof t.value === 'string' && t.key.trim() && t.value.trim()
+      )
+    : [];
+
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
+    <main className="mx-auto max-w-2xl px-4 py-6 sm:px-6 sm:py-8">
       {/* 🔔 Wallet insufficient funds modal */}
       <InsufficientFundsModal showOnMount={showInsufficientModal} />
 
@@ -66,79 +73,75 @@ export default async function ProductPage({
         </Link>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] items-start">
-        {/* LEFT: Product overview */}
-        <section className="space-y-6">
-          {/* Type badge + title + price */}
-          <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950 px-5 py-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
-                {isInstant ? 'Instant delivery' : 'Manual delivery'}
+      <div className="space-y-4">
+        {/* ── HERO CARD ── */}
+        <section className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.12] to-emerald-700/[0.03] p-6 text-center">
+          {/* Icon */}
+          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-400">
+            <svg className="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <path d="M10 9l5 3-5 3V9z" fill="currentColor" stroke="none" />
+            </svg>
+          </div>
+
+          {/* Delivery + stock badge */}
+          <div className="mb-2.5 flex flex-wrap items-center justify-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-[11px] font-medium text-emerald-300">
+              {isInstant ? '⚡ Instant delivery' : '📦 Manual delivery'}
+            </span>
+            {isInstant && (
+              <span
+                className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium ${
+                  product.isInStock ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'
+                }`}
+              >
+                {product.isInStock ? 'In stock' : 'Out of stock'}
               </span>
-              {isInstant && (
+            )}
+          </div>
+
+          {/* Title + category */}
+          <h1 className="text-2xl font-semibold text-slate-50">{product.name}</h1>
+          {product.category?.name && (
+            <p className="mt-1 text-[11px] uppercase tracking-wide text-slate-500">
+              {product.category.name}
+            </p>
+          )}
+
+          {/* ── Admin-controlled pill tags ── */}
+          {tags.length > 0 && (
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {tags.map((t, i) => (
                 <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                    product.isInStock
-                      ? 'bg-emerald-500/10 text-emerald-300'
-                      : 'bg-red-500/10 text-red-300'
-                  }`}
+                  key={i}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[11px]"
                 >
-                  {product.isInStock ? 'In stock' : 'Out of stock'}
+                  <span className="text-slate-500">{t.key}</span>
+                  <span className="font-medium text-slate-200">{t.value}</span>
                 </span>
-              )}
+              ))}
             </div>
-
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h1 className="text-2xl md:text-3xl font-semibold text-slate-50">
-                  {product.name}
-                </h1>
-                {product.category?.name && (
-                  <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
-                    {product.category.name}
-                  </p>
-                )}
-              </div>
-
-              {primaryVariant && (
-                <div className="text-right">
-                  <p className="text-xs uppercase text-slate-500">From</p>
-                  <p className="text-xl font-semibold text-emerald-300">
-                    {formatKS(primaryVariant.price)}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Description & delivery note */}
-          <div className="space-y-4">
-            {product.description && (
-              <div className="rounded-2xl border border-slate-800 bg-slate-950 px-5 py-4">
-                <h2 className="mb-1 text-sm font-semibold text-slate-100">
-                  Details
-                </h2>
-                <p className="text-sm leading-relaxed text-slate-300">
-                  {product.description}
-                </p>
-              </div>
-            )}
-
-            {product.deliveryNote && (
-              <div className="rounded-2xl border border-slate-800 bg-slate-950 px-5 py-4">
-                <h2 className="mb-1 text-sm font-semibold text-slate-100">
-                  Delivery info
-                </h2>
-                <p className="text-sm text-slate-300">
-                  {product.deliveryNote}
-                </p>
-              </div>
-            )}
-          </div>
+          )}
         </section>
 
-        {/* RIGHT: Purchase card */}
-        <aside className="rounded-2xl border border-slate-800 bg-slate-950 px-5 py-5 shadow-lg shadow-black/40">
+        {/* ── Details ── */}
+        {product.description && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-950 px-5 py-4">
+            <h2 className="mb-1.5 text-sm font-semibold text-slate-100">Details</h2>
+            <p className="text-sm leading-relaxed text-slate-300">{product.description}</p>
+          </section>
+        )}
+
+        {/* ── Delivery info ── */}
+        {product.deliveryNote && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-950 px-5 py-4">
+            <h2 className="mb-1.5 text-sm font-semibold text-slate-100">Delivery info</h2>
+            <p className="text-sm text-slate-300">{product.deliveryNote}</p>
+          </section>
+        )}
+
+        {/* ── Purchase card (plan select + buy) ── */}
+        <section className="rounded-2xl border border-slate-800 bg-slate-950 px-5 py-5 shadow-lg shadow-black/40">
           <PurchaseForm
             product={product}
             isManual={isManual}
@@ -147,7 +150,7 @@ export default async function ProductPage({
             primaryVariant={primaryVariant}
             otherErrorMessage={otherErrorMessage}
           />
-        </aside>
+        </section>
       </div>
     </main>
   );

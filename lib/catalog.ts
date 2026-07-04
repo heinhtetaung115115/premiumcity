@@ -430,6 +430,7 @@ export async function getProductBySlug(slug: string) {
       is_in_stock,
       input_schema,
       delivery_note,
+      tags,
       category:categories (
         id,
         name,
@@ -507,5 +508,6 @@ export async function getProductBySlug(slug: string) {
   return {
     ...base,
     category: productRow.category,
+    tags: Array.isArray((productRow as any).tags) ? (productRow as any).tags : [],
   };
 }

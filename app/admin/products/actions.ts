@@ -334,6 +334,24 @@ export async function updateProductAction(formData: FormData) {
     }
   }
 
+  // Parse tags (array of { key, value }) from JSON
+  let tags: { key: string; value: string }[] = [];
+  const tagsRaw = String(formData.get('tags') ?? '').trim();
+  if (tagsRaw) {
+    try {
+      const parsed = JSON.parse(tagsRaw);
+      if (Array.isArray(parsed)) {
+        tags = parsed
+          .filter((t) => t && typeof t.key === 'string' && typeof t.value === 'string')
+          .map((t) => ({ key: String(t.key).trim(), value: String(t.value).trim() }))
+          .filter((t) => t.key && t.value)
+          .slice(0, 10); // cap at 10 tags
+      }
+    } catch {
+      return { success: false, error: 'Tags data is invalid' };
+    }
+  }
+
   const supabase = getServiceSupabaseClient();
   const { error } = await supabase
     .from('products')
@@ -341,7 +359,8 @@ export async function updateProductAction(formData: FormData) {
       name,
       description: String(formData.get('description') ?? ''),
       delivery_note: String(formData.get('deliveryNote') ?? ''),
-      input_schema: inputSchema
+      input_schema: inputSchema,
+      tags
     })
     .eq('id', productId);
 

@@ -21,6 +21,7 @@ export type Product = {
   isInStock: boolean;
   inputSchema: ProductInputField[] | null;
   deliveryNote: string | null;
+  tags?: { key: string; value: string }[];
   variants: ProductVariant[];
   category?: { id: string; name: string; slug: string } | null;
 };

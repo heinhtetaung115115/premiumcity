@@ -12,6 +12,7 @@ import {
   deleteInventoryItemAction
 } from './actions';
 import { Button, Card, Input, TextArea } from '@/components/ui';
+import { TagEditor } from './TagEditor';
 import type { Product, ProductVariant, BankAccount } from '@/types/entities';
 
 function mapVariant(row: any): ProductVariant {
@@ -47,6 +48,7 @@ function mapProduct(
     isInStock: row.is_in_stock,
     inputSchema: row.input_schema,
     deliveryNote: row.delivery_note,
+    tags: Array.isArray(row.tags) ? row.tags : [],
     variants: (row.variants ?? []).map(mapVariant),
     category: row.category ?? null,
     inventoryItems: (row.inventory_items ?? []).map((item: any) => ({
@@ -121,7 +123,7 @@ export default async function AdminProductsPage({
     supabase
       .from('products')
       .select(
-        'id,name,slug,description,category_id,product_type,status,is_in_stock,input_schema,delivery_note,category:categories(id,name),variants:product_variants!product_id(*),inventory_items!product_id(id,order_item_id,variant_id,payload)'
+        'id,name,slug,description,category_id,product_type,status,is_in_stock,input_schema,delivery_note,tags,category:categories(id,name),variants:product_variants!product_id(*),inventory_items!product_id(id,order_item_id,variant_id,payload)'
       )
       .order('created_at', { ascending: false }),
     supabase
@@ -371,6 +373,7 @@ email,password,note
                     rows={2}
                     className="text-sm"
                   />
+                  <TagEditor initial={product.tags ?? []} />
                   <div className="md:col-span-2">
                     <Button type="submit" variant="secondary" className="text-xs">
                       Save changes

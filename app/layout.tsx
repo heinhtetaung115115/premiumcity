@@ -21,27 +21,42 @@ export default async function RootLayout({
 }) {
   const session = await getOptionalSession();
 
-  // Try to load wallet balance (for nav chip)
+  // Load wallet balance + fresh name/avatar from the database
   let walletBalance: number | null = null;
+  let userName: string | null =
+    (session?.user as any)?.email?.split('@')[0] || null;
+  let avatarUrl: string | null = null;
+
   if (session?.user?.id) {
     try {
       const overview = await getWalletOverview(session.user.id!);
       walletBalance =
-        typeof overview.balance === 'number' &&
-        Number.isFinite(overview.balance)
+        typeof overview.balance === 'number' && Number.isFinite(overview.balance)
           ? overview.balance
           : 0;
     } catch {
       walletBalance = null;
     }
+
+    // Fresh name + avatar (JWT token may be stale after profile edits)
+    try {
+      const { getServiceSupabaseClient } = await import('@/lib/supabase');
+      const supabase = getServiceSupabaseClient();
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('name,email,avatar_url')
+        .eq('id', session.user.id!)
+        .maybeSingle();
+      const u = (userRow as any) ?? {};
+      userName = u.name || u.email?.split('@')[0] || userName;
+      avatarUrl = u.avatar_url ?? null;
+    } catch {
+      // keep fallback userName
+    }
   }
 
   const isAuthenticated = !!session?.user;
   const isAdmin = session?.user?.role === 'ADMIN';
-  const userName =
-    (session?.user as any)?.name ||
-    (session?.user as any)?.email?.split('@')[0] ||
-    null;
 
   return (
     <html lang="en">
@@ -64,6 +79,7 @@ export default async function RootLayout({
             isAuthenticated={isAuthenticated}
             isAdmin={isAdmin}
             userName={userName}
+            avatarUrl={avatarUrl}
           />
 
           {/* Main content */}

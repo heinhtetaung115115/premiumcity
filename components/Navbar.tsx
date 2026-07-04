@@ -8,13 +8,15 @@ type NavbarProps = {
   isAuthenticated: boolean;
   isAdmin: boolean;
   userName?: string | null;
+  avatarUrl?: string | null;
 };
 
 export default function Navbar({
   walletBalance,
   isAuthenticated,
   isAdmin,
-  userName
+  userName,
+  avatarUrl
 }: NavbarProps) {
   const pathname = usePathname();
 
@@ -104,9 +106,13 @@ export default function Navbar({
               href="/account"
               className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-medium text-slate-200 hover:border-emerald-400 hover:text-emerald-300"
             >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-[10px] font-bold text-slate-950">
-                {initials}
-              </span>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Profile" className="h-6 w-6 rounded-full object-cover" />
+              ) : (
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-[10px] font-bold text-slate-950">
+                  {initials}
+                </span>
+              )}
               <span className="max-w-[90px] truncate">{userName || 'Account'}</span>
             </Link>
           ) : (
@@ -119,36 +125,33 @@ export default function Navbar({
           )}
         </div>
 
-        {/* MOBILE RIGHT SIDE: contact + wallet chip + profile icon */}
+        {/* MOBILE RIGHT SIDE: Talk to support + profile */}
         <div className="flex items-center gap-2 md:hidden">
-          {/* Contact icon */}
+          {/* Talk to support */}
           <Link
             href="/contact"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-slate-300 hover:border-emerald-400 hover:text-emerald-300"
-            aria-label="Contact"
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-medium text-slate-200 hover:border-emerald-400 hover:text-emerald-300"
           >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" strokeLinecap="round" strokeLinejoin="round" />
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-          </Link>
-
-          <Link
-            href="/wallet"
-            className="inline-flex items-center gap-1 rounded-full border border-emerald-500 bg-slate-900/90 px-2.5 py-1 text-[10px] font-semibold text-emerald-300 shadow-[0_0_8px_2px_rgba(16,185,129,0.35)] transition-shadow hover:shadow-[0_0_12px_3px_rgba(16,185,129,0.55)]"
-          >
-            💳 <span className="max-w-[80px] truncate">{walletLabel}</span>
+            <span>Talk to support</span>
           </Link>
 
           {/* Profile icon button */}
           {isAuthenticated ? (
             <Link
               href="/account"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-slate-100 hover:border-emerald-400"
+              className="inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border border-slate-700 bg-slate-900 text-slate-100 hover:border-emerald-400"
               aria-label="Account"
             >
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-[10px] font-bold text-slate-950">
-                {initials}
-              </span>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Profile" className="h-full w-full object-cover" />
+              ) : (
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-[10px] font-bold text-slate-950">
+                  {initials}
+                </span>
+              )}
             </Link>
           ) : (
             <Link

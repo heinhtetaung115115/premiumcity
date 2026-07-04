@@ -1,22 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { signOut } from 'next-auth/react';
-import { updateUsernameAction } from './actions';
+import { updateUsernameAction, updateAvatarAction, removeAvatarAction } from './actions';
 
 type Props = {
   email: string;
   name: string;
+  avatarUrl: string | null;
   createdAt: string | null;
   balance: number;
 };
 
-export function AccountClient({ email, name, createdAt, balance }: Props) {
+export function AccountClient({ email, name, avatarUrl, createdAt, balance }: Props) {
   const [currentName, setCurrentName] = useState(name);
+  const [currentAvatar, setCurrentAvatar] = useState<string | null>(avatarUrl);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const initials = (currentName || email || 'A')
     .split(' ')
@@ -36,7 +40,6 @@ export function AccountClient({ email, name, createdAt, balance }: Props) {
     fd.set('name', draft.trim());
     const res = await updateUsernameAction(fd);
     setSaving(false);
-
     if (res.success) {
       setCurrentName(draft.trim());
       setEditing(false);
@@ -46,23 +49,133 @@ export function AccountClient({ email, name, createdAt, balance }: Props) {
     }
   }
 
+  // Resize + compress image to a small square before uploading
+  async function fileToCompressedDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const size = 256; // square avatar
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject(new Error('Canvas not supported'));
+          // center-crop to square
+          const min = Math.min(img.width, img.height);
+          const sx = (img.width - min) / 2;
+          const sy = (img.height - min) / 2;
+          ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+        };
+        img.onerror = () => reject(new Error('Could not load image'));
+        img.src = reader.result as string;
+      };
+      reader.onerror = () => reject(new Error('Could not read file'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMsg(null);
+    if (!file.type.startsWith('image/')) {
+      setMsg({ type: 'err', text: 'Please choose an image file.' });
+      return;
+    }
+    setUploadingPhoto(true);
+    try {
+      const dataUrl = await fileToCompressedDataUrl(file);
+      const fd = new FormData();
+      fd.set('avatar', dataUrl);
+      const res = await updateAvatarAction(fd);
+      if (res.success) {
+        setCurrentAvatar(dataUrl);
+        setMsg({ type: 'ok', text: 'Profile photo updated.' });
+      } else {
+        setMsg({ type: 'err', text: res.error || 'Could not upload photo.' });
+      }
+    } catch (err: any) {
+      setMsg({ type: 'err', text: err?.message || 'Could not process image.' });
+    } finally {
+      setUploadingPhoto(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  async function handleRemovePhoto() {
+    setMsg(null);
+    setUploadingPhoto(true);
+    const res = await removeAvatarAction();
+    setUploadingPhoto(false);
+    if (res.success) {
+      setCurrentAvatar(null);
+      setMsg({ type: 'ok', text: 'Profile photo removed.' });
+    } else {
+      setMsg({ type: 'err', text: res.error || 'Could not remove photo.' });
+    }
+  }
+
   return (
     <main className="mx-auto max-w-md px-4 py-6 sm:py-8">
       <h1 className="mb-6 text-xl font-semibold text-slate-50">My Account</h1>
 
-      {/* Profile card */}
+      {/* Profile card with photo */}
       <div className="mb-5 rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
         <div className="flex items-center gap-4">
-          <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-xl font-bold text-slate-950">
-            {initials}
-          </span>
+          <div className="relative">
+            {currentAvatar ? (
+              <img
+                src={currentAvatar}
+                alt="Profile"
+                className="h-16 w-16 rounded-2xl object-cover"
+              />
+            ) : (
+              <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-xl font-bold text-slate-950">
+                {initials}
+              </span>
+            )}
+            {/* Camera button */}
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploadingPhoto}
+              className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-slate-900 bg-emerald-500 text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
+              aria-label="Change photo"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoChange}
+              className="hidden"
+            />
+          </div>
           <div className="min-w-0">
             <p className="truncate text-lg font-semibold text-slate-50">
               {currentName || 'No name set'}
             </p>
             <p className="truncate text-sm text-slate-400">{email}</p>
+            {currentAvatar && (
+              <button
+                onClick={handleRemovePhoto}
+                disabled={uploadingPhoto}
+                className="mt-1 text-[11px] text-rose-400 hover:text-rose-300"
+              >
+                Remove photo
+              </button>
+            )}
           </div>
         </div>
+        {uploadingPhoto && (
+          <p className="mt-3 text-xs text-emerald-400">Processing photo…</p>
+        )}
       </div>
 
       {/* Wallet balance */}
@@ -124,11 +237,7 @@ export function AccountClient({ email, name, createdAt, balance }: Props) {
         )}
 
         {msg && (
-          <p
-            className={`mt-3 text-xs ${
-              msg.type === 'ok' ? 'text-emerald-400' : 'text-rose-400'
-            }`}
-          >
+          <p className={`mt-3 text-xs ${msg.type === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}>
             {msg.text}
           </p>
         )}
@@ -157,14 +266,12 @@ export function AccountClient({ email, name, createdAt, balance }: Props) {
         </div>
       </div>
 
-      {/* Coming soon note */}
       <div className="mb-5 rounded-2xl border border-slate-800/60 bg-slate-900/30 p-4">
         <p className="text-xs text-slate-500">
           More settings coming soon — change password, notification preferences, and more.
         </p>
       </div>
 
-      {/* Logout */}
       <button
         onClick={() => signOut({ callbackUrl: '/' })}
         className="flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-500/40 bg-rose-500/10 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/20"

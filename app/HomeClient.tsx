@@ -36,6 +36,7 @@ type Props = {
   products: Product[];
   walletBalance?: number | null;
   userName?: string | null;
+  avatarUrl?: string | null;
 };
 
 function formatKS(amount: number) {
@@ -109,7 +110,7 @@ function ManualIcon() {
   );
 }
 
-export function HomeClient({ categories, products, walletBalance, userName }: Props) {
+export function HomeClient({ categories, products, walletBalance, userName, avatarUrl }: Props) {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<SortOption>('default');
   const [searchQuery, setSearchQuery] = useState('');
@@ -157,11 +158,19 @@ export function HomeClient({ categories, products, walletBalance, userName }: Pr
     <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600">
-            <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none">
-              <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="currentColor" />
-            </svg>
-          </div>
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt="Profile"
+              className="h-10 w-10 rounded-xl object-cover"
+            />
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600">
+              <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none">
+                <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="currentColor" />
+              </svg>
+            </div>
+          )}
           <div>
             <p className="text-[11px] text-slate-500">
               {userName ? `Welcome back,` : 'Welcome to'}

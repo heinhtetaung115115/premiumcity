@@ -1,6 +1,7 @@
 import { getAllProducts } from '@/lib/catalog';
 import { getOptionalSession } from '@/lib/session';
 import { getWalletOverview } from '@/lib/wallet';
+import { getServiceSupabaseClient } from '@/lib/supabase';
 import { HomeClient } from './HomeClient';
 
 export const dynamic = 'force-dynamic';
@@ -8,20 +9,30 @@ export const dynamic = 'force-dynamic';
 export default async function HomePage() {
   const { categories, products } = await getAllProducts();
 
-  // Optional: if logged in, show the wallet balance card
   let walletBalance: number | null = null;
   let userName: string | null = null;
+  let avatarUrl: string | null = null;
 
   try {
     const session = await getOptionalSession();
     const userId = (session?.user as any)?.id;
     if (userId) {
-      userName = (session?.user as any)?.name || (session?.user as any)?.email?.split('@')[0] || null;
+      // Read fresh name + avatar from the DATABASE (not the stale JWT token)
+      const supabase = getServiceSupabaseClient();
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('name,email,avatar_url')
+        .eq('id', userId)
+        .maybeSingle();
+
+      const u = (userRow as any) ?? {};
+      userName = u.name || u.email?.split('@')[0] || null;
+      avatarUrl = u.avatar_url ?? null;
+
       const overview = await getWalletOverview(userId);
       walletBalance = overview.balance;
     }
   } catch {
-    // If anything fails, just hide the balance card — products still render
     walletBalance = null;
   }
 
@@ -31,6 +42,7 @@ export default async function HomePage() {
       products={products}
       walletBalance={walletBalance}
       userName={userName}
+      avatarUrl={avatarUrl}
     />
   );
 }

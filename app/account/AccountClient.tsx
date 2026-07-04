@@ -2,7 +2,13 @@
 
 import { useState, useRef } from 'react';
 import { signOut } from 'next-auth/react';
-import { updateUsernameAction, updateAvatarAction, removeAvatarAction } from './actions';
+import {
+  updateUsernameAction,
+  updateAvatarAction,
+  removeAvatarAction,
+  claimProfileRewardAction,
+} from './actions';
+import { PRESET_AVATARS } from '@/components/preset-avatars';
 
 type Props = {
   email: string;
@@ -10,15 +16,21 @@ type Props = {
   avatarUrl: string | null;
   createdAt: string | null;
   balance: number;
+  rewardClaimed: boolean;
 };
 
-export function AccountClient({ email, name, avatarUrl, createdAt, balance }: Props) {
+export function AccountClient({ email, name, avatarUrl, createdAt, balance, rewardClaimed }: Props) {
   const [currentName, setCurrentName] = useState(name);
   const [currentAvatar, setCurrentAvatar] = useState<string | null>(avatarUrl);
+  const [currentBalance, setCurrentBalance] = useState(balance);
+  const [claimed, setClaimed] = useState(rewardClaimed);
+  const [claiming, setClaiming] = useState(false);
+  const [claimMsg, setClaimMsg] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -49,20 +61,18 @@ export function AccountClient({ email, name, avatarUrl, createdAt, balance }: Pr
     }
   }
 
-  // Resize + compress image to a small square before uploading
   async function fileToCompressedDataUrl(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
         const img = new Image();
         img.onload = () => {
-          const size = 256; // square avatar
+          const size = 256;
           const canvas = document.createElement('canvas');
           canvas.width = size;
           canvas.height = size;
           const ctx = canvas.getContext('2d');
           if (!ctx) return reject(new Error('Canvas not supported'));
-          // center-crop to square
           const min = Math.min(img.width, img.height);
           const sx = (img.width - min) / 2;
           const sy = (img.height - min) / 2;
@@ -77,6 +87,19 @@ export function AccountClient({ email, name, avatarUrl, createdAt, balance }: Pr
     });
   }
 
+  async function saveAvatar(dataUrl: string) {
+    const fd = new FormData();
+    fd.set('avatar', dataUrl);
+    const res = await updateAvatarAction(fd);
+    if (res.success) {
+      setCurrentAvatar(dataUrl);
+      setMsg({ type: 'ok', text: 'Profile photo updated.' });
+      setShowPresets(false);
+    } else {
+      setMsg({ type: 'err', text: res.error || 'Could not update photo.' });
+    }
+  }
+
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -88,20 +111,22 @@ export function AccountClient({ email, name, avatarUrl, createdAt, balance }: Pr
     setUploadingPhoto(true);
     try {
       const dataUrl = await fileToCompressedDataUrl(file);
-      const fd = new FormData();
-      fd.set('avatar', dataUrl);
-      const res = await updateAvatarAction(fd);
-      if (res.success) {
-        setCurrentAvatar(dataUrl);
-        setMsg({ type: 'ok', text: 'Profile photo updated.' });
-      } else {
-        setMsg({ type: 'err', text: res.error || 'Could not upload photo.' });
-      }
+      await saveAvatar(dataUrl);
     } catch (err: any) {
       setMsg({ type: 'err', text: err?.message || 'Could not process image.' });
     } finally {
       setUploadingPhoto(false);
       if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  async function handlePickPreset(url: string) {
+    setMsg(null);
+    setUploadingPhoto(true);
+    try {
+      await saveAvatar(url);
+    } finally {
+      setUploadingPhoto(false);
     }
   }
 
@@ -118,26 +143,84 @@ export function AccountClient({ email, name, avatarUrl, createdAt, balance }: Pr
     }
   }
 
+  const profileComplete = currentName.trim().length >= 2 && !!currentAvatar;
+
+  async function handleClaimReward() {
+    setClaimMsg(null);
+    if (!profileComplete) {
+      setClaimMsg('Add both your name and profile photo first.');
+      return;
+    }
+    setClaiming(true);
+    const res = await claimProfileRewardAction();
+    setClaiming(false);
+    if (res.success) {
+      setClaimed(true);
+      if (typeof res.newBalance === 'number') setCurrentBalance(res.newBalance);
+      setClaimMsg(null);
+    } else {
+      setClaimMsg(res.error || 'Could not claim reward.');
+    }
+  }
+
   return (
     <main className="mx-auto max-w-md px-4 py-6 sm:py-8">
       <h1 className="mb-6 text-xl font-semibold text-slate-50">My Account</h1>
+
+      {/* ── Profile completion reward banner ── */}
+      {!claimed && (
+        <div className="mb-5 overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-500/15 to-emerald-500/10 p-5">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-xl">🎁</span>
+            <p className="text-sm font-semibold text-amber-200">Get free 1,000 KS</p>
+          </div>
+          <p className="mb-3 text-xs leading-relaxed text-slate-300">
+            Complete your profile — add your name and a profile photo — to claim a one-time 1,000 KS bonus to your wallet.
+          </p>
+          <div className="mb-3 space-y-1.5">
+            <div className="flex items-center gap-2 text-xs">
+              <span className={currentName.trim().length >= 2 ? 'text-emerald-400' : 'text-slate-500'}>
+                {currentName.trim().length >= 2 ? '✓' : '○'}
+              </span>
+              <span className={currentName.trim().length >= 2 ? 'text-slate-300' : 'text-slate-500'}>
+                Set your display name
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className={currentAvatar ? 'text-emerald-400' : 'text-slate-500'}>
+                {currentAvatar ? '✓' : '○'}
+              </span>
+              <span className={currentAvatar ? 'text-slate-300' : 'text-slate-500'}>
+                Add a profile photo
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={handleClaimReward}
+            disabled={!profileComplete || claiming}
+            className={`w-full rounded-xl py-2.5 text-sm font-semibold transition ${
+              profileComplete
+                ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+                : 'cursor-not-allowed bg-slate-800 text-slate-500'
+            }`}
+          >
+            {claiming ? 'Claiming…' : profileComplete ? 'Claim 1,000 KS' : 'Complete profile to claim'}
+          </button>
+          {claimMsg && <p className="mt-2 text-xs text-rose-400">{claimMsg}</p>}
+        </div>
+      )}
 
       {/* Profile card with photo */}
       <div className="mb-5 rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
         <div className="flex items-center gap-4">
           <div className="relative">
             {currentAvatar ? (
-              <img
-                src={currentAvatar}
-                alt="Profile"
-                className="h-16 w-16 rounded-2xl object-cover"
-              />
+              <img src={currentAvatar} alt="Profile" className="h-16 w-16 rounded-2xl object-cover" />
             ) : (
               <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-xl font-bold text-slate-950">
                 {initials}
               </span>
             )}
-            {/* Camera button */}
             <button
               onClick={() => fileRef.current?.click()}
               disabled={uploadingPhoto}
@@ -149,13 +232,7 @@ export function AccountClient({ email, name, avatarUrl, createdAt, balance }: Pr
                 <circle cx="12" cy="13" r="4" />
               </svg>
             </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              onChange={handlePhotoChange}
-              className="hidden"
-            />
+            <input ref={fileRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
           </div>
           <div className="min-w-0">
             <p className="truncate text-lg font-semibold text-slate-50">
@@ -173,16 +250,58 @@ export function AccountClient({ email, name, avatarUrl, createdAt, balance }: Pr
             )}
           </div>
         </div>
-        {uploadingPhoto && (
-          <p className="mt-3 text-xs text-emerald-400">Processing photo…</p>
+
+        {/* Photo options */}
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploadingPhoto}
+            className="flex-1 rounded-xl border border-slate-700 py-2 text-xs font-medium text-slate-200 hover:border-emerald-400 hover:text-emerald-300 disabled:opacity-60"
+          >
+            📷 Upload photo
+          </button>
+          <button
+            onClick={() => setShowPresets((s) => !s)}
+            disabled={uploadingPhoto}
+            className="flex-1 rounded-xl border border-slate-700 py-2 text-xs font-medium text-slate-200 hover:border-emerald-400 hover:text-emerald-300 disabled:opacity-60"
+          >
+            😀 Choose avatar
+          </button>
+        </div>
+
+        {/* Preset avatar grid */}
+        {showPresets && (
+          <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <p className="mb-2 text-[11px] text-slate-400">Pick a ready-made avatar</p>
+            <div className="grid grid-cols-6 gap-2">
+              {PRESET_AVATARS.map((av) => {
+                const selected = currentAvatar === av.url;
+                return (
+                  <button
+                    key={av.id}
+                    onClick={() => handlePickPreset(av.url)}
+                    disabled={uploadingPhoto}
+                    title={av.label}
+                    className={`overflow-hidden rounded-xl border-2 transition ${
+                      selected ? 'border-emerald-500' : 'border-transparent hover:border-slate-600'
+                    }`}
+                  >
+                    <img src={av.url} alt={av.label} className="h-full w-full object-cover" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
+
+        {uploadingPhoto && <p className="mt-3 text-xs text-emerald-400">Saving photo…</p>}
       </div>
 
       {/* Wallet balance */}
       <div className="mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5">
         <p className="text-[13px] text-emerald-50/90">Wallet balance</p>
         <p className="text-2xl font-semibold text-white">
-          {balance.toLocaleString()} <span className="text-base">KS</span>
+          {currentBalance.toLocaleString()} <span className="text-base">KS</span>
         </p>
       </div>
 

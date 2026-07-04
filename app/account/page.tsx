@@ -12,7 +12,7 @@ export default async function AccountPage() {
   const supabase = getServiceSupabaseClient();
   const { data: userRow } = await supabase
     .from('users')
-    .select('email,name,avatar_url,created_at')
+    .select('email,name,avatar_url,created_at,profile_reward_claimed')
     .eq('id', userId)
     .maybeSingle();
 
@@ -33,6 +33,7 @@ export default async function AccountPage() {
       avatarUrl={u.avatar_url ?? null}
       createdAt={u.created_at ?? null}
       balance={balance}
+      rewardClaimed={u.profile_reward_claimed ?? false}
     />
   );
 }

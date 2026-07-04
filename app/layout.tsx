@@ -5,6 +5,7 @@ import { AuthSessionProvider } from '@/components/session-provider';
 import Navbar from '@/components/Navbar';  // <-- FIXED CASE
 import { getWalletOverview } from '@/lib/wallet';
 import Footer from '@/components/Footer';
+import { WelcomeRewardPopup } from '@/components/WelcomeRewardPopup';
 import NextTopLoader from 'nextjs-toploader'; // ⬅ Added top progress bar
 import { Analytics } from '@vercel/analytics/react'; // ⬅ Vercel Analytics
 
@@ -26,6 +27,7 @@ export default async function RootLayout({
   let userName: string | null =
     (session?.user as any)?.email?.split('@')[0] || null;
   let avatarUrl: string | null = null;
+  let showWelcomePopup = false;
 
   if (session?.user?.id) {
     try {
@@ -44,12 +46,13 @@ export default async function RootLayout({
       const supabase = getServiceSupabaseClient();
       const { data: userRow } = await supabase
         .from('users')
-        .select('name,email,avatar_url')
+        .select('name,email,avatar_url,welcome_popup_seen,profile_reward_claimed')
         .eq('id', session.user.id!)
         .maybeSingle();
       const u = (userRow as any) ?? {};
       userName = u.name || u.email?.split('@')[0] || userName;
       avatarUrl = u.avatar_url ?? null;
+      showWelcomePopup = !u.welcome_popup_seen && !u.profile_reward_claimed;
     } catch {
       // keep fallback userName
     }
@@ -73,6 +76,9 @@ export default async function RootLayout({
         />
 
         <AuthSessionProvider session={session}>
+          {/* One-time welcome reward popup */}
+          <WelcomeRewardPopup show={showWelcomePopup} />
+
           {/* Top navigation */}
           <Navbar
             walletBalance={walletBalance}

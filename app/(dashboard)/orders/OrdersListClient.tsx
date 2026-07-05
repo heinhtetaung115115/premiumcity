@@ -177,15 +177,15 @@ function CredentialsBlock({ credentials }: { credentials: any[] }) {
 
 function getStatusBadge(statusUpper: string, isPreparing: boolean) {
   if (statusUpper === 'COMPLETED') {
-    return { label: 'COMPLETED', className: 'bg-emerald-500/15 text-emerald-300' };
+    return { label: 'COMPLETED', className: 'bg-emerald-500/15 text-emerald-300', accent: '#10b981' };
   }
   if (statusUpper === 'CANCELLED') {
-    return { label: 'CANCELLED', className: 'bg-rose-500/15 text-rose-300' };
+    return { label: 'CANCELLED', className: 'bg-rose-500/15 text-rose-300', accent: '#f43f5e' };
   }
   if (isPreparing) {
-    return { label: 'PREPARING', className: 'bg-amber-500/15 text-amber-300' };
+    return { label: 'PREPARING', className: 'bg-amber-500/15 text-amber-300', accent: '#f59e0b' };
   }
-  return { label: statusUpper || 'PENDING', className: 'bg-slate-500/15 text-slate-300' };
+  return { label: statusUpper || 'PENDING', className: 'bg-slate-500/15 text-slate-300', accent: '#64748b' };
 }
 
 export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }: OrdersListClientProps) {
@@ -338,11 +338,14 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
         return (
           <Card
             key={order.id}
-            className="border-slate-800 bg-slate-950/70"
+            className="overflow-hidden border-slate-800 bg-slate-900/40 p-0"
           >
-            <div className="p-4">
-              <details className="group" open={autoOpen}>
-                {/* SUMMARY HEADER */}
+            <div className="flex">
+              {/* Status accent bar */}
+              <div className="w-1 flex-shrink-0" style={{ backgroundColor: badge.accent }} />
+              <div className="flex-1 p-4">
+                <details className="group" open={autoOpen}>
+                  {/* SUMMARY HEADER */}
                 <summary className="flex cursor-pointer list-none flex-col gap-3">
                   {/* Top row: icon + name + status */}
                   <div className="flex items-center justify-between gap-3">
@@ -382,10 +385,10 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
                   {/* Expand hint / total */}
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-emerald-400 group-open:hidden">
-                      Tap to view details ▾
+                      View order details ▾
                     </span>
                     <span className="hidden text-[11px] text-slate-500 group-open:inline">
-                      Hide details ▴
+                      Hide ▴
                     </span>
                     <span className="text-sm font-semibold text-slate-50">
                       {totalDisplay}
@@ -802,6 +805,7 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
                   </div>
                 )}
               </details>
+              </div>
             </div>
           </Card>
         );

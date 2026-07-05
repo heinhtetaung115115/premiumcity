@@ -1080,6 +1080,157 @@ export async function listOrdersForUser(
   return result;
 }
 
+export type PagedOrders = {
+  orders: OrderView[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+/**
+ * Paginated version of listOrdersForUser. Fetches ONE page of orders
+ * (plus their items/credentials/VPN keys), staying fast even with hundreds of orders.
+ */
+export async function listOrdersForUserPaged(
+  userId: string,
+  page = 1,
+  pageSize = 15
+): Promise<PagedOrders> {
+  const supabase = getServiceSupabaseClient();
+
+  try {
+    await refreshVpnUsageForUser(userId);
+  } catch (err) {
+    console.warn('listOrdersForUserPaged: refreshVpnUsageForUser failed:', err);
+  }
+
+  const safePage = Math.max(1, Math.floor(page) || 1);
+  const safeSize = Math.max(1, Math.min(50, Math.floor(pageSize) || 15));
+  const from = (safePage - 1) * safeSize;
+  const to = from + safeSize - 1;
+
+  const { count, error: countError } = await supabase
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
+  if (countError) throw countError;
+  const total = count ?? 0;
+
+  const { data: orderRows, error: orderError } = await supabase
+    .from('orders')
+    .select('id,user_id,total_amount,status,created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (orderError) throw orderError;
+  const orders = (orderRows ?? []) as any[];
+  const totalPages = Math.max(1, Math.ceil(total / safeSize));
+
+  if (orders.length === 0) {
+    return { orders: [], total, page: safePage, pageSize: safeSize, totalPages };
+  }
+
+  const orderIds = orders.map((o) => o.id as string);
+
+  const { data: itemRows, error: itemError } = await supabase
+    .from('order_items')
+    .select(
+      'id,order_id,product_id,variant_id,quantity,unit_price,product_name,variant_name,product_type,manual_input'
+    )
+    .in('order_id', orderIds);
+
+  if (itemError) throw itemError;
+  const items = (itemRows ?? []) as any[];
+  const itemIds = items.map((i) => i.id as string);
+
+  let credsByItem: Record<string, any[]> = {};
+  if (itemIds.length > 0) {
+    const { data: credRows, error: credError } = await supabase
+      .from('inventory_items')
+      .select('id,order_item_id,payload')
+      .in('order_item_id', itemIds);
+    if (credError) throw credError;
+    for (const row of (credRows ?? []) as any[]) {
+      if (!row.order_item_id) continue;
+      if (!credsByItem[row.order_item_id]) credsByItem[row.order_item_id] = [];
+      credsByItem[row.order_item_id]!.push(row.payload);
+    }
+  }
+
+  let vpnByItem: Record<string, any[]> = {};
+  if (itemIds.length > 0) {
+    const { data: vpnRows, error: vpnError } = await supabase
+      .from('vpn_keys')
+      .select('id,order_item_id,country,plan_name,expires_at,data_limit_bytes,used_bytes,ss_uri')
+      .in('order_item_id', itemIds);
+    if (vpnError) throw vpnError;
+    for (const row of (vpnRows ?? []) as any[]) {
+      if (!row.order_item_id) continue;
+      if (!vpnByItem[row.order_item_id]) vpnByItem[row.order_item_id] = [];
+      vpnByItem[row.order_item_id].push(row);
+    }
+  }
+
+  const itemsByOrder: Record<string, OrderItemView[]> = {};
+  for (const item of items as any[]) {
+    const vpnRowsForItem = vpnByItem[item.id] ?? [];
+    const primaryVpn = vpnRowsForItem[0] || null;
+
+    const vpnKeys: VpnKeyView[] = vpnRowsForItem.map((vpnRow: any) => ({
+      id: vpnRow.id,
+      country: vpnRow.country ?? null,
+      planName: vpnRow.plan_name ?? null,
+      expiresAt: vpnRow.expires_at ?? null,
+      dataLimitBytes:
+        typeof vpnRow.data_limit_bytes === 'number'
+          ? vpnRow.data_limit_bytes
+          : vpnRow.data_limit_bytes != null
+          ? Number(vpnRow.data_limit_bytes)
+          : null,
+      usedBytes:
+        typeof vpnRow.used_bytes === 'number'
+          ? vpnRow.used_bytes
+          : vpnRow.used_bytes != null
+          ? Number(vpnRow.used_bytes)
+          : null,
+      ssUri: vpnRow.ss_uri ?? null,
+    }));
+
+    const view: OrderItemView = {
+      id: item.id,
+      productName: item.product_name,
+      variantName: item.variant_name,
+      quantity: item.quantity,
+      unitPrice: Number(item.unit_price),
+      productType: item.product_type,
+      manualInput: (item.manual_input ?? null) as Record<string, string> | null,
+      credentials: credsByItem[item.id] ?? [],
+      vpnCountry: primaryVpn?.country ?? null,
+      vpnPlanName: primaryVpn?.plan_name ?? null,
+      vpnExpiresAt: primaryVpn?.expires_at ?? null,
+      vpnDataLimitBytes: primaryVpn?.data_limit_bytes != null ? Number(primaryVpn.data_limit_bytes) : null,
+      vpnUsedBytes: primaryVpn?.used_bytes != null ? Number(primaryVpn.used_bytes) : null,
+      vpnSsUri: primaryVpn?.ss_uri ?? null,
+      vpnKeys,
+    };
+    if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = [];
+    itemsByOrder[item.order_id].push(view);
+  }
+
+  const pagedOrders: OrderView[] = orders.map((order: any) => ({
+    id: order.id,
+    createdAt: order.created_at,
+    status: order.status,
+    totalAmount: Number(order.total_amount),
+    items: itemsByOrder[order.id] ?? [],
+  }));
+
+  return { orders: pagedOrders, total, page: safePage, pageSize: safeSize, totalPages };
+}
+
 export type PendingManualDelivery = {
   orderItemId: string;
   orderId: string;

@@ -1,12 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Copy, Bell } from 'lucide-react';
 import { credentialToRows } from '@/lib/deliveryTypes';
 
 type OrdersListClientProps = {
   orders: any[];
+  page?: number;
+  totalPages?: number;
+  total?: number;
 };
 
 function formatDate(value: string) {
@@ -89,6 +93,34 @@ function CopyButton({ value }: { value: string }) {
   );
 }
 
+function CopyIdButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy(e: React.MouseEvent) {
+    // Prevent the <summary> from toggling the details open/closed
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard?.writeText(value).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      () => {}
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900/60 px-2 py-0.5 text-[10px] text-slate-300 hover:border-emerald-500 hover:text-emerald-300"
+    >
+      <Copy className="h-3 w-3" />
+      <span>{copied ? 'Copied' : 'Copy ID'}</span>
+    </button>
+  );
+}
+
 function CredentialsBlock({ credentials }: { credentials: any[] }) {
   if (!credentials || credentials.length === 0) return null;
 
@@ -140,7 +172,7 @@ function CredentialsBlock({ credentials }: { credentials: any[] }) {
   );
 }
 
-export function OrdersListClient({ orders }: OrdersListClientProps) {
+export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }: OrdersListClientProps) {
   const [hasNotificationSupport, setHasNotificationSupport] = useState(false);
   const [permission, setPermission] =
     useState<NotificationPermission | 'default'>('default');
@@ -265,20 +297,34 @@ export function OrdersListClient({ orders }: OrdersListClientProps) {
 
         const items: any[] = Array.isArray(order.items) ? order.items : [];
 
+        // Smart hybrid: auto-expand orders that are still being prepared
+        // (manual, not cancelled, no credentials delivered yet) so the customer
+        // sees the tracker without tapping. Completed orders stay collapsed.
+        const anyManualPending = items.some((item) => {
+          const type = String(item.productType || item.product_type || '').toUpperCase();
+          const creds = Array.isArray(item.credentials) ? item.credentials : [];
+          const vpnKeys = Array.isArray(item.vpnKeys) ? item.vpnKeys : [];
+          return type === 'MANUAL' && creds.length === 0 && vpnKeys.length === 0;
+        });
+        const autoOpen = anyManualPending && statusUpper !== 'CANCELLED' && statusUpper !== 'COMPLETED';
+
+        const shortId = String(order.id).slice(0, 8);
+
         return (
           <Card
             key={order.id}
             className="border-slate-800 bg-slate-950/70"
           >
             <div className="p-4">
-              <details className="group">
+              <details className="group" open={autoOpen}>
                 {/* SUMMARY HEADER */}
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <p className="text-xs text-slate-500">Order ID</p>
-                    <p className="font-mono text-sm text-slate-100">
-                      {order.id}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">Order ID</span>
+                      <span className="font-mono text-xs text-slate-300">{shortId}</span>
+                      <CopyIdButton value={String(order.id)} />
+                    </div>
                     <p className="text-xs text-slate-500">{createdAt}</p>
                   </div>
 
@@ -712,6 +758,80 @@ export function OrdersListClient({ orders }: OrdersListClientProps) {
           </Card>
         );
       })}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <nav className="flex items-center justify-center gap-1.5 pt-2">
+          <PageLink page={page - 1} disabled={page <= 1} label="‹" />
+          {getPageNumbers(page, totalPages).map((p, i) =>
+            p === '...' ? (
+              <span key={`gap-${i}`} className="px-1 text-xs text-slate-600">
+                …
+              </span>
+            ) : (
+              <PageLink key={p} page={p as number} active={p === page} label={String(p)} />
+            )
+          )}
+          <PageLink page={page + 1} disabled={page >= totalPages} label="›" />
+        </nav>
+      )}
+
+      {total > 0 && (
+        <p className="pb-2 text-center text-[11px] text-slate-600">
+          Page {page} of {totalPages} · {total} order{total === 1 ? '' : 's'} total
+        </p>
+      )}
     </div>
+  );
+}
+
+/** Build a compact page list like [1, '...', 4, 5, 6, '...', 12]. */
+function getPageNumbers(current: number, totalPages: number): (number | string)[] {
+  const pages: (number | string)[] = [];
+  const push = (n: number | string) => pages.push(n);
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) push(i);
+    return pages;
+  }
+  push(1);
+  if (current > 3) push('...');
+  const start = Math.max(2, current - 1);
+  const end = Math.min(totalPages - 1, current + 1);
+  for (let i = start; i <= end; i++) push(i);
+  if (current < totalPages - 2) push('...');
+  push(totalPages);
+  return pages;
+}
+
+function PageLink({
+  page,
+  label,
+  active,
+  disabled,
+}: {
+  page: number;
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+}) {
+  if (disabled) {
+    return (
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.03] text-sm text-slate-700">
+        {label}
+      </span>
+    );
+  }
+  return (
+    <Link
+      href={`/orders?page=${page}`}
+      scroll
+      className={`flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-sm transition ${
+        active
+          ? 'bg-emerald-500 font-semibold text-slate-950'
+          : 'bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+      }`}
+    >
+      {label}
+    </Link>
   );
 }

@@ -1,6 +1,6 @@
 // app/(dashboard)/orders/page.tsx
 import { requireAuth } from '@/lib/session';
-import { listOrdersForUser } from '@/lib/orders';
+import { listOrdersForUserPaged } from '@/lib/orders';
 import { OrdersListClient } from './OrdersListClient';
 
 type OrdersPageProps = {
@@ -9,14 +9,18 @@ type OrdersPageProps = {
 
 export const dynamic = 'force-dynamic';
 
-export default async function OrdersPage(_props: OrdersPageProps) {
+const PAGE_SIZE = 15;
+
+export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   const session = await requireAuth();
   const userId = session.user.id!;
 
-  // Keep it loose so TS doesn't block build
-  const orders = (await listOrdersForUser(userId)) as any[];
+  const pageRaw = searchParams?.page;
+  const pageNum = Math.max(1, parseInt(typeof pageRaw === 'string' ? pageRaw : '1', 10) || 1);
 
-  const hasOrders = Array.isArray(orders) && orders.length > 0;
+  const { orders, total, page, totalPages } = await listOrdersForUserPaged(userId, pageNum, PAGE_SIZE);
+
+  const hasOrders = total > 0;
 
   return (
     <div className="space-y-6">
@@ -28,12 +32,17 @@ export default async function OrdersPage(_props: OrdersPageProps) {
       </header>
 
       {!hasOrders && (
-        <p className="text-sm text-slate-400">
-          You don&apos;t have any orders yet.
-        </p>
+        <p className="text-sm text-slate-400">You don&apos;t have any orders yet.</p>
       )}
 
-      {hasOrders && <OrdersListClient orders={orders} />}
+      {hasOrders && (
+        <OrdersListClient
+          orders={orders as any[]}
+          page={page}
+          totalPages={totalPages}
+          total={total}
+        />
+      )}
     </div>
   );
 }

@@ -1107,27 +1107,25 @@ export async function listOrdersForUserPaged(
 
   const safePage = Math.max(1, Math.floor(page) || 1);
   const safeSize = Math.max(1, Math.min(50, Math.floor(pageSize) || 15));
-  const from = (safePage - 1) * safeSize;
-  const to = from + safeSize - 1;
 
-  const { count, error: countError } = await supabase
-    .from('orders')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId);
-
-  if (countError) throw countError;
-  const total = count ?? 0;
-
-  const { data: orderRows, error: orderError } = await supabase
+  // The custom Supabase client has no count/range support — only limit.
+  // Fetch the lightweight order list (id/status/total/date only), then
+  // slice the current page in JS. This is cheap because we DON'T load
+  // items/credentials/VPN here — only for the 15 orders on this page.
+  const { data: allOrderRows, error: listError } = await supabase
     .from('orders')
     .select('id,user_id,total_amount,status,created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .range(from, to);
+    .limit(2000);
 
-  if (orderError) throw orderError;
-  const orders = (orderRows ?? []) as any[];
+  if (listError) throw listError;
+  const allOrders = (allOrderRows ?? []) as any[];
+  const total = allOrders.length;
   const totalPages = Math.max(1, Math.ceil(total / safeSize));
+
+  const from = (safePage - 1) * safeSize;
+  const orders = allOrders.slice(from, from + safeSize);
 
   if (orders.length === 0) {
     return { orders: [], total, page: safePage, pageSize: safeSize, totalPages };

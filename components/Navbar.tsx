@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { ProfileMenu } from '@/components/ProfileMenu';
 
 type NavbarProps = {
   walletBalance: number | null;
@@ -102,19 +103,12 @@ export default function Navbar({
 
           {/* Profile / auth */}
           {isAuthenticated ? (
-            <Link
-              href="/account"
-              className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-medium text-slate-200 hover:border-emerald-400 hover:text-emerald-300"
-            >
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="Profile" className="h-6 w-6 rounded-full object-cover" />
-              ) : (
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-[10px] font-bold text-slate-950">
-                  {initials}
-                </span>
-              )}
-              <span className="max-w-[90px] truncate">{userName || 'Account'}</span>
-            </Link>
+            <ProfileMenu
+              userName={userName}
+              avatarUrl={avatarUrl}
+              initials={initials}
+              variant="desktop"
+            />
           ) : (
             <Link
               href="/login"
@@ -140,19 +134,12 @@ export default function Navbar({
 
           {/* Profile icon button */}
           {isAuthenticated ? (
-            <Link
-              href="/account"
-              className="inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border border-slate-700 bg-slate-900 text-slate-100 hover:border-emerald-400"
-              aria-label="Account"
-            >
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="Profile" className="h-full w-full object-cover" />
-              ) : (
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-[10px] font-bold text-slate-950">
-                  {initials}
-                </span>
-              )}
-            </Link>
+            <ProfileMenu
+              userName={userName}
+              avatarUrl={avatarUrl}
+              initials={initials}
+              variant="mobile"
+            />
           ) : (
             <Link
               href="/login"

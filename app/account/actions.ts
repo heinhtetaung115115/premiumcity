@@ -177,3 +177,62 @@ export async function dismissWelcomePopupAction() {
   await supabase.from('users').update({ welcome_popup_seen: true }).eq('id', userId);
   return { success: true };
 }
+
+/**
+ * Change the logged-in user's password.
+ * Requires the current password, and a new password (confirmed).
+ */
+export async function changePasswordAction(formData: FormData) {
+  const bcrypt = (await import('bcryptjs')).default;
+  const session = await requireAuth();
+  const userId = session.user.id as string;
+
+  const currentPassword = String(formData.get('currentPassword') ?? '');
+  const newPassword = String(formData.get('newPassword') ?? '');
+  const confirmPassword = String(formData.get('confirmPassword') ?? '');
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return { success: false, error: 'Please fill in all fields.' };
+  }
+  if (newPassword.length < 8) {
+    return { success: false, error: 'New password must be at least 8 characters.' };
+  }
+  if (newPassword !== confirmPassword) {
+    return { success: false, error: 'New passwords do not match.' };
+  }
+  if (newPassword === currentPassword) {
+    return { success: false, error: 'New password must be different from the current one.' };
+  }
+
+  const supabase = getServiceSupabaseClient();
+
+  // Load current hash
+  const { data: userRow, error: loadErr } = await supabase
+    .from('users')
+    .select('id,password_hash')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (loadErr) return { success: false, error: loadErr.message };
+  const u = (userRow as any) ?? {};
+  if (!u.password_hash) {
+    return { success: false, error: 'Could not verify your account.' };
+  }
+
+  // Verify current password
+  const ok = await bcrypt.compare(currentPassword, u.password_hash);
+  if (!ok) {
+    return { success: false, error: 'Current password is incorrect.' };
+  }
+
+  // Hash + save new password
+  const newHash = await bcrypt.hash(newPassword, 12);
+  const { error: updErr } = await supabase
+    .from('users')
+    .update({ password_hash: newHash })
+    .eq('id', userId);
+
+  if (updErr) return { success: false, error: updErr.message };
+
+  return { success: true };
+}

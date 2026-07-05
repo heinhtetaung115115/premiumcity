@@ -177,15 +177,39 @@ function CredentialsBlock({ credentials }: { credentials: any[] }) {
 
 function getStatusBadge(statusUpper: string, isPreparing: boolean) {
   if (statusUpper === 'COMPLETED') {
-    return { label: 'COMPLETED', className: 'bg-emerald-500/15 text-emerald-300', accent: '#10b981' };
+    return {
+      label: 'COMPLETED',
+      badgeClass: 'bg-emerald-500 text-emerald-950',
+      headerClass: 'bg-emerald-500/12 border-emerald-500/20',
+      cardBorder: 'border-emerald-500/25',
+      iconBg: 'bg-emerald-500/25 text-emerald-300',
+    };
   }
   if (statusUpper === 'CANCELLED') {
-    return { label: 'CANCELLED', className: 'bg-rose-500/15 text-rose-300', accent: '#f43f5e' };
+    return {
+      label: 'CANCELLED',
+      badgeClass: 'bg-rose-500 text-rose-950',
+      headerClass: 'bg-rose-500/12 border-rose-500/20',
+      cardBorder: 'border-rose-500/25',
+      iconBg: 'bg-rose-500/25 text-rose-300',
+    };
   }
   if (isPreparing) {
-    return { label: 'PREPARING', className: 'bg-amber-500/15 text-amber-300', accent: '#f59e0b' };
+    return {
+      label: 'PREPARING',
+      badgeClass: 'bg-amber-500 text-amber-950',
+      headerClass: 'bg-amber-500/12 border-amber-500/20',
+      cardBorder: 'border-amber-500/25',
+      iconBg: 'bg-amber-500/25 text-amber-300',
+    };
   }
-  return { label: statusUpper || 'PENDING', className: 'bg-slate-500/15 text-slate-300', accent: '#64748b' };
+  return {
+    label: statusUpper || 'PENDING',
+    badgeClass: 'bg-slate-500 text-slate-950',
+    headerClass: 'bg-slate-500/12 border-slate-500/20',
+    cardBorder: 'border-slate-600/30',
+    iconBg: 'bg-slate-500/25 text-slate-300',
+  };
 }
 
 export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }: OrdersListClientProps) {
@@ -338,43 +362,39 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
         return (
           <Card
             key={order.id}
-            className="overflow-hidden border-slate-800 bg-slate-900/40 p-0"
+            className={`overflow-hidden bg-transparent p-0 shadow-lg shadow-black/40 ${badge.cardBorder}`}
           >
-            <div className="flex">
-              {/* Status accent bar */}
-              <div className="w-1 flex-shrink-0" style={{ backgroundColor: badge.accent }} />
-              <div className="flex-1 p-4">
-                <details className="group" open={autoOpen}>
-                  {/* SUMMARY HEADER */}
-                <summary className="flex cursor-pointer list-none flex-col gap-3">
-                  {/* Top row: icon + name + status */}
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-400">
-                        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
-                          <rect x="3" y="4" width="18" height="16" rx="2" />
-                          <path d="M9 9l4 3-4 3V9z" fill="currentColor" stroke="none" />
-                        </svg>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-100">
-                          {headerName}
-                          {itemCount > 1 && (
-                            <span className="ml-1 text-xs font-normal text-slate-500">
-                              +{itemCount - 1} more
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-[11px] text-slate-500">{createdAt}</p>
-                      </div>
+            <details className="group" open={autoOpen}>
+              <summary className="cursor-pointer list-none">
+                {/* HEADER STRIP (tinted by status) */}
+                <div className={`flex items-center justify-between gap-3 border-b px-4 py-3 ${badge.headerClass}`}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${badge.iconBg}`}>
+                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                        <rect x="3" y="4" width="18" height="16" rx="2" />
+                        <path d="M9 9l4 3-4 3V9z" fill="currentColor" stroke="none" />
+                      </svg>
                     </div>
-                    <span className={`flex-shrink-0 rounded-md px-2.5 py-1 text-[9px] font-semibold ${badge.className}`}>
-                      {badge.label}
-                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-50">
+                        {headerName}
+                        {itemCount > 1 && (
+                          <span className="ml-1 text-xs font-normal text-slate-400">
+                            +{itemCount - 1} more
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-slate-400">{createdAt}</p>
+                    </div>
                   </div>
+                  <span className={`flex-shrink-0 rounded-md px-2 py-1 text-[9px] font-bold ${badge.badgeClass}`}>
+                    {badge.label}
+                  </span>
+                </div>
 
-                  {/* Order ID row with copy */}
-                  <div className="flex items-center justify-between rounded-xl bg-black/25 px-3 py-2">
+                {/* BODY: order id + hint + total */}
+                <div className="space-y-3 bg-slate-950/60 px-4 py-3">
+                  <div className="flex items-center justify-between rounded-xl bg-black/30 px-3 py-2">
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] text-slate-500">Order ID</span>
                       <span className="font-mono text-[11px] text-slate-300">{shortId}</span>
@@ -382,7 +402,6 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
                     <CopyIdButton value={String(order.id)} />
                   </div>
 
-                  {/* Expand hint / total */}
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-emerald-400 group-open:hidden">
                       View order details ▾
@@ -394,11 +413,13 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
                       {totalDisplay}
                     </span>
                   </div>
-                </summary>
+                </div>
+              </summary>
 
-                {/* ORDER DETAILS */}
+              {/* ORDER DETAILS */}
+              <div className="bg-slate-950/60 px-4 pb-4">
                 {items.length > 0 && (
-                  <div className="mt-4 space-y-3 border-t border-slate-800 pt-3 transition-all duration-200 group-open:opacity-100">
+                  <div className="space-y-3 border-t border-slate-800 pt-3 transition-all duration-200 group-open:opacity-100">
                     {items.map((item, idx) => {
                       const qty = Number(item.quantity ?? 1);
                       const productName =
@@ -804,9 +825,8 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
                     })}
                   </div>
                 )}
-              </details>
               </div>
-            </div>
+            </details>
           </Card>
         );
       })}

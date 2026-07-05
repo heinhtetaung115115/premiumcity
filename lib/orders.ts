@@ -1099,11 +1099,11 @@ export async function listOrdersForUserPaged(
 ): Promise<PagedOrders> {
   const supabase = getServiceSupabaseClient();
 
-  try {
-    await refreshVpnUsageForUser(userId);
-  } catch (err) {
-    console.warn('listOrdersForUserPaged: refreshVpnUsageForUser failed:', err);
-  }
+  // NOTE: We intentionally do NOT call refreshVpnUsageForUser here.
+  // That function makes external HTTP calls to VPN servers on every page
+  // load, which was the main cause of slow order-page loads. VPN usage is
+  // refreshed elsewhere (e.g. when opening a single order), so the list
+  // stays fast. Displayed usage may be slightly stale until then.
 
   const safePage = Math.max(1, Math.floor(page) || 1);
   const safeSize = Math.max(1, Math.min(50, Math.floor(pageSize) || 15));

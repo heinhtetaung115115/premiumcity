@@ -125,49 +125,52 @@ function CredentialsBlock({ credentials }: { credentials: any[] }) {
   if (!credentials || credentials.length === 0) return null;
 
   return (
-    <div className="mt-3 rounded-xl border border-emerald-700/40 bg-emerald-950/20 p-3">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-300">
-        Delivered access
-      </p>
+    <div className="mt-3 overflow-hidden rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.08] to-emerald-700/[0.02] p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <svg className="h-4 w-4 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2a10 10 0 100 20 10 10 0 000-20zm4.7 7.7l-5.4 5.4a1 1 0 01-1.4 0l-2.6-2.6a1 1 0 011.4-1.4l1.9 1.9 4.7-4.7a1 1 0 011.4 1.4z" />
+        </svg>
+        <span className="text-xs font-semibold text-emerald-200">Your account is ready</span>
+      </div>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         {credentials.map((cred, idx) => {
           const rows = credentialToRows(cred);
           if (!rows.length) return null;
 
           return (
-            <div key={idx} className="rounded-lg bg-slate-950/80 px-3 py-2">
-              <p className="mb-1 text-[11px] text-slate-500">
-                Credential #{idx + 1}
-              </p>
+            <div key={idx} className="space-y-2">
+              {credentials.length > 1 && (
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">
+                  Account #{idx + 1}
+                </p>
+              )}
 
-              <div className="space-y-2">
-                {rows.map((row) => (
-                  <div
-                    key={row.label}
-                    className="flex items-start justify-between gap-2"
-                  >
-                    <div className="min-w-0">
-                      <span className="text-[11px] uppercase text-slate-500">
-                        {row.label}
-                      </span>
-                      <p className="break-all text-sm text-emerald-100">
-                        {row.value}
-                      </p>
-                    </div>
-
+              {rows.map((row) => (
+                <div key={row.label}>
+                  <p className="mb-1 text-[9px] uppercase tracking-[0.05em] text-slate-500">
+                    {row.label}
+                  </p>
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5">
+                    <span className="min-w-0 break-all font-mono text-[13px] text-slate-100">
+                      {row.value}
+                    </span>
                     {row.copyable && (
                       <div className="flex-shrink-0">
                         <CopyButton value={row.value} />
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           );
         })}
       </div>
+
+      <p className="mt-3 text-[10px] leading-relaxed text-slate-400">
+        ⚠ Please don&apos;t change the account password. If it stops working, copy your Order ID above and contact support.
+      </p>
     </div>
   );
 }

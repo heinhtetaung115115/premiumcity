@@ -177,39 +177,15 @@ function CredentialsBlock({ credentials }: { credentials: any[] }) {
 
 function getStatusBadge(statusUpper: string, isPreparing: boolean) {
   if (statusUpper === 'COMPLETED') {
-    return {
-      label: 'COMPLETED',
-      badgeClass: 'bg-emerald-500 text-emerald-950',
-      headerClass: 'bg-emerald-500/12 border-emerald-500/20',
-      cardBorder: 'border-emerald-500/25',
-      iconBg: 'bg-emerald-500/25 text-emerald-300',
-    };
+    return { label: 'COMPLETED', badgeClass: 'bg-emerald-900/60 text-emerald-300' };
   }
   if (statusUpper === 'CANCELLED') {
-    return {
-      label: 'CANCELLED',
-      badgeClass: 'bg-rose-500 text-rose-950',
-      headerClass: 'bg-rose-500/12 border-rose-500/20',
-      cardBorder: 'border-rose-500/25',
-      iconBg: 'bg-rose-500/25 text-rose-300',
-    };
+    return { label: 'CANCELLED', badgeClass: 'bg-rose-900/60 text-rose-300' };
   }
   if (isPreparing) {
-    return {
-      label: 'PREPARING',
-      badgeClass: 'bg-amber-500 text-amber-950',
-      headerClass: 'bg-amber-500/12 border-amber-500/20',
-      cardBorder: 'border-amber-500/25',
-      iconBg: 'bg-amber-500/25 text-amber-300',
-    };
+    return { label: 'PREPARING', badgeClass: 'bg-amber-900/60 text-amber-300' };
   }
-  return {
-    label: statusUpper || 'PENDING',
-    badgeClass: 'bg-slate-500 text-slate-950',
-    headerClass: 'bg-slate-500/12 border-slate-500/20',
-    cardBorder: 'border-slate-600/30',
-    iconBg: 'bg-slate-500/25 text-slate-300',
-  };
+  return { label: statusUpper || 'PENDING', badgeClass: 'bg-slate-700/60 text-slate-300' };
 }
 
 export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }: OrdersListClientProps) {
@@ -362,14 +338,14 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
         return (
           <Card
             key={order.id}
-            className={`overflow-hidden bg-transparent p-0 shadow-lg shadow-black/40 ${badge.cardBorder}`}
+            className="overflow-hidden border-slate-600/50 bg-[#232d42] p-0"
           >
             <details className="group" open={autoOpen}>
-              <summary className="cursor-pointer list-none">
-                {/* HEADER STRIP (tinted by status) */}
-                <div className={`flex items-center justify-between gap-3 border-b px-4 py-3 ${badge.headerClass}`}>
+              <summary className="cursor-pointer list-none p-4">
+                {/* Top row: icon + name + status */}
+                <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${badge.iconBg}`}>
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#2f3d5c] text-emerald-300">
                       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
                         <rect x="3" y="4" width="18" height="16" rx="2" />
                         <path d="M9 9l4 3-4 3V9z" fill="currentColor" stroke="none" />
@@ -392,34 +368,33 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
                   </span>
                 </div>
 
-                {/* BODY: order id + hint + total */}
-                <div className="space-y-3 bg-slate-950/60 px-4 py-3">
-                  <div className="flex items-center justify-between rounded-xl bg-black/30 px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-slate-500">Order ID</span>
-                      <span className="font-mono text-[11px] text-slate-300">{shortId}</span>
-                    </div>
-                    <CopyIdButton value={String(order.id)} />
+                {/* Order ID row */}
+                <div className="mt-3 flex items-center justify-between rounded-xl bg-black/20 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400">Order ID</span>
+                    <span className="font-mono text-[11px] text-slate-200">{shortId}</span>
                   </div>
+                  <CopyIdButton value={String(order.id)} />
+                </div>
 
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-emerald-400 group-open:hidden">
-                      View order details ▾
-                    </span>
-                    <span className="hidden text-[11px] text-slate-500 group-open:inline">
-                      Hide ▴
-                    </span>
-                    <span className="text-sm font-semibold text-slate-50">
-                      {totalDisplay}
-                    </span>
-                  </div>
+                {/* Divider + hint + total */}
+                <div className="mt-3 flex items-center justify-between border-t border-slate-600/40 pt-3">
+                  <span className="text-[11px] text-emerald-300 group-open:hidden">
+                    View order details ▾
+                  </span>
+                  <span className="hidden text-[11px] text-slate-400 group-open:inline">
+                    Hide ▴
+                  </span>
+                  <span className="text-sm font-semibold text-slate-50">
+                    {totalDisplay}
+                  </span>
                 </div>
               </summary>
 
               {/* ORDER DETAILS */}
-              <div className="bg-slate-950/60 px-4 pb-4">
+              <div className="px-4 pb-4">
                 {items.length > 0 && (
-                  <div className="space-y-3 border-t border-slate-800 pt-3 transition-all duration-200 group-open:opacity-100">
+                  <div className="space-y-3 border-t border-slate-600/40 pt-3 transition-all duration-200 group-open:opacity-100">
                     {items.map((item, idx) => {
                       const qty = Number(item.quantity ?? 1);
                       const productName =

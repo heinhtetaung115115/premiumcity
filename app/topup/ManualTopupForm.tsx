@@ -65,7 +65,7 @@ export default function ManualTopupForm({ banks }: Props) {
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
         <aside className="space-y-3">
           <h2 className="text-lg font-semibold text-slate-200">🏦 Select bank</h2>
-          <div className="max-h-[420px] overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/40">
+          <div className="max-h-[420px] overflow-y-auto rounded-2xl border border-slate-800/80 bg-slate-900/50">
             <ul className="divide-y divide-slate-800">
               {banks.map((b) => (
                 <li key={b.id}>
@@ -88,14 +88,14 @@ export default function ManualTopupForm({ banks }: Props) {
               </div>
 
               {method === 'qr' ? (
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4">
                   <p className="mb-3 text-sm text-slate-400">Scan this QR to transfer.</p>
                   {selected.qr_code_url ? (
                     <div className="flex justify-center"><img src={selected.qr_code_url} alt="QR" className="h-auto max-h-[360px] w-full max-w-xs rounded-xl border border-slate-800 bg-slate-950 object-contain" /></div>
                   ) : <p className="text-sm text-slate-500">No QR for this bank.</p>}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4">
                   <p className="text-sm text-slate-400">Transfer to:</p>
                   <div className="mt-3 grid gap-2 text-sm">
                     <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900 px-3 py-2"><span className="text-xs text-slate-500">Bank</span><span className="text-slate-200">{selected.bank_name}</span></div>
@@ -112,7 +112,7 @@ export default function ManualTopupForm({ banks }: Props) {
                 </div>
               )}
 
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+              <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   လိုသလို ထည့်သွင်းလိုသော ငွေပမာဏ (Custom amount)
                 </p>
@@ -124,7 +124,7 @@ export default function ManualTopupForm({ banks }: Props) {
                 <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))} inputMode="numeric" placeholder="ငွေပမာဏ ထည့်ပါ" className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-50 outline-none focus:border-emerald-500" />
               </div>
 
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+              <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4">
                 <p className="mb-2 text-sm text-slate-400">ငွေလွဲပြေစာမှ Transaction ID နောက်ဆုံးနံပါတ် 4 လုံးထည့်ပါ</p>
                 <input value={last4} onChange={(e) => setLast4(e.target.value.replace(/[^\d]/g, '').slice(0, 4))} inputMode="numeric" placeholder="1234" className="w-36 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-center text-sm tracking-[0.4em] text-slate-50 outline-none focus:border-emerald-500" />
               </div>
@@ -132,7 +132,7 @@ export default function ManualTopupForm({ banks }: Props) {
               <div className="flex justify-end"><Button disabled={submitting} onClick={handleSubmit}>{submitting ? 'Submitting…' : 'Submit top-up'}</Button></div>
             </>
           ) : (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-6 text-sm text-slate-400">Select a bank on the left.</div>
+            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-6 text-sm text-slate-400">Select a bank on the left.</div>
           )}
         </section>
       </div>

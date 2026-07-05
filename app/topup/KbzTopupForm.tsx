@@ -207,12 +207,12 @@ export default function KbzTopupForm({ bank }: { bank: BankRow }) {
           <p className="text-xs text-slate-400">Transfer to this account, then upload the screenshot below.</p>
 
           {/* Account details */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-2">
-            <div className="flex items-center justify-between rounded-lg bg-slate-900 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-3 space-y-2">
+            <div className="flex items-center justify-between rounded-xl bg-slate-950/60 px-3 py-2.5 text-sm">
               <span className="text-xs text-slate-500">Account name</span>
               <span className="text-slate-200">{bank.account_name}</span>
             </div>
-            <div className="flex items-center justify-between rounded-lg bg-slate-900 px-3 py-2 text-sm">
+            <div className="flex items-center justify-between rounded-xl bg-slate-950/60 px-3 py-2.5 text-sm">
               <span className="text-xs text-slate-500">Account number</span>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-slate-50">{bank.account_no}</span>
@@ -226,7 +226,7 @@ export default function KbzTopupForm({ bank }: { bank: BankRow }) {
 
           {/* Collapsible QR code */}
           {bank.qr_code_url && (
-            <div className="rounded-xl border border-slate-800 bg-slate-950/60">
+            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50">
               <button
                 type="button"
                 onClick={() => setShowQr(!showQr)}
@@ -247,7 +247,7 @@ export default function KbzTopupForm({ bank }: { bank: BankRow }) {
         {/* RIGHT: Upload form */}
         <section className="space-y-4 self-start lg:sticky lg:top-6">
           {/* Amount */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+          <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               လိုသလို ထည့်သွင်းလိုသော ငွေပမာဏ (Custom amount)
             </p>
@@ -261,11 +261,11 @@ export default function KbzTopupForm({ bank }: { bank: BankRow }) {
             </div>
             <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))}
               inputMode="numeric" placeholder="ငွေပမာဏ ထည့်ပါ"
-              className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-50 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/60" />
+              className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/60" />
           </div>
 
           {/* Screenshot */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+          <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Payment Screenshot <span className="text-red-400">*</span>
             </p>

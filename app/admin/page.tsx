@@ -4,10 +4,11 @@ import { redirect } from 'next/navigation';
 import { requireAdmin } from '@/lib/session';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { listPendingManualDeliveries } from '@/lib/orders';
+import { listPendingManualDeliveries, getAdminSalesStats } from '@/lib/orders';
 import { listPendingTopupsForAdmin } from '@/lib/wallet';
 import { processTopup } from './topups/actions';
 import { dismissManualDeliveryAction } from './orders/actions';
+import { SalesStatsHero } from './SalesStatsHero';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,10 +41,18 @@ async function dismissDeliveryFormAction(formData: FormData): Promise<void> {
 export default async function AdminHomePage() {
   await requireAdmin();
 
-  const [pendingDeliveries, pendingTopups] = await Promise.all([
-    listPendingManualDeliveries(8),
-    listPendingTopupsForAdmin(8),
+  const [pendingDeliveries, pendingTopups, salesStats] = await Promise.all([
+    listPendingManualDeliveries(200),
+    listPendingTopupsForAdmin(200),
+    getAdminSalesStats(),
   ]);
+
+  const deliveriesCount = pendingDeliveries.length;
+  const topupsCount = pendingTopups.length;
+
+  // Only show the first 8 in the lists below (counts use the full length above)
+  const deliveriesToShow = pendingDeliveries.slice(0, 8);
+  const topupsToShow = pendingTopups.slice(0, 8);
 
   return (
     <main className="space-y-8">
@@ -54,13 +63,50 @@ export default async function AdminHomePage() {
         </p>
       </header>
 
-      {/* Pending manual deliveries */}
+      {/* ── STATS: hero revenue + action counts ── */}
       <section className="space-y-3">
+        <SalesStatsHero
+          today={salesStats.today}
+          week={salesStats.week}
+          month={salesStats.month}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            href="#deliveries"
+            className="flex items-center justify-between rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] p-4 transition hover:border-amber-500/50"
+          >
+            <div>
+              <p className="text-2xl font-bold leading-none text-amber-300">{deliveriesCount}</p>
+              <p className="mt-1.5 text-[11px] text-slate-400">Deliveries pending</p>
+            </div>
+            <svg className="h-7 w-7 text-amber-500/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+              <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12" />
+            </svg>
+          </Link>
+          <Link
+            href="#topups"
+            className="flex items-center justify-between rounded-2xl border border-sky-500/30 bg-sky-500/[0.08] p-4 transition hover:border-sky-500/50"
+          >
+            <div>
+              <p className="text-2xl font-bold leading-none text-sky-300">{topupsCount}</p>
+              <p className="mt-1.5 text-[11px] text-slate-400">Top-ups to review</p>
+            </div>
+            <svg className="h-7 w-7 text-sky-500/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+              <rect x="2" y="5" width="20" height="14" rx="2" />
+              <path d="M2 10h20" />
+            </svg>
+          </Link>
+        </div>
+      </section>
+
+      {/* Pending manual deliveries */}
+      <section id="deliveries" className="scroll-mt-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-100">
             Manual orders needing delivery
             <span className="ml-2 rounded-full bg-amber-900/50 px-2 py-0.5 text-xs font-medium text-amber-300">
-              {pendingDeliveries.length}
+              {deliveriesCount}
             </span>
           </h2>
           <Link href="/admin/orders" className="text-xs text-emerald-400 hover:text-emerald-300">
@@ -68,11 +114,11 @@ export default async function AdminHomePage() {
           </Link>
         </div>
 
-        {pendingDeliveries.length === 0 ? (
+        {deliveriesToShow.length === 0 ? (
           <Card className="p-4 text-sm text-slate-400">Nothing waiting — all manual orders are delivered.</Card>
         ) : (
           <div className="space-y-2">
-            {pendingDeliveries.map((d) => (
+            {deliveriesToShow.map((d) => (
               <Card key={d.orderItemId} className="p-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -111,12 +157,12 @@ export default async function AdminHomePage() {
       </section>
 
       {/* Pending top-ups */}
-      <section className="space-y-3">
+      <section id="topups" className="scroll-mt-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-100">
             Top-ups needing review
             <span className="ml-2 rounded-full bg-amber-900/50 px-2 py-0.5 text-xs font-medium text-amber-300">
-              {pendingTopups.length}
+              {topupsCount}
             </span>
           </h2>
           <Link href="/admin/topups" className="text-xs text-emerald-400 hover:text-emerald-300">
@@ -124,11 +170,11 @@ export default async function AdminHomePage() {
           </Link>
         </div>
 
-        {pendingTopups.length === 0 ? (
+        {topupsToShow.length === 0 ? (
           <Card className="p-4 text-sm text-slate-400">No pending top-ups.</Card>
         ) : (
           <div className="space-y-2">
-            {pendingTopups.map((t) => (
+            {topupsToShow.map((t) => (
               <Card key={t.id} className="p-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>

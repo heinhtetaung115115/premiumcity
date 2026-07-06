@@ -1245,6 +1245,100 @@ export type PendingManualDelivery = {
  * delivered (product_type = MANUAL and no inventory_items row attached
  * yet). Used to power the "needs delivery" queue on the admin home page.
  */
+export type AdminSalesStats = {
+  today: { amount: number; count: number };
+  week: { amount: number; count: number };
+  month: { amount: number; count: number };
+};
+
+/**
+ * Sales stats for the admin dashboard. Counts ONLY completed orders,
+ * using calendar periods in the given timezone (defaults to Asia/Yangon):
+ *   - today  = since local midnight today
+ *   - week   = since Monday of the current week
+ *   - month  = since the 1st of the current month
+ */
+export async function getAdminSalesStats(timeZone = 'Asia/Yangon'): Promise<AdminSalesStats> {
+  const supabase = getServiceSupabaseClient();
+
+  // Determine the current local date parts in the target timezone.
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+  });
+  const parts = fmt.formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  const year = Number(get('year'));
+  const month = Number(get('month'));
+  const day = Number(get('day'));
+  const weekdayShort = get('weekday'); // Mon, Tue, ...
+
+  // Offset (in ms) between the target timezone and UTC right now.
+  // Used to convert a local wall-clock midnight into a UTC instant.
+  const asUTC = Date.UTC(year, month - 1, day, 0, 0, 0);
+  const localMidnightGuess = new Date(
+    now.toLocaleString('en-US', { timeZone })
+  );
+  const tzOffsetMs = now.getTime() - localMidnightGuess.getTime();
+
+  // Local midnight today -> UTC instant
+  const startOfToday = new Date(Date.UTC(year, month - 1, day, 0, 0, 0) + tzOffsetMs);
+
+  // Start of week (Monday). Compute how many days back Monday is.
+  const weekdayIndex = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekdayShort);
+  const daysSinceMonday = weekdayIndex === 0 ? 6 : weekdayIndex - 1;
+  const startOfWeek = new Date(startOfToday.getTime() - daysSinceMonday * 24 * 60 * 60 * 1000);
+
+  // Start of month (1st, local midnight) -> UTC instant
+  const startOfMonth = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0) + tzOffsetMs);
+
+  // Fetch completed orders since the start of the month (covers all three windows).
+  const { data: rows, error } = await supabase
+    .from('orders')
+    .select('total_amount,status,created_at')
+    .eq('status', 'COMPLETED')
+    .order('created_at', { ascending: false })
+    .limit(5000);
+
+  if (error) throw error;
+  const orders = (rows ?? []) as any[];
+
+  const stats: AdminSalesStats = {
+    today: { amount: 0, count: 0 },
+    week: { amount: 0, count: 0 },
+    month: { amount: 0, count: 0 },
+  };
+
+  const tMonth = startOfMonth.getTime();
+  const tWeek = startOfWeek.getTime();
+  const tToday = startOfToday.getTime();
+
+  for (const o of orders) {
+    const created = new Date(o.created_at).getTime();
+    if (Number.isNaN(created)) continue;
+    const amt = Number(o.total_amount) || 0;
+
+    if (created >= tMonth) {
+      stats.month.amount += amt;
+      stats.month.count += 1;
+    }
+    if (created >= tWeek) {
+      stats.week.amount += amt;
+      stats.week.count += 1;
+    }
+    if (created >= tToday) {
+      stats.today.amount += amt;
+      stats.today.count += 1;
+    }
+  }
+
+  return stats;
+}
+
 export async function listPendingManualDeliveries(limit = 50): Promise<PendingManualDelivery[]> {
   const supabase = getServiceSupabaseClient();
 

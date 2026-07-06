@@ -1339,6 +1339,127 @@ export async function getAdminSalesStats(timeZone = 'Asia/Yangon'): Promise<Admi
   return stats;
 }
 
+export type AdminReportStats = {
+  today: { amount: number; count: number };
+  week: { amount: number; count: number };
+  month: { amount: number; count: number };
+  allTime: { amount: number; count: number };
+  dailyLast7: { date: string; label: string; amount: number; count: number }[];
+  topProducts: { name: string; count: number; amount: number }[];
+};
+
+/**
+ * Richer stats for the admin Reports page: today/week/month/all-time,
+ * a 7-day daily breakdown, and top products by revenue.
+ * COMPLETED orders only, calendar based, Myanmar time.
+ */
+export async function getAdminReportStats(timeZone = 'Asia/Yangon'): Promise<AdminReportStats> {
+  const supabase = getServiceSupabaseClient();
+
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
+  });
+  const parts = fmt.formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  const year = Number(get('year'));
+  const month = Number(get('month'));
+  const day = Number(get('day'));
+  const weekdayShort = get('weekday');
+
+  const localMidnightGuess = new Date(now.toLocaleString('en-US', { timeZone }));
+  const tzOffsetMs = now.getTime() - localMidnightGuess.getTime();
+
+  const startOfToday = new Date(Date.UTC(year, month - 1, day, 0, 0, 0) + tzOffsetMs);
+  const weekdayIndex = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekdayShort);
+  const daysSinceMonday = weekdayIndex === 0 ? 6 : weekdayIndex - 1;
+  const startOfWeek = new Date(startOfToday.getTime() - daysSinceMonday * 86400000);
+  const startOfMonth = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0) + tzOffsetMs);
+
+  // All completed orders (with items for top-products breakdown)
+  const { data: orderRows, error } = await supabase
+    .from('orders')
+    .select('id,total_amount,status,created_at')
+    .eq('status', 'COMPLETED')
+    .order('created_at', { ascending: false })
+    .limit(5000);
+  if (error) throw error;
+  const orders = (orderRows ?? []) as any[];
+
+  const stats: AdminReportStats = {
+    today: { amount: 0, count: 0 },
+    week: { amount: 0, count: 0 },
+    month: { amount: 0, count: 0 },
+    allTime: { amount: 0, count: 0 },
+    dailyLast7: [],
+    topProducts: [],
+  };
+
+  const tToday = startOfToday.getTime();
+  const tWeek = startOfWeek.getTime();
+  const tMonth = startOfMonth.getTime();
+
+  // Build 7-day buckets
+  const dayBuckets: { start: number; end: number; date: string; label: string; amount: number; count: number }[] = [];
+  const dayFmt = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' });
+  for (let i = 6; i >= 0; i--) {
+    const s = startOfToday.getTime() - i * 86400000;
+    const e = s + 86400000;
+    dayBuckets.push({
+      start: s, end: e,
+      date: new Date(s).toISOString().slice(0, 10),
+      label: dayFmt.format(new Date(s)),
+      amount: 0, count: 0,
+    });
+  }
+
+  for (const o of orders) {
+    const created = new Date(o.created_at).getTime();
+    if (Number.isNaN(created)) continue;
+    const amt = Number(o.total_amount) || 0;
+
+    stats.allTime.amount += amt;
+    stats.allTime.count += 1;
+    if (created >= tMonth) { stats.month.amount += amt; stats.month.count += 1; }
+    if (created >= tWeek) { stats.week.amount += amt; stats.week.count += 1; }
+    if (created >= tToday) { stats.today.amount += amt; stats.today.count += 1; }
+
+    for (const b of dayBuckets) {
+      if (created >= b.start && created < b.end) { b.amount += amt; b.count += 1; break; }
+    }
+  }
+
+  stats.dailyLast7 = dayBuckets.map((b) => ({ date: b.date, label: b.label, amount: b.amount, count: b.count }));
+
+  // Top products (this month) from order_items of completed orders
+  const monthOrderIds = orders
+    .filter((o) => new Date(o.created_at).getTime() >= tMonth)
+    .map((o) => o.id as string);
+
+  if (monthOrderIds.length > 0) {
+    const { data: itemRows } = await supabase
+      .from('order_items')
+      .select('order_id,product_name,quantity,unit_price')
+      .in('order_id', monthOrderIds.slice(0, 1000));
+    const items = (itemRows ?? []) as any[];
+    const byName: Record<string, { count: number; amount: number }> = {};
+    for (const it of items) {
+      const name = it.product_name || 'Unknown';
+      const qty = Number(it.quantity) || 1;
+      const amt = (Number(it.unit_price) || 0) * qty;
+      if (!byName[name]) byName[name] = { count: 0, amount: 0 };
+      byName[name].count += qty;
+      byName[name].amount += amt;
+    }
+    stats.topProducts = Object.entries(byName)
+      .map(([name, v]) => ({ name, count: v.count, amount: v.amount }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
+  }
+
+  return stats;
+}
+
 export async function listPendingManualDeliveries(limit = 50): Promise<PendingManualDelivery[]> {
   const supabase = getServiceSupabaseClient();
 

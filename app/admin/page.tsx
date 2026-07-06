@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { requireAdmin } from '@/lib/session';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { listPendingManualDeliveries, getAdminSalesStats } from '@/lib/orders';
 import { listPendingTopupsForAdmin } from '@/lib/wallet';
 import { processTopup } from './topups/actions';
@@ -117,32 +116,46 @@ export default async function AdminHomePage() {
         {deliveriesToShow.length === 0 ? (
           <Card className="p-4 text-sm text-slate-400">Nothing waiting — all manual orders are delivered.</Card>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {deliveriesToShow.map((d) => (
-              <Card key={d.orderItemId} className="p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-100">
-                      {d.productName}
-                      {d.variantName ? ` · ${d.variantName}` : ''}{' '}
-                      <span className="text-xs text-slate-500">x{d.quantity}</span>
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {d.userEmail ?? 'Unknown customer'} · {timeAgo(d.createdAt)}
-                    </p>
+              <Card key={d.orderItemId} className="overflow-hidden border-[#26344e] bg-[#151e30] p-0">
+                <div className="h-[3px] bg-amber-500" />
+                <div className="p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="flex gap-3">
+                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400">
+                        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                          <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+                          <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-100">
+                          {d.productName}
+                          {d.variantName ? ` · ${d.variantName}` : ''}{' '}
+                          <span className="font-normal text-slate-500">×{d.quantity}</span>
+                        </p>
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          {d.userEmail ?? 'Unknown customer'} · {timeAgo(d.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="flex-shrink-0 rounded bg-amber-500/20 px-2 py-1 text-[8px] font-bold text-amber-300">
+                      PENDING
+                    </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex gap-2">
                     <Link
                       href={`/admin/orders?orderId=${d.orderId}`}
-                      className="inline-flex items-center justify-center rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:border-emerald-400 hover:text-emerald-300"
+                      className="flex-1 rounded-lg bg-emerald-500 py-2 text-center text-xs font-semibold text-slate-950 transition hover:bg-emerald-400"
                     >
-                      Go deliver
+                      Go deliver →
                     </Link>
                     <form action={dismissDeliveryFormAction}>
                       <input type="hidden" name="orderItemId" value={d.orderItemId} />
                       <button
                         type="submit"
-                        className="inline-flex items-center justify-center rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:border-rose-400 hover:text-rose-300"
+                        className="rounded-lg border border-slate-700 px-4 py-2 text-xs text-slate-400 transition hover:border-rose-400 hover:text-rose-300"
                         title="Mark as delivered (already handled via Telegram)"
                       >
                         Mark done
@@ -173,35 +186,52 @@ export default async function AdminHomePage() {
         {topupsToShow.length === 0 ? (
           <Card className="p-4 text-sm text-slate-400">No pending top-ups.</Card>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {topupsToShow.map((t) => (
-              <Card key={t.id} className="p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-100">
-                      {Number(t.amount).toLocaleString('en-US')} MMK
-                      <span className="ml-2 text-xs text-slate-500">
-                        {t.bankName ?? t.method.toUpperCase()} · last 4 {t.last4}
-                      </span>
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {t.userEmail ?? t.userId} · {timeAgo(t.createdAt)}
-                    </p>
+              <Card key={t.id} className="overflow-hidden border-[#26344e] bg-[#151e30] p-0">
+                <div className="h-[3px] bg-sky-500" />
+                <div className="p-4">
+                  <div className="mb-3 flex gap-3">
+                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-sky-400">
+                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                        <rect x="2" y="5" width="20" height="14" rx="2" />
+                        <path d="M2 10h20M6 15h4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-[15px] font-bold text-slate-50">
+                        {Number(t.amount).toLocaleString('en-US')}{' '}
+                        <span className="text-[11px] font-medium text-slate-400">MMK</span>
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        {t.bankName ?? t.method.toUpperCase()} · last 4{' '}
+                        <span className="font-mono text-slate-300">{t.last4}</span>
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        {t.userEmail ?? t.userId} · {timeAgo(t.createdAt)}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex gap-2">
-                    <form action={approveTopupFormAction}>
+                    <form action={approveTopupFormAction} className="flex-1">
                       <input type="hidden" name="id" value={t.id} />
                       <input type="hidden" name="action" value="APPROVE" />
-                      <Button type="submit" className="px-3 py-1.5 text-xs">
-                        Approve
-                      </Button>
+                      <button
+                        type="submit"
+                        className="w-full rounded-lg bg-emerald-500 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-400"
+                      >
+                        ✓ Approve
+                      </button>
                     </form>
-                    <form action={rejectTopupFormAction}>
+                    <form action={rejectTopupFormAction} className="flex-1">
                       <input type="hidden" name="id" value={t.id} />
                       <input type="hidden" name="action" value="REJECT" />
-                      <Button type="submit" variant="secondary" className="px-3 py-1.5 text-xs">
-                        Reject
-                      </Button>
+                      <button
+                        type="submit"
+                        className="w-full rounded-lg border border-rose-500/30 bg-rose-500/10 py-2 text-xs font-semibold text-rose-300 transition hover:border-rose-500/50 hover:bg-rose-500/20"
+                      >
+                        ✕ Reject
+                      </button>
                     </form>
                   </div>
                 </div>
@@ -212,31 +242,54 @@ export default async function AdminHomePage() {
       </section>
 
       {/* Secondary nav */}
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid grid-cols-2 gap-3">
         <Link href="/admin/products">
-          <Card className="cursor-pointer p-4 hover:border-emerald-400 hover:bg-slate-900 transition">
-            <h2 className="text-lg font-semibold text-slate-100">Products &amp; Catalog</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Manage categories, products, pricing, and inventory credentials.
-            </p>
+          <Card className="h-full cursor-pointer border-[#26344e] bg-[#151e30] p-4 transition hover:border-emerald-400">
+            <div className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+                <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12" />
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-slate-100">Products &amp; Catalog</p>
+            <p className="mt-1 text-[11px] leading-snug text-slate-500">Categories, pricing, inventory</p>
           </Card>
         </Link>
 
         <Link href="/admin/orders">
-          <Card className="cursor-pointer p-4 hover:border-emerald-400 hover:bg-slate-900 transition">
-            <h2 className="text-lg font-semibold text-slate-100">Orders</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              View all orders, deliver manual products, and see credential history.
-            </p>
+          <Card className="h-full cursor-pointer border-[#26344e] bg-[#151e30] p-4 transition hover:border-emerald-400">
+            <div className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/15 text-purple-400">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                <path d="M9 2h6a2 2 0 012 2v16l-3-2-2 2-2-2-3 2V4a2 2 0 012-2z" />
+                <path d="M9 7h6M9 11h6" strokeLinecap="round" />
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-slate-100">Orders</p>
+            <p className="mt-1 text-[11px] leading-snug text-slate-500">All orders &amp; delivery history</p>
           </Card>
         </Link>
 
         <Link href="/admin/users">
-          <Card className="cursor-pointer p-4 hover:border-emerald-400 hover:bg-slate-900 transition">
-            <h2 className="text-lg font-semibold text-slate-100">Users</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Search users by email and review their orders.
-            </p>
+          <Card className="h-full cursor-pointer border-[#26344e] bg-[#151e30] p-4 transition hover:border-emerald-400">
+            <div className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/15 text-sky-400">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-slate-100">Users</p>
+            <p className="mt-1 text-[11px] leading-snug text-slate-500">Search &amp; review customers</p>
+          </Card>
+        </Link>
+
+        <Link href="/admin/reports">
+          <Card className="h-full cursor-pointer border-[#26344e] bg-[#151e30] p-4 transition hover:border-emerald-400">
+            <div className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                <path d="M3 3v18h18M8 17V9M13 17V5M18 17v-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-slate-100">Reports</p>
+            <p className="mt-1 text-[11px] leading-snug text-slate-500">Sales &amp; analytics</p>
           </Card>
         </Link>
       </section>

@@ -1,6 +1,5 @@
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import {
-  addInventoryAction,
   createBankAccountAction,
   createCategoryAction,
   createProductAction,
@@ -13,6 +12,7 @@ import {
 } from './actions';
 import { Button, Card, Input, TextArea } from '@/components/ui';
 import { TagEditor } from './TagEditor';
+import { InventoryUploadForm } from './InventoryUploadForm';
 import type { Product, ProductVariant, BankAccount } from '@/types/entities';
 
 function mapVariant(row: any): ProductVariant {
@@ -310,24 +310,35 @@ email,password,note
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Existing products</h2>
         {products.map((product) => (
-          <Card key={product.id}>
+          <Card key={product.id} className="border-[#26344e] bg-[#151e30]">
             <details>
               <summary className="cursor-pointer list-none">
-                <div className="flex flex-col gap-2 py-1 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-xs uppercase text-slate-500">
+                <div className="flex items-center justify-between gap-3 py-1">
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500">
                       {product.category?.name}
                     </p>
-                    <h3 className="text-lg font-medium text-emerald-300">
+                    <h3 className="truncate text-base font-semibold text-emerald-300">
                       {product.name}
                     </h3>
-                    <p className="text-sm text-slate-400">
-                      {product.productType}
-                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[9px] font-medium text-slate-300">
+                        {product.productType}
+                      </span>
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${
+                          product.isInStock
+                            ? 'bg-emerald-900/50 text-emerald-300'
+                            : 'bg-rose-900/50 text-rose-300'
+                        }`}
+                      >
+                        {product.isInStock ? 'In stock' : 'Out of stock'}
+                      </span>
+                    </div>
                   </div>
                   <form
                     action={toggleProductStockAction as any}
-                    className="flex items-center gap-2 text-sm"
+                    className="flex flex-shrink-0 items-center gap-2 text-sm"
                   >
                     <input type="hidden" name="productId" value={product.id} />
                     <input
@@ -335,10 +346,8 @@ email,password,note
                       name="isInStock"
                       value={(!product.isInStock).toString()}
                     />
-                    <Button type="submit">
-                      {product.isInStock
-                        ? 'Mark out of stock'
-                        : 'Mark in stock'}
+                    <Button type="submit" variant="secondary" className="whitespace-nowrap px-3 py-1.5 text-xs">
+                      {product.isInStock ? 'Mark out' : 'Mark in'}
                     </Button>
                   </form>
                 </div>
@@ -499,46 +508,12 @@ email,password,note
                         </>
                       );
                     })()}
-                    <form
-                      action={addInventoryAction as any}
-                      className="mt-3 space-y-2 text-sm"
-                    >
-                      <input
-                        type="hidden"
-                        name="productId"
-                        value={product.id}
+                    <div className="mt-3">
+                      <InventoryUploadForm
+                        productId={product.id}
+                        variants={product.variants.map((v: any) => ({ id: v.id, name: v.name }))}
                       />
-                      <label className="text-xs uppercase text-slate-400">
-                        Variant
-                        <select
-                          name="variantId"
-                          className="mt-1 w-full rounded border border-slate-800 bg-slate-900 px-3 py-2 text-sm"
-                          required
-                        >
-                          {product.variants.map((variant) => (
-                            <option key={variant.id} value={variant.id}>
-                              {variant.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <TextArea
-                        name="payload"
-                        rows={6}
-                        placeholder={`Paste one of the following formats:
-
-JSON (single):
-{"email":"user@example.com","password":"secret","note":"Main profile only"}
-
-CSV (bulk, one per line):
-email,password,note
-user1@netflix.com,pass123,Main profile only
-user2@netflix.com,password456,Use profile #2
-user3@netflix.com,secure789,Do not change password`}
-                        required
-                      />
-                      <Button type="submit">Add credential(s)</Button>
-                    </form>
+                    </div>
                   </div>
                 )}
               </div>

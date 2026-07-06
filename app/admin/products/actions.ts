@@ -143,50 +143,125 @@ export async function addInventoryAction(formData: FormData) {
   await requireAdmin();
   const productId = String(formData.get('productId') ?? '');
   const variantId = String(formData.get('variantId') ?? '');
-  const payloadRaw = String(formData.get('payload') ?? '').trim();
-
-  if (!payloadRaw) return { success: false, error: 'Payload is required' };
-
+  const kind = String(formData.get('kind') ?? '').trim(); // typed mode: email_password | key | note
   const supabase = getServiceSupabaseClient();
 
-  if (payloadRaw.startsWith('{') || payloadRaw.startsWith('[')) {
-    // JSON single insert
-    let payload: unknown;
-    try {
-      payload = JSON.parse(payloadRaw);
-    } catch {
-      return {
-        success: false,
-        error: 'Payload must be valid JSON or CSV'
-      };
+  // ── Typed mode (new): matches the manual-delivery payload shapes ──
+  if (kind === 'email_password' || kind === 'key' || kind === 'note') {
+    if (kind === 'email_password') {
+      // Support bulk: one "email,password[,note]" per line.
+      const bulk = String(formData.get('bulk') ?? '').trim();
+      if (bulk) {
+        const rows = bulk.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const maybeHeader = rows[0]?.toLowerCase().replace(/\s+/g, '');
+        const startIndex = maybeHeader === 'email,password,note' ? 1 : 0;
+        const inserts: any[] = [];
+        for (let i = startIndex; i < rows.length; i++) {
+          const parts = rows[i].split(',').map((p) => p.trim());
+          if (!parts[0] || !parts[1]) continue;
+          const [email, password, note] = parts;
+          inserts.push({
+            product_id: productId,
+            variant_id: variantId || null,
+            payload: { type: 'email_password', email, password, ...(note ? { note } : {}) },
+          });
+        }
+        if (inserts.length === 0) {
+          return { success: false, error: 'No valid rows found (need email,password[,note])' };
+        }
+        const { error } = await supabase.from('inventory_items').insert(inserts);
+        if (error) return { success: false, error: error.message };
+        revalidatePath('/admin/products');
+        redirect('/admin/products?m=inventory_added_bulk');
+      }
+
+      // Single entry
+      const email = String(formData.get('email') ?? '').trim();
+      const password = String(formData.get('password') ?? '').trim();
+      const note = String(formData.get('note') ?? '').trim();
+      if (!email || !password) {
+        return { success: false, error: 'Email and password are required.' };
+      }
+      const { error } = await supabase.from('inventory_items').insert({
+        product_id: productId,
+        variant_id: variantId || null,
+        payload: { type: 'email_password', email, password, ...(note ? { note } : {}) },
+      });
+      if (error) return { success: false, error: error.message };
+      revalidatePath('/admin/products');
+      redirect('/admin/products?m=inventory_added');
     }
 
+    if (kind === 'key') {
+      // Support bulk: one key per line.
+      const bulk = String(formData.get('bulk') ?? '').trim();
+      if (bulk) {
+        const keys = bulk.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        if (keys.length === 0) return { success: false, error: 'No keys found.' };
+        const inserts = keys.map((key) => ({
+          product_id: productId,
+          variant_id: variantId || null,
+          payload: { type: 'key', key },
+        }));
+        const { error } = await supabase.from('inventory_items').insert(inserts);
+        if (error) return { success: false, error: error.message };
+        revalidatePath('/admin/products');
+        redirect('/admin/products?m=inventory_added_bulk');
+      }
+      const key = String(formData.get('key') ?? '').trim();
+      if (!key) return { success: false, error: 'Key is required.' };
+      const { error } = await supabase.from('inventory_items').insert({
+        product_id: productId,
+        variant_id: variantId || null,
+        payload: { type: 'key', key },
+      });
+      if (error) return { success: false, error: error.message };
+      revalidatePath('/admin/products');
+      redirect('/admin/products?m=inventory_added');
+    }
+
+    // note
+    const note = String(formData.get('note') ?? '').trim();
+    if (!note) return { success: false, error: 'Note is required.' };
     const { error } = await supabase.from('inventory_items').insert({
       product_id: productId,
       variant_id: variantId || null,
-      payload
+      payload: { type: 'note', note },
     });
     if (error) return { success: false, error: error.message };
-
     revalidatePath('/admin/products');
     redirect('/admin/products?m=inventory_added');
   }
 
-  // CSV bulk
-  const rows = payloadRaw
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
+  // ── Legacy mode (kept for backwards-compat): raw JSON or CSV payload ──
+  const payloadRaw = String(formData.get('payload') ?? '').trim();
+  if (!payloadRaw) return { success: false, error: 'Payload is required' };
 
+  if (payloadRaw.startsWith('{') || payloadRaw.startsWith('[')) {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(payloadRaw);
+    } catch {
+      return { success: false, error: 'Payload must be valid JSON or CSV' };
+    }
+    const { error } = await supabase.from('inventory_items').insert({
+      product_id: productId,
+      variant_id: variantId || null,
+      payload,
+    });
+    if (error) return { success: false, error: error.message };
+    revalidatePath('/admin/products');
+    redirect('/admin/products?m=inventory_added');
+  }
+
+  const rows = payloadRaw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const maybeHeader = rows[0]?.toLowerCase().replace(/\s+/g, '');
   const startIndex = maybeHeader === 'email,password,note' ? 1 : 0;
-
   const inserts: {
     product_id: string;
     variant_id: string | null;
     payload: { email: string; password: string; note?: string };
   }[] = [];
-
   for (let i = startIndex; i < rows.length; i++) {
     const parts = rows[i].split(',').map((p) => p.trim());
     if (!parts[0] || !parts[1]) continue;
@@ -194,20 +269,14 @@ export async function addInventoryAction(formData: FormData) {
     inserts.push({
       product_id: productId,
       variant_id: variantId || null,
-      payload: { email, password, note: note ?? '' }
+      payload: { email, password, note: note ?? '' },
     });
   }
-
   if (inserts.length === 0) {
-    return {
-      success: false,
-      error: 'No valid CSV rows found (need email,password[,note])'
-    };
+    return { success: false, error: 'No valid CSV rows found (need email,password[,note])' };
   }
-
   const { error } = await supabase.from('inventory_items').insert(inserts);
   if (error) return { success: false, error: error.message };
-
   revalidatePath('/admin/products');
   redirect('/admin/products?m=inventory_added_bulk');
 }

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Input, Button } from '@/components/ui';
+import { Input } from '@/components/ui';
+import { SubmitButton } from '@/components/admin/SubmitButton';
 import { DELIVERY_TYPE_OPTIONS, type DeliveryType } from '@/lib/deliveryTypes';
 
 export function DeliveryForm({
@@ -70,9 +71,7 @@ export function DeliveryForm({
       </div>
 
       <div className="flex justify-end pt-1">
-        <Button type="submit" className="px-3 py-1.5 text-xs">
-          Save &amp; deliver
-        </Button>
+        <SubmitButton variant="deliver">Save &amp; deliver</SubmitButton>
       </div>
     </form>
   );

@@ -8,6 +8,7 @@ import { listPendingTopupsForAdmin } from '@/lib/wallet';
 import { processTopup } from './topups/actions';
 import { dismissManualDeliveryAction } from './orders/actions';
 import { SalesStatsHero } from './SalesStatsHero';
+import { SubmitButton } from '@/components/admin/SubmitButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -144,22 +145,16 @@ export default async function AdminHomePage() {
                       PENDING
                     </span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 sm:justify-start">
                     <Link
                       href={`/admin/orders?orderId=${d.orderId}`}
-                      className="flex-1 rounded-lg bg-emerald-500 py-2 text-center text-xs font-semibold text-slate-950 transition hover:bg-emerald-400"
+                      className="flex-1 rounded-lg bg-emerald-500 px-4 py-2 text-center text-xs font-semibold text-slate-950 transition hover:bg-emerald-400 sm:flex-none"
                     >
                       Go deliver →
                     </Link>
-                    <form action={dismissDeliveryFormAction}>
+                    <form action={dismissDeliveryFormAction} className="sm:flex-none">
                       <input type="hidden" name="orderItemId" value={d.orderItemId} />
-                      <button
-                        type="submit"
-                        className="rounded-lg border border-slate-700 px-4 py-2 text-xs text-slate-400 transition hover:border-rose-400 hover:text-rose-300"
-                        title="Mark as delivered (already handled via Telegram)"
-                      >
-                        Mark done
-                      </button>
+                      <SubmitButton variant="neutral">Mark done</SubmitButton>
                     </form>
                   </div>
                 </div>
@@ -212,26 +207,20 @@ export default async function AdminHomePage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <form action={approveTopupFormAction} className="flex-1">
+                  <div className="flex gap-2 sm:justify-start">
+                    <form action={approveTopupFormAction} className="flex-1 sm:flex-none">
                       <input type="hidden" name="id" value={t.id} />
                       <input type="hidden" name="action" value="APPROVE" />
-                      <button
-                        type="submit"
-                        className="w-full rounded-lg bg-emerald-500 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-400"
-                      >
+                      <SubmitButton variant="approve" fullWidth className="sm:w-auto sm:px-6">
                         ✓ Approve
-                      </button>
+                      </SubmitButton>
                     </form>
-                    <form action={rejectTopupFormAction} className="flex-1">
+                    <form action={rejectTopupFormAction} className="flex-1 sm:flex-none">
                       <input type="hidden" name="id" value={t.id} />
                       <input type="hidden" name="action" value="REJECT" />
-                      <button
-                        type="submit"
-                        className="w-full rounded-lg border border-rose-500/30 bg-rose-500/10 py-2 text-xs font-semibold text-rose-300 transition hover:border-rose-500/50 hover:bg-rose-500/20"
-                      >
+                      <SubmitButton variant="reject" fullWidth className="sm:w-auto sm:px-6">
                         ✕ Reject
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 </div>

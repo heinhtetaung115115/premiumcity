@@ -310,7 +310,7 @@ email,password,note
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Existing products</h2>
         {products.map((product) => (
-          <Card key={product.id} className="border-[#26344e] bg-[#151e30]">
+          <Card key={product.id} className="border-[#26344e] !bg-[#151e30]">
             <details>
               <summary className="cursor-pointer list-none">
                 <div className="flex items-center justify-between gap-3 py-1">

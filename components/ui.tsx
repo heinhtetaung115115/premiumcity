@@ -44,8 +44,18 @@ export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   );
 }
 
-export function Card({ children }: { children: ReactNode }) {
-  return <div className="rounded border border-slate-800 bg-slate-900/70 p-6">{children}</div>;
+export function Card({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded border border-slate-800 bg-slate-900/70 p-6 ${className}`}>
+      {children}
+    </div>
+  );
 }
 
 export function InlineLink({ href, children }: { href: string; children: ReactNode }) {

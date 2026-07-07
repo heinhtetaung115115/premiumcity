@@ -13,6 +13,8 @@ type PageProps = {
   };
 };
 
+export const dynamic = 'force-dynamic';
+
 function formatDate(value: string) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
@@ -60,22 +62,44 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
 
   const supabase = getServiceSupabaseClient();
 
-  // Load a generous list of users, newest first (so recent signups are included).
-  const { data: usersData, error: usersError } = await supabase
-    .from('users')
-    .select('id,email,name,created_at,avatar_url')
-    .order('created_at', { ascending: false })
-    .limit(2000);
-
-  if (usersError) throw usersError;
-
-  const allUsers = (usersData ?? []) as {
+  // Load users newest-first so recent signups are included.
+  // Wrapped defensively so a query hiccup can't blank the whole page.
+  let allUsers: {
     id: string;
     email: string;
     name: string | null;
     created_at: string;
     avatar_url: string | null;
-  }[];
+  }[] = [];
+
+  try {
+    const { data: usersData, error: usersError } = await supabase
+      .from('users')
+      .select('id,email,name,created_at,avatar_url')
+      .order('created_at', { ascending: false })
+      .limit(1000);
+    if (usersError) throw usersError;
+    allUsers = (usersData ?? []) as typeof allUsers;
+  } catch (err) {
+    console.error('admin/users: failed to load users:', err);
+    // Fallback: try a minimal select in case avatar_url or ordering caused it.
+    try {
+      const { data: fallback } = await supabase
+        .from('users')
+        .select('id,email,name,created_at')
+        .limit(1000);
+      allUsers = ((fallback ?? []) as any[]).map((u) => ({
+        id: u.id,
+        email: u.email,
+        name: u.name ?? null,
+        created_at: u.created_at,
+        avatar_url: null,
+      }));
+    } catch (err2) {
+      console.error('admin/users: fallback user load also failed:', err2);
+      allUsers = [];
+    }
+  }
 
   // PARTIAL, case-insensitive match on email OR name. Show up to 20 matches.
   let matches: typeof allUsers = [];
@@ -94,7 +118,15 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
   const exact = matches.find((u) => u.email?.toLowerCase() === emailFilter.toLowerCase());
   const user = exact ?? (matches.length === 1 ? matches[0] : null);
 
-  const orders = user ? await listOrdersForUser(user.id) : [];
+  let orders: any[] = [];
+  if (user) {
+    try {
+      orders = await listOrdersForUser(user.id);
+    } catch (err) {
+      console.error('admin/users: listOrdersForUser failed:', err);
+      orders = [];
+    }
+  }
 
   // Wallet + derived stats
   let balance = 0;

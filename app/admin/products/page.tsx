@@ -13,6 +13,7 @@ import {
 import { Button, Card, Input, TextArea } from '@/components/ui';
 import { TagEditor } from './TagEditor';
 import { InventoryUploadForm } from './InventoryUploadForm';
+import { ManualFieldsBuilder } from './ManualFieldsBuilder';
 import type { Product, ProductVariant, BankAccount } from '@/types/entities';
 
 function mapVariant(row: any): ProductVariant {
@@ -288,22 +289,7 @@ export default async function AdminProductsPage({
                 placeholder="Delivery note (shown to customers)"
                 rows={3}
               />
-              <TextArea
-                name="manualFields"
-                placeholder={`Manual input fields — JSON or CSV.
-
-JSON example:
-[
-  {"id":"email","label":"Email","required":true},
-  {"id":"password","label":"Password","required":true},
-  {"id":"note","label":"Note","required":false}
-]
-
-CSV example:
-email,password,note
-`}
-                rows={10}
-              />
+              <ManualFieldsBuilder />
             </div>
             <div className="md:col-span-2">
               <Button type="submit">Create product</Button>
@@ -379,15 +365,7 @@ email,password,note
                     rows={2}
                     className="text-sm"
                   />
-                  <TextArea
-                    name="manualFields"
-                    defaultValue={
-                      product.inputSchema ? JSON.stringify(product.inputSchema) : ''
-                    }
-                    placeholder="Manual input fields (JSON array or CSV ids) — leave blank for none"
-                    rows={2}
-                    className="text-sm"
-                  />
+                  <ManualFieldsBuilder initial={product.inputSchema ?? []} compact />
                   <TagEditor initial={product.tags ?? []} />
                   <div className="md:col-span-2">
                     <Button type="submit" variant="secondary" className="text-xs">

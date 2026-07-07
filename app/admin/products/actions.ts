@@ -196,6 +196,7 @@ export async function addInventoryAction(formData: FormData) {
     }
 
     if (kind === 'key') {
+      const sharedNote = String(formData.get('sharedNote') ?? '').trim();
       // Support bulk: one key per line.
       const bulk = String(formData.get('bulk') ?? '').trim();
       if (bulk) {
@@ -204,7 +205,7 @@ export async function addInventoryAction(formData: FormData) {
         const inserts = keys.map((key) => ({
           product_id: productId,
           variant_id: variantId || null,
-          payload: { type: 'key', key },
+          payload: { type: 'key', key, ...(sharedNote ? { note: sharedNote } : {}) },
         }));
         const { error } = await supabase.from('inventory_items').insert(inserts);
         if (error) return { success: false, error: error.message };
@@ -212,11 +213,12 @@ export async function addInventoryAction(formData: FormData) {
         redirect('/admin/products?m=inventory_added_bulk');
       }
       const key = String(formData.get('key') ?? '').trim();
+      const note = String(formData.get('note') ?? '').trim() || sharedNote;
       if (!key) return { success: false, error: 'Key is required.' };
       const { error } = await supabase.from('inventory_items').insert({
         product_id: productId,
         variant_id: variantId || null,
-        payload: { type: 'key', key },
+        payload: { type: 'key', key, ...(note ? { note } : {}) },
       });
       if (error) return { success: false, error: error.message };
       revalidatePath('/admin/products');
@@ -224,6 +226,7 @@ export async function addInventoryAction(formData: FormData) {
     }
 
     if (kind === 'invite_link') {
+      const sharedNote = String(formData.get('sharedNote') ?? '').trim();
       // Support bulk: one link per line.
       const bulk = String(formData.get('bulk') ?? '').trim();
       if (bulk) {
@@ -232,7 +235,7 @@ export async function addInventoryAction(formData: FormData) {
         const inserts = links.map((inviteLink) => ({
           product_id: productId,
           variant_id: variantId || null,
-          payload: { type: 'invite_link', inviteLink },
+          payload: { type: 'invite_link', inviteLink, ...(sharedNote ? { note: sharedNote } : {}) },
         }));
         const { error } = await supabase.from('inventory_items').insert(inserts);
         if (error) return { success: false, error: error.message };
@@ -240,11 +243,12 @@ export async function addInventoryAction(formData: FormData) {
         redirect('/admin/products?m=inventory_added_bulk');
       }
       const inviteLink = String(formData.get('inviteLink') ?? '').trim();
+      const note = String(formData.get('note') ?? '').trim() || sharedNote;
       if (!inviteLink) return { success: false, error: 'Invite link is required.' };
       const { error } = await supabase.from('inventory_items').insert({
         product_id: productId,
         variant_id: variantId || null,
-        payload: { type: 'invite_link', inviteLink },
+        payload: { type: 'invite_link', inviteLink, ...(note ? { note } : {}) },
       });
       if (error) return { success: false, error: error.message };
       revalidatePath('/admin/products');

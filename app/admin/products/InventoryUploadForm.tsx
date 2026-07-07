@@ -143,33 +143,61 @@ export function InventoryUploadForm({
 
       {/* ── KEY ── */}
       {kind === 'key' && !bulk && (
-        <input name="key" type="text" placeholder="Redeem key / code" className={inputCls} />
+        <div className="space-y-2">
+          <input name="key" type="text" placeholder="Redeem key / code" className={inputCls} />
+          <input name="note" type="text" placeholder="Note (optional)" className={inputCls} />
+        </div>
       )}
       {kind === 'key' && bulk && (
-        <div>
+        <div className="space-y-2">
           <textarea
             name="bulk"
             rows={5}
             placeholder={'One key per line:\nXXXX-XXXX-XXXX\nYYYY-YYYY-YYYY'}
             className={`${inputCls} font-mono`}
           />
-          <p className="mt-1 text-[10px] text-slate-500">One key per line.</p>
+          <p className="text-[10px] text-slate-500">One key per line.</p>
+          <div>
+            <label className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">
+              Shared note for all keys (optional)
+            </label>
+            <textarea
+              name="sharedNote"
+              rows={3}
+              placeholder="This note is added to every key above."
+              className={inputCls}
+            />
+          </div>
         </div>
       )}
 
       {/* ── INVITE LINK ── */}
       {kind === 'invite_link' && !bulk && (
-        <input name="inviteLink" type="text" placeholder="https://…" className={inputCls} />
+        <div className="space-y-2">
+          <input name="inviteLink" type="text" placeholder="https://…" className={inputCls} />
+          <input name="note" type="text" placeholder="Note (optional)" className={inputCls} />
+        </div>
       )}
       {kind === 'invite_link' && bulk && (
-        <div>
+        <div className="space-y-2">
           <textarea
             name="bulk"
             rows={5}
             placeholder={'One link per line:\nhttps://example.com/invite/1\nhttps://example.com/invite/2'}
             className={`${inputCls} font-mono`}
           />
-          <p className="mt-1 text-[10px] text-slate-500">One link per line.</p>
+          <p className="text-[10px] text-slate-500">One link per line.</p>
+          <div>
+            <label className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">
+              Shared note for all links (optional)
+            </label>
+            <textarea
+              name="sharedNote"
+              rows={3}
+              placeholder="This note is added to every link above."
+              className={inputCls}
+            />
+          </div>
         </div>
       )}
 

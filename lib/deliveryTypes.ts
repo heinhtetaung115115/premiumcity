@@ -25,6 +25,7 @@ export function credentialToRows(payload: Record<string, unknown> | null | undef
 
   if (type === 'key') {
     if ((payload as any).key) rows.push({ label: 'Key', value: String((payload as any).key), copyable: true });
+    if ((payload as any).note) rows.push({ label: 'Note', value: String((payload as any).note), copyable: false });
     return rows;
   }
 
@@ -32,6 +33,7 @@ export function credentialToRows(payload: Record<string, unknown> | null | undef
     if ((payload as any).inviteLink) {
       rows.push({ label: 'Invite link', value: String((payload as any).inviteLink), copyable: true });
     }
+    if ((payload as any).note) rows.push({ label: 'Note', value: String((payload as any).note), copyable: false });
     return rows;
   }
 

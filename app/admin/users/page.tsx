@@ -4,7 +4,7 @@ import { requireAdmin } from '@/lib/session';
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import { listOrdersForUser } from '@/lib/orders';
 import { getWalletOverview } from '@/lib/wallet';
-import { Input, Button } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { credentialToRows } from '@/lib/deliveryTypes';
 
 type PageProps = {
@@ -162,15 +162,17 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
       </header>
 
       {/* Search bar */}
-      <Panel className="p-4">
-        <form className="flex flex-col gap-3 sm:flex-row sm:items-end" method="get">
-          <div className="flex-1">
-            <label className="text-xs uppercase text-slate-500">Email or name</label>
-            <Input
+      <Panel className="border-[#26344e] bg-[#151e30] p-4">
+        <form className="flex flex-col gap-3 sm:flex-row sm:items-center" method="get">
+          <div className="flex flex-1 items-center gap-2 rounded-xl border border-[#26344e] bg-[#0d1420] px-3 py-2.5 focus-within:border-emerald-500">
+            <svg className="h-4 w-4 flex-shrink-0 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+            </svg>
+            <input
               name="email"
               placeholder="Type part of an email or name…"
               defaultValue={emailFilter}
-              className="mt-1"
+              className="w-full bg-transparent text-sm text-slate-50 outline-none placeholder:text-slate-600"
             />
           </div>
           <div className="flex gap-2">
@@ -178,7 +180,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
             {hasFilter && (
               <a
                 href="/admin/users"
-                className="inline-flex items-center rounded border border-slate-700 px-3 py-1 text-sm text-slate-200 hover:border-emerald-400 hover:text-emerald-300"
+                className="inline-flex items-center rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:border-emerald-400 hover:text-emerald-300"
               >
                 Clear
               </a>
@@ -236,7 +238,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
       {/* User profile + stats */}
       {user && (
         <>
-          <Panel className="p-5">
+          <Panel className="border-[#26344e] bg-gradient-to-br from-[#1a2438] to-[#151e30] p-5">
             <div className="flex items-center gap-4">
               <span className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-full bg-slate-800">
                 {user.avatar_url ? (
@@ -247,37 +249,63 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                   </span>
                 )}
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-lg font-semibold text-slate-50">
                   {user.name || <span className="italic text-slate-500">No name set</span>}
                 </p>
                 <p className="truncate font-mono text-sm text-slate-400">{user.email}</p>
               </div>
+              <span className="flex-shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-[10px] font-semibold text-emerald-300">
+                ● Active
+              </span>
             </div>
 
             {/* Stat grid */}
             <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Wallet balance</p>
-                <p className="mt-1 text-lg font-bold text-emerald-400">
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.08] p-3">
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <svg className="h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20M6 15h4" strokeLinecap="round" />
+                  </svg>
+                  <span className="text-[9px] uppercase tracking-wide text-slate-500">Balance</span>
+                </div>
+                <p className="text-lg font-bold text-emerald-400">
                   {balance.toLocaleString('en-US')} <span className="text-xs">Ks</span>
                 </p>
               </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Total orders</p>
-                <p className="mt-1 text-lg font-bold text-slate-100">{orders.length}</p>
+
+              <div className="rounded-xl border border-[#26344e] bg-[#0d1420] p-3">
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <svg className="h-3.5 w-3.5 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path d="M6 2l1.5 3h9L18 2M3 6h18l-1.5 13.5a2 2 0 01-2 1.5H6.5a2 2 0 01-2-1.5L3 6z" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span className="text-[9px] uppercase tracking-wide text-slate-500">Orders</span>
+                </div>
+                <p className="text-lg font-bold text-slate-100">{orders.length}</p>
                 <p className="text-[10px] text-slate-500">{completedOrders.length} completed</p>
               </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Total spent</p>
-                <p className="mt-1 text-lg font-bold text-slate-100">
+
+              <div className="rounded-xl border border-[#26344e] bg-[#0d1420] p-3">
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <svg className="h-3.5 w-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span className="text-[9px] uppercase tracking-wide text-slate-500">Spent</span>
+                </div>
+                <p className="text-lg font-bold text-slate-100">
                   {totalSpent.toLocaleString('en-US')} <span className="text-xs">Ks</span>
                 </p>
                 <p className="text-[10px] text-slate-500">completed only</p>
               </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Member since</p>
-                <p className="mt-1 text-sm font-bold text-slate-100">{formatDay(user.created_at)}</p>
+
+              <div className="rounded-xl border border-[#26344e] bg-[#0d1420] p-3">
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <svg className="h-3.5 w-3.5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" strokeLinecap="round" />
+                  </svg>
+                  <span className="text-[9px] uppercase tracking-wide text-slate-500">Joined</span>
+                </div>
+                <p className="text-sm font-bold text-slate-100">{formatDay(user.created_at)}</p>
                 <p className="text-[10px] text-slate-500">{monthsSince(user.created_at)}</p>
               </div>
             </div>

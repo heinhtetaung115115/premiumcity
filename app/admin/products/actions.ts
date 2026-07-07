@@ -147,10 +147,11 @@ export async function addInventoryAction(formData: FormData) {
   const supabase = getServiceSupabaseClient();
 
   // ── Typed mode (new): matches the manual-delivery payload shapes ──
-  if (kind === 'email_password' || kind === 'key' || kind === 'note') {
+  if (kind === 'email_password' || kind === 'key' || kind === 'note' || kind === 'invite_link') {
     if (kind === 'email_password') {
       // Support bulk: one "email,password[,note]" per line.
       const bulk = String(formData.get('bulk') ?? '').trim();
+      const sharedNote = String(formData.get('sharedNote') ?? '').trim();
       if (bulk) {
         const rows = bulk.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const maybeHeader = rows[0]?.toLowerCase().replace(/\s+/g, '');
@@ -159,7 +160,9 @@ export async function addInventoryAction(formData: FormData) {
         for (let i = startIndex; i < rows.length; i++) {
           const parts = rows[i].split(',').map((p) => p.trim());
           if (!parts[0] || !parts[1]) continue;
-          const [email, password, note] = parts;
+          const [email, password, lineNote] = parts;
+          // Per-line note wins; otherwise fall back to the shared note box.
+          const note = lineNote || sharedNote;
           inserts.push({
             product_id: productId,
             variant_id: variantId || null,
@@ -214,6 +217,34 @@ export async function addInventoryAction(formData: FormData) {
         product_id: productId,
         variant_id: variantId || null,
         payload: { type: 'key', key },
+      });
+      if (error) return { success: false, error: error.message };
+      revalidatePath('/admin/products');
+      redirect('/admin/products?m=inventory_added');
+    }
+
+    if (kind === 'invite_link') {
+      // Support bulk: one link per line.
+      const bulk = String(formData.get('bulk') ?? '').trim();
+      if (bulk) {
+        const links = bulk.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        if (links.length === 0) return { success: false, error: 'No links found.' };
+        const inserts = links.map((inviteLink) => ({
+          product_id: productId,
+          variant_id: variantId || null,
+          payload: { type: 'invite_link', inviteLink },
+        }));
+        const { error } = await supabase.from('inventory_items').insert(inserts);
+        if (error) return { success: false, error: error.message };
+        revalidatePath('/admin/products');
+        redirect('/admin/products?m=inventory_added_bulk');
+      }
+      const inviteLink = String(formData.get('inviteLink') ?? '').trim();
+      if (!inviteLink) return { success: false, error: 'Invite link is required.' };
+      const { error } = await supabase.from('inventory_items').insert({
+        product_id: productId,
+        variant_id: variantId || null,
+        payload: { type: 'invite_link', inviteLink },
       });
       if (error) return { success: false, error: error.message };
       revalidatePath('/admin/products');

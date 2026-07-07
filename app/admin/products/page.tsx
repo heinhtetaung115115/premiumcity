@@ -171,75 +171,80 @@ export default async function AdminProductsPage({
 
       <section className="grid gap-6 md:grid-cols-2">
         <Card>
-          <h2 className="text-lg font-medium text-emerald-300">
-            Create category
-          </h2>
-          {/* 👇 cast action to any to satisfy TS */}
-          <form
-            action={createCategoryAction as any}
-            className="mt-4 space-y-3"
-          >
-            <div>
-              <label
-                className="text-xs uppercase text-slate-400"
-                htmlFor="categoryName"
-              >
-                Name
-              </label>
-              <Input id="categoryName" name="name" required />
-            </div>
-            <div>
-              <label
-                className="text-xs uppercase text-slate-400"
-                htmlFor="categoryDescription"
-              >
-                Description
-              </label>
-              <TextArea id="categoryDescription" name="description" rows={3} />
-            </div>
-            <Button type="submit">Create category</Button>
-          </form>
+          <details>
+            <summary className="cursor-pointer list-none text-lg font-medium text-emerald-300">
+              + Create category
+            </summary>
+            {/* 👇 cast action to any to satisfy TS */}
+            <form
+              action={createCategoryAction as any}
+              className="mt-4 space-y-3"
+            >
+              <div>
+                <label
+                  className="text-xs uppercase text-slate-400"
+                  htmlFor="categoryName"
+                >
+                  Name
+                </label>
+                <Input id="categoryName" name="name" required />
+              </div>
+              <div>
+                <label
+                  className="text-xs uppercase text-slate-400"
+                  htmlFor="categoryDescription"
+                >
+                  Description
+                </label>
+                <TextArea id="categoryDescription" name="description" rows={3} />
+              </div>
+              <Button type="submit">Create category</Button>
+            </form>
+          </details>
         </Card>
 
         <Card>
-          <h2 className="text-lg font-medium text-emerald-300">
-            Add bank account
-          </h2>
-          <form
-            action={createBankAccountAction as any}
-            className="mt-4 space-y-3"
-          >
-            <Input name="bankName" placeholder="KBZ" required />
-            <Input name="accountName" placeholder="PremiumCity" required />
-            <Input name="accountNo" placeholder="123456789" required />
-            <Input name="qrCodeUrl" placeholder="https://example.com/qr.png" />
-            <TextArea
-              name="instructions"
-              placeholder="Preferred transfer instructions"
-              rows={3}
-            />
-            <Button type="submit">Save bank</Button>
-          </form>
-          <div className="mt-4 space-y-2 text-sm text-slate-400">
-            {banks.map((bank) => (
-              <div
-                key={bank.id}
-                className="rounded border border-slate-800 px-3 py-2"
-              >
-                {bank.bankName} · {bank.accountNo}
-              </div>
-            ))}
-            {banks.length === 0 && <p>No banks configured.</p>}
-          </div>
+          <details>
+            <summary className="cursor-pointer list-none text-lg font-medium text-emerald-300">
+              + Add bank account
+            </summary>
+            <form
+              action={createBankAccountAction as any}
+              className="mt-4 space-y-3"
+            >
+              <Input name="bankName" placeholder="KBZ" required />
+              <Input name="accountName" placeholder="PremiumCity" required />
+              <Input name="accountNo" placeholder="123456789" required />
+              <Input name="qrCodeUrl" placeholder="https://example.com/qr.png" />
+              <TextArea
+                name="instructions"
+                placeholder="Preferred transfer instructions"
+                rows={3}
+              />
+              <Button type="submit">Save bank</Button>
+            </form>
+            <div className="mt-4 space-y-2 text-sm text-slate-400">
+              {banks.map((bank) => (
+                <div
+                  key={bank.id}
+                  className="rounded border border-slate-800 px-3 py-2"
+                >
+                  {bank.bankName} · {bank.accountNo}
+                </div>
+              ))}
+              {banks.length === 0 && <p>No banks configured.</p>}
+            </div>
+          </details>
         </Card>
       </section>
 
       <section className="space-y-4">
         <Card>
-          <h2 className="text-lg font-medium text-emerald-300">
-            Create product
-          </h2>
-          <form
+          <details>
+            <summary className="cursor-pointer list-none text-lg font-medium text-emerald-300">
+              + Create product
+            </summary>
+            <form
             action={createProductAction as any}
             className="mt-4 grid gap-3 md:grid-cols-2"
           >
@@ -304,13 +309,14 @@ email,password,note
               <Button type="submit">Create product</Button>
             </div>
           </form>
+          </details>
         </Card>
       </section>
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Existing products</h2>
         {products.map((product) => (
-          <Card key={product.id} className="border-[#26344e] !bg-[#151e30]">
+          <Card key={product.id} className="border-[#26344e] !bg-[#151e30] !p-3">
             <details>
               <summary className="cursor-pointer list-none">
                 <div className="flex items-center justify-between gap-3 py-1">

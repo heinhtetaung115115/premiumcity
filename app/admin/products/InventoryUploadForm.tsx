@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { addInventoryAction } from './actions';
 
-type Kind = 'email_password' | 'key' | 'note';
+type Kind = 'email_password' | 'key' | 'invite_link' | 'note';
 type Variant = { id: string; name: string | null };
 
 function UploadButton() {
@@ -40,13 +40,15 @@ export function InventoryUploadForm({
   const inputCls =
     'w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-50 outline-none focus:border-emerald-500';
 
+  const canBulk = kind === 'email_password' || kind === 'key' || kind === 'invite_link';
+
   return (
     <form action={addInventoryAction as any} className="space-y-3">
       <input type="hidden" name="productId" value={productId} />
       <input type="hidden" name="kind" value={kind} />
 
       {/* Variant selector (optional) */}
-      {variants.length > 0 && (
+      {variants.length > 0 ? (
         <div>
           <label className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">
             Variant (optional)
@@ -60,18 +62,20 @@ export function InventoryUploadForm({
             ))}
           </select>
         </div>
+      ) : (
+        <input type="hidden" name="variantId" value="" />
       )}
-      {variants.length === 0 && <input type="hidden" name="variantId" value="" />}
 
       {/* Type selector */}
       <div>
         <label className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">
           Stock type
         </label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {([
             { v: 'email_password', label: 'Email : Password' },
             { v: 'key', label: 'Key' },
+            { v: 'invite_link', label: 'Invite Link' },
             { v: 'note', label: 'Note' },
           ] as const).map((opt) => (
             <button
@@ -90,8 +94,8 @@ export function InventoryUploadForm({
         </div>
       </div>
 
-      {/* Bulk toggle (email_password + key only) */}
-      {kind !== 'note' && (
+      {/* Bulk toggle */}
+      {canBulk && (
         <label className="flex items-center gap-2 text-xs text-slate-400">
           <input
             type="checkbox"
@@ -103,7 +107,7 @@ export function InventoryUploadForm({
         </label>
       )}
 
-      {/* Fields per type */}
+      {/* ── EMAIL : PASSWORD ── */}
       {kind === 'email_password' && !bulk && (
         <div className="space-y-2">
           <input name="email" type="text" placeholder="Email" className={inputCls} />
@@ -113,21 +117,34 @@ export function InventoryUploadForm({
       )}
 
       {kind === 'email_password' && bulk && (
-        <div>
+        <div className="space-y-2">
           <textarea
             name="bulk"
             rows={5}
             placeholder={'One per line:\nemail,password\nemail,password,note'}
             className={`${inputCls} font-mono`}
           />
-          <p className="mt-1 text-[10px] text-slate-500">Format: email,password[,note] — one account per line.</p>
+          <p className="text-[10px] text-slate-500">
+            Format: email,password[,note] — one account per line.
+          </p>
+          <div>
+            <label className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">
+              Shared note for all accounts (optional)
+            </label>
+            <textarea
+              name="sharedNote"
+              rows={3}
+              placeholder="This note is added to every account above (use when your note is long). A per-line note overrides this."
+              className={inputCls}
+            />
+          </div>
         </div>
       )}
 
+      {/* ── KEY ── */}
       {kind === 'key' && !bulk && (
         <input name="key" type="text" placeholder="Redeem key / code" className={inputCls} />
       )}
-
       {kind === 'key' && bulk && (
         <div>
           <textarea
@@ -140,6 +157,23 @@ export function InventoryUploadForm({
         </div>
       )}
 
+      {/* ── INVITE LINK ── */}
+      {kind === 'invite_link' && !bulk && (
+        <input name="inviteLink" type="text" placeholder="https://…" className={inputCls} />
+      )}
+      {kind === 'invite_link' && bulk && (
+        <div>
+          <textarea
+            name="bulk"
+            rows={5}
+            placeholder={'One link per line:\nhttps://example.com/invite/1\nhttps://example.com/invite/2'}
+            className={`${inputCls} font-mono`}
+          />
+          <p className="mt-1 text-[10px] text-slate-500">One link per line.</p>
+        </div>
+      )}
+
+      {/* ── NOTE ── */}
       {kind === 'note' && (
         <textarea
           name="note"

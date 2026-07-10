@@ -19,6 +19,7 @@ type ProductRow = {
   is_in_stock: boolean; // present in DB but we ignore it for logic
   input_schema: ProductInputField[] | null;
   delivery_note: string | null;
+  image_url?: string | null;
 };
 
 type VariantRow = {
@@ -110,6 +111,7 @@ function mapProduct(
     isInStock,
     inputSchema: row.input_schema,
     deliveryNote: row.delivery_note,
+    imageUrl: row.image_url ?? null,
     variants: variants.map(mapVariant),
     // extra debug field if you want to show it later
     availableInventoryCount,
@@ -135,7 +137,7 @@ export async function getAllProducts() {
     supabase
       .from('products')
       .select(
-        'id,name,slug,description,category_id,product_type,status,is_in_stock,input_schema,delivery_note'
+        'id,name,slug,description,category_id,product_type,status,is_in_stock,input_schema,delivery_note,image_url'
       )
       .eq('status', 'ACTIVE')
       .order('created_at', { ascending: true }),

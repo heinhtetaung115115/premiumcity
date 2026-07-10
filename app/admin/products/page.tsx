@@ -49,6 +49,7 @@ function mapProduct(
     isInStock: row.is_in_stock,
     inputSchema: row.input_schema,
     deliveryNote: row.delivery_note,
+    imageUrl: row.image_url ?? null,
     tags: Array.isArray(row.tags) ? row.tags : [],
     variants: (row.variants ?? []).map(mapVariant),
     category: row.category ?? null,
@@ -124,7 +125,7 @@ export default async function AdminProductsPage({
     supabase
       .from('products')
       .select(
-        'id,name,slug,description,category_id,product_type,status,is_in_stock,input_schema,delivery_note,tags,category:categories(id,name),variants:product_variants!product_id(*),inventory_items!product_id(id,order_item_id,variant_id,payload)'
+        'id,name,slug,description,category_id,product_type,status,is_in_stock,input_schema,delivery_note,image_url,tags,category:categories(id,name),variants:product_variants!product_id(*),inventory_items!product_id(id,order_item_id,variant_id,payload)'
       )
       .order('created_at', { ascending: false }),
     supabase
@@ -284,6 +285,10 @@ export default async function AdminProductsPage({
             </div>
             <div className="space-y-3">
               <TextArea name="description" placeholder="Description" rows={3} />
+              <Input
+                name="imageUrl"
+                placeholder="Product image URL (https://…) — optional"
+              />
               <TextArea
                 name="deliveryNote"
                 placeholder="Delivery note (shown to customers)"
@@ -351,6 +356,12 @@ export default async function AdminProductsPage({
                 <form action={updateProductAction as any} className="grid gap-2 md:grid-cols-2">
                   <input type="hidden" name="productId" value={product.id} />
                   <Input name="name" defaultValue={product.name} placeholder="Product name" required className="text-sm" />
+                  <Input
+                    name="imageUrl"
+                    defaultValue={product.imageUrl ?? ''}
+                    placeholder="Product image URL (https://…)"
+                    className="text-sm"
+                  />
                   <TextArea
                     name="deliveryNote"
                     defaultValue={product.deliveryNote ?? ''}

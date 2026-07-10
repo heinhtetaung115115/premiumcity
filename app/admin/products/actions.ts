@@ -75,6 +75,8 @@ export async function createProductAction(formData: FormData) {
   }
 
   const supabase = getServiceSupabaseClient();
+  const imageUrl = String(formData.get('imageUrl') ?? '').trim();
+
   const { error } = await supabase.from('products').insert({
     name,
     slug: slugify(name),
@@ -82,6 +84,7 @@ export async function createProductAction(formData: FormData) {
     product_type: productType,
     description: String(formData.get('description') ?? ''),
     delivery_note: String(formData.get('deliveryNote') ?? ''),
+    image_url: imageUrl || null,
     input_schema: inputSchema
     // NOTE: we do NOT set is_in_stock; we rely on DB default and inventory-based logic
   });
@@ -457,12 +460,14 @@ export async function updateProductAction(formData: FormData) {
   }
 
   const supabase = getServiceSupabaseClient();
+  const imageUrl = String(formData.get('imageUrl') ?? '').trim();
   const { error } = await supabase
     .from('products')
     .update({
       name,
       description: String(formData.get('description') ?? ''),
       delivery_note: String(formData.get('deliveryNote') ?? ''),
+      image_url: imageUrl || null,
       input_schema: inputSchema,
       tags
     })

@@ -28,6 +28,7 @@ type Product = {
   categorySlug: string;
   productType: string;
   isInStock: boolean;
+  imageUrl?: string | null;
   variants: Variant[];
 };
 
@@ -319,60 +320,74 @@ export function HomeClient({ categories, products, walletBalance, userName, avat
             return (
               <Link key={product.id} href={`/product/${product.slug}`} className="group relative block">
                 <div
-                  className={`relative flex h-full flex-col overflow-hidden rounded-2xl border p-3 transition-all duration-300 sm:p-3.5 ${
+                  className={`relative flex h-full flex-col overflow-hidden rounded-2xl border transition-all duration-300 ${
                     isOutOfStock
                       ? 'border-slate-800/60 bg-slate-900/30'
                       : 'border-slate-800/80 bg-slate-900/50 group-hover:border-emerald-500/40 group-hover:bg-slate-900/70'
                   }`}
                 >
-                  <div className="mb-2.5 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-400">
-                    {categoryIcon(product.categoryName)}
-                  </div>
-
-                  <span className="mb-1 self-start rounded-md bg-slate-800/70 px-1.5 py-[2px] text-[8px] font-medium uppercase tracking-wider text-slate-400 sm:text-[9px]">
-                    {product.categoryName}
-                  </span>
-
-                  <h2 className="text-[11px] font-semibold leading-snug text-slate-100 line-clamp-2 sm:text-sm">
-                    {product.name}
-                  </h2>
-
-                  {product.description && (
-                    <p className="mt-0.5 hidden text-[11px] leading-relaxed text-slate-500 line-clamp-1 sm:block">
-                      {product.description}
-                    </p>
-                  )}
-
-                  <div className="flex-1" />
-
-                  <div className="mt-2.5 flex items-end justify-between gap-1">
-                    <div>
-                      {isOutOfStock ? (
-                        <span className="text-[10px] font-medium text-red-400/80 sm:text-xs">Out of stock</span>
-                      ) : cheapest ? (
-                        <>
-                          <p className="text-[9px] text-slate-500 sm:text-[10px]">from</p>
-                          <p className="text-sm font-bold tracking-tight text-emerald-400 sm:text-base">
-                            {formatKS(cheapest.price)}
-                          </p>
-                        </>
-                      ) : (
-                        <span className="text-[10px] font-medium text-emerald-400 sm:text-xs">Available</span>
-                      )}
-                    </div>
-
-                    {isOutOfStock ? (
-                      <span className="inline-flex items-center gap-0.5 rounded-md bg-sky-500/10 px-1.5 py-[3px] text-[8px] font-medium text-sky-400 sm:text-[9px]">
-                        {isInstant ? <InstantIcon /> : <ManualIcon />}
-                        <span className="hidden sm:inline">{isInstant ? 'Instant' : 'Manual'}</span>
-                      </span>
+                  {/* Product image (square) with icon fallback */}
+                  <div className="relative aspect-square w-full overflow-hidden bg-slate-800/40">
+                    {product.imageUrl ? (
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name}
+                        loading="lazy"
+                        className={`h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 ${
+                          isOutOfStock ? 'opacity-50 grayscale' : ''
+                        }`}
+                      />
                     ) : (
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500 transition group-hover:bg-emerald-400">
-                        <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                          <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
+                      <div className="flex h-full w-full items-center justify-center bg-emerald-500/[0.08] text-emerald-400">
+                        <div className="scale-[1.8]">{categoryIcon(product.categoryName)}</div>
                       </div>
                     )}
+                    {/* Instant/Manual badge on the image */}
+                    <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-0.5 rounded-md bg-black/55 px-1.5 py-[3px] text-[8px] font-semibold text-emerald-300 backdrop-blur-sm sm:text-[9px]">
+                      {isInstant ? <InstantIcon /> : <ManualIcon />}
+                      <span className="hidden sm:inline">{isInstant ? 'Instant' : 'Manual'}</span>
+                    </span>
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex flex-1 flex-col p-2.5 sm:p-3">
+                    <span className="mb-1 self-start rounded-md bg-slate-800/70 px-1.5 py-[2px] text-[8px] font-medium uppercase tracking-wider text-slate-400 sm:text-[9px]">
+                      {product.categoryName}
+                    </span>
+
+                    <h2 className="text-[11px] font-semibold leading-snug text-slate-100 line-clamp-2 sm:text-sm">
+                      {product.name}
+                    </h2>
+
+                    <div className="flex-1" />
+
+                    <div className="mt-2 flex items-end justify-between gap-1">
+                      <div>
+                        {isOutOfStock ? (
+                          <span className="text-[10px] font-medium text-red-400/80 sm:text-xs">Out of stock</span>
+                        ) : cheapest ? (
+                          <>
+                            <p className="text-[9px] text-slate-500 sm:text-[10px]">from</p>
+                            <p className="text-sm font-bold tracking-tight text-emerald-400 sm:text-base">
+                              {formatKS(cheapest.price)}
+                            </p>
+                          </>
+                        ) : (
+                          <span className="text-[10px] font-medium text-emerald-400 sm:text-xs">Available</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Buy now button */}
+                    <div
+                      className={`mt-2.5 flex w-full items-center justify-center rounded-lg py-1.5 text-[11px] font-semibold transition sm:text-xs ${
+                        isOutOfStock
+                          ? 'bg-slate-800 text-slate-500'
+                          : 'bg-emerald-500 text-slate-950 group-hover:bg-emerald-400'
+                      }`}
+                    >
+                      {isOutOfStock ? 'Sold out' : 'Buy now'}
+                    </div>
                   </div>
                 </div>
               </Link>

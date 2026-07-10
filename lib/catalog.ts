@@ -432,6 +432,7 @@ export async function getProductBySlug(slug: string) {
       is_in_stock,
       input_schema,
       delivery_note,
+      image_url,
       tags,
       category:categories (
         id,
@@ -507,8 +508,28 @@ export async function getProductBySlug(slug: string) {
   // 4) Combine
   const base = mapProduct(productRow, variantsWithCounts, availableCount);
 
+  // 5) Sold count — total quantity ordered for this product (any status),
+  // plus a +100 marketing boost so new products still look popular.
+  let soldCount = 100;
+  try {
+    const { data: soldRows } = await supabase
+      .from('order_items')
+      .select('quantity')
+      .eq('product_id', productRow.id)
+      .limit(5000);
+    const realSold = ((soldRows ?? []) as any[]).reduce(
+      (sum, r) => sum + (Number(r.quantity) || 1),
+      0
+    );
+    soldCount = realSold + 100;
+  } catch {
+    soldCount = 100;
+  }
+
   return {
     ...base,
+    imageUrl: (productRow as any).image_url ?? null,
+    soldCount,
     category: productRow.category,
     tags: Array.isArray((productRow as any).tags) ? (productRow as any).tags : [],
   };

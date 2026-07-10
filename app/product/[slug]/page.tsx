@@ -74,54 +74,78 @@ export default async function ProductPage({
       </div>
 
       <div className="space-y-4">
-        {/* ── HERO CARD ── */}
-        <section className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.12] to-emerald-700/[0.03] p-6 text-center">
-          {/* Icon */}
-          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-400">
-            <svg className="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <path d="M10 9l5 3-5 3V9z" fill="currentColor" stroke="none" />
-            </svg>
+        {/* ── HERO CARD (Design 1: photo top) ── */}
+        <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+          {/* Product photo */}
+          <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-800/40">
+            {(product as any).imageUrl ? (
+              <img
+                src={(product as any).imageUrl}
+                alt={product.name}
+                className={`h-full w-full object-cover ${!product.isInStock && isInstant ? 'opacity-60 grayscale' : ''}`}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-emerald-500/[0.08] text-emerald-400">
+                <svg className="h-16 w-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.4}>
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="M10 9l5 3-5 3V9z" fill="currentColor" stroke="none" />
+                </svg>
+              </div>
+            )}
+            {/* Delivery + stock badge overlaid */}
+            <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium text-emerald-300 backdrop-blur-sm">
+                {isInstant ? '⚡ Instant' : '📦 Manual'}
+              </span>
+              {isInstant && (
+                <span
+                  className={`inline-flex items-center rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium backdrop-blur-sm ${
+                    product.isInStock ? 'text-emerald-300' : 'text-red-300'
+                  }`}
+                >
+                  {product.isInStock ? 'In stock' : 'Out of stock'}
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Delivery + stock badge */}
-          <div className="mb-2.5 flex flex-wrap items-center justify-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-[11px] font-medium text-emerald-300">
-              {isInstant ? '⚡ Instant delivery' : '📦 Manual delivery'}
-            </span>
-            {isInstant && (
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium ${
-                  product.isInStock ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'
-                }`}
-              >
-                {product.isInStock ? 'In stock' : 'Out of stock'}
+          {/* Info below photo */}
+          <div className="p-5">
+            {product.category?.name && (
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">
+                {product.category.name}
+              </p>
+            )}
+            <h1 className="mt-1 text-2xl font-semibold text-slate-50">{product.name}</h1>
+
+            {/* Sold count */}
+            <div className="mt-2 flex items-center gap-1.5 text-[12px] text-slate-400">
+              <svg className="h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span>
+                <span className="font-semibold text-slate-200">
+                  {((product as any).soldCount ?? 0).toLocaleString('en-US')}
+                </span>{' '}
+                sold
               </span>
+            </div>
+
+            {/* ── Admin-controlled pill tags ── */}
+            {tags.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {tags.map((t, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[11px]"
+                  >
+                    <span className="text-slate-500">{t.key}</span>
+                    <span className="font-medium text-slate-200">{t.value}</span>
+                  </span>
+                ))}
+              </div>
             )}
           </div>
-
-          {/* Title + category */}
-          <h1 className="text-2xl font-semibold text-slate-50">{product.name}</h1>
-          {product.category?.name && (
-            <p className="mt-1 text-[11px] uppercase tracking-wide text-slate-500">
-              {product.category.name}
-            </p>
-          )}
-
-          {/* ── Admin-controlled pill tags ── */}
-          {tags.length > 0 && (
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              {tags.map((t, i) => (
-                <span
-                  key={i}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[11px]"
-                >
-                  <span className="text-slate-500">{t.key}</span>
-                  <span className="font-medium text-slate-200">{t.value}</span>
-                </span>
-              ))}
-            </div>
-          )}
         </section>
 
         {/* ── Details ── */}

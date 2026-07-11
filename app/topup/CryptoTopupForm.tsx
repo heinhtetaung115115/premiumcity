@@ -51,10 +51,10 @@ export default function CryptoTopupForm({ onBack }: { onBack: () => void }) {
     }
     startTransition(async () => {
       const res = await createCryptoTopupAction(usd);
-      if (res.ok) {
+      if (res.ok && res.topupId) {
         router.push(`/topup/crypto/${res.topupId}`);
       } else {
-        setError(res.error);
+        setError(res.error || 'Could not create payment. Please try again.');
       }
     });
   }

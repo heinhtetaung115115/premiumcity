@@ -30,9 +30,11 @@ export async function getCryptoQuoteAction(): Promise<CryptoQuote> {
   }
 }
 
-export type CreateCryptoResult =
-  | { ok: true; topupId: string }
-  | { ok: false; error: string };
+export type CreateCryptoResult = {
+  ok: boolean;
+  topupId?: string;
+  error?: string;
+};
 
 export async function createCryptoTopupAction(
   usdAmount: number

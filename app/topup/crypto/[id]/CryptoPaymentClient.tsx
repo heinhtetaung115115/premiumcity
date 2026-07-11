@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 
 type Props = {
   topupId: string;
+  coinLabel: string;
+  networkName: string;
   payAddress: string;
   payAmount: number;
   usdAmount: number;
@@ -186,7 +188,7 @@ export default function CryptoPaymentClient(props: Props) {
               className="flex w-full items-center justify-between gap-2 rounded-xl border border-teal-500/30 bg-teal-500/[0.08] px-3 py-3 text-left transition hover:border-teal-500/60"
             >
               <span className="text-lg font-bold text-teal-300">
-                {props.payAmount} <span className="text-xs font-semibold">USDT</span>
+                {props.payAmount} <span className="text-xs font-semibold">{props.coinLabel}</span>
               </span>
               <span className="flex-shrink-0 text-[10px] text-slate-400">
                 {copied === 'amt' ? '✓ Copied' : 'Tap to copy'}
@@ -203,7 +205,7 @@ export default function CryptoPaymentClient(props: Props) {
           {/* Address */}
           <div>
             <label className="mb-1.5 block text-[11px] uppercase tracking-wide text-slate-500">
-              To this address (TRC-20)
+              To this address ({props.networkName})
             </label>
             <button
               onClick={() => copy(props.payAddress, 'addr')}
@@ -221,8 +223,8 @@ export default function CryptoPaymentClient(props: Props) {
           {/* Network warning */}
           <div className="rounded-xl border border-amber-500/30 bg-amber-950/30 px-3 py-2.5">
             <p className="text-[11px] leading-relaxed text-amber-100/90">
-              <span className="font-semibold">Tron (TRC-20) network only.</span> Sending USDT on
-              another network (ERC-20, BEP-20) will result in permanent loss.
+              <span className="font-semibold">{props.networkName} network only.</span> Sending{' '}
+              {props.coinLabel} on any other network will result in permanent loss of your funds.
             </p>
           </div>
 
@@ -230,7 +232,7 @@ export default function CryptoPaymentClient(props: Props) {
           <div className="space-y-1.5 rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-[12px]">
             <div className="flex justify-between">
               <span className="text-slate-500">Rate locked</span>
-              <span className="text-slate-300">1 USDT = {props.rate.toLocaleString()} Ks</span>
+              <span className="text-slate-300">1 {props.coinLabel} = {props.rate.toLocaleString()} Ks</span>
             </div>
             <div className="flex justify-between border-t border-slate-800 pt-1.5">
               <span className="text-slate-500">You&apos;ll receive</span>

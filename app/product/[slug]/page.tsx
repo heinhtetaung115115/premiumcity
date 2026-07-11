@@ -118,16 +118,36 @@ export default async function ProductPage({
             )}
             <h1 className="mt-1 text-2xl font-semibold text-slate-50">{product.name}</h1>
 
-            {/* Sold count */}
-            <div className="mt-2 flex items-center gap-1.5 text-[12px] text-slate-400">
-              <svg className="h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span>
-                <span className="font-semibold text-slate-200">
-                  {((product as any).soldCount ?? 0).toLocaleString('en-US')}
-                </span>{' '}
-                sold
+            {/* Sold count — "Hot seller" animated flame */}
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
+@keyframes pcFireFlicker {
+  0%, 100% { transform: scale(1) rotate(-2deg); opacity: 1; }
+  50%      { transform: scale(1.15) rotate(2deg); opacity: 0.85; }
+}
+.pc-flame {
+  display: inline-block;
+  transform-origin: center bottom;
+  animation: pcFireFlicker 0.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-flame { animation: none; }
+}
+`,
+              }}
+            />
+            <div className="mt-2.5">
+              <span className="inline-flex items-center gap-2 rounded-full border border-orange-500/30 bg-gradient-to-br from-orange-500/[0.15] to-orange-600/[0.05] px-3.5 py-1.5">
+                <span className="pc-flame text-base leading-none" aria-hidden="true">
+                  🔥
+                </span>
+                <span className="text-[13px] text-orange-200">
+                  <span className="font-bold text-orange-400">
+                    {((product as any).soldCount ?? 0).toLocaleString('en-US')}
+                  </span>{' '}
+                  sold
+                </span>
               </span>
             </div>
 

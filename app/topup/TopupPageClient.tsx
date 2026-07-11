@@ -4,17 +4,18 @@
 import { useState } from 'react';
 import KbzTopupForm from './KbzTopupForm';
 import ManualTopupForm from './ManualTopupForm';
+import CryptoTopupForm from './CryptoTopupForm';
 
 type BankRow = { id: string; bank_name: string; account_name: string; account_no: string; qr_code_url: string | null; instructions: string | null };
 type Props = { banks: BankRow[]; reason?: string; balance?: number };
 
 export default function TopupPageClient({ banks, reason, balance = 0 }: Props) {
-  const [selected, setSelected] = useState<null | 'kbz' | 'manual'>(null);
+  const [selected, setSelected] = useState<null | 'kbz' | 'manual' | 'crypto'>(null);
   const kbzBank = banks.find((b) => b.bank_name.toLowerCase().includes('kbz'));
   const manualBanks = banks.filter((b) => !b.bank_name.toLowerCase().includes('kbz'));
 
   return (
-    <div className={`mx-auto space-y-5 ${selected === null ? 'max-w-md' : 'max-w-4xl'}`}>
+    <div className={`mx-auto space-y-5 ${selected === null || selected === 'crypto' ? 'max-w-md' : 'max-w-4xl'}`}>
       {reason === 'insufficient_balance' && (
         <div className="rounded-xl border border-amber-500/60 bg-amber-950/50 px-4 py-3 text-sm text-amber-50">
           <p className="font-semibold">Not enough wallet balance</p>
@@ -83,9 +84,33 @@ export default function TopupPageClient({ banks, reason, balance = 0 }: Props) {
                 </svg>
               </button>
             )}
+
+            {/* ── Crypto (USDT) ── */}
+            <button
+              onClick={() => setSelected('crypto')}
+              className="flex items-center gap-4 rounded-2xl border border-teal-500/30 bg-teal-500/[0.06] p-4 text-left transition hover:border-teal-500/60 hover:bg-teal-500/[0.10]"
+            >
+              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-teal-500/15">
+                <svg className="h-6 w-6 text-teal-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-slate-100">USDT (Crypto)</p>
+                  <span className="rounded bg-teal-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-teal-300">AUTO</span>
+                </div>
+                <p className="mt-0.5 text-[11px] text-slate-400">Tron TRC-20 · from $5 · instant credit</p>
+              </div>
+              <svg className="h-5 w-5 flex-shrink-0 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           </div>
         </>
       )}
+
+      {selected === 'crypto' && <CryptoTopupForm onBack={() => setSelected(null)} />}
 
       {selected === 'kbz' && kbzBank && (
         <div>

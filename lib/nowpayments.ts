@@ -17,6 +17,26 @@ const API_BASE = 'https://api.nowpayments.io/v1';
 export const PAY_CURRENCY = 'usdttrc20';
 
 /**
+ * YOUR payout / outcome wallet currency — the coin NOWPayments settles to.
+ *
+ * THIS DRIVES THE MINIMUMS. NOWPayments swaps whatever the customer sends into
+ * this currency, and the minimum it enforces is for the pair
+ * (pay currency -> payout currency), NOT the pay currency on its own.
+ *
+ * Querying a mono pair (usdterc20 -> usdterc20) returns a meaningless
+ * self-swap minimum. That is why Ethereum once showed a $0.55 minimum while
+ * NOWPayments actually rejected anything under ~$12.
+ *
+ * Set NOWPAYMENTS_PAYOUT_CURRENCY to whatever coin your NOWPayments outcome
+ * wallet is set to.
+ */
+export const PAYOUT_CURRENCY =
+  process.env.NOWPAYMENTS_PAYOUT_CURRENCY || 'usdttrc20';
+
+/** Padding on the reported minimum, to survive rounding at the boundary. */
+const MIN_BUFFER = 0.03; // 3%
+
+/**
  * Networks the customer can pay on.
  *
  * Each has a DIFFERENT minimum on NOWPayments, driven by that chain's fees.
@@ -139,14 +159,29 @@ export async function getStatus(): Promise<boolean> {
  */
 export async function getMinAmount(
   currencyFrom: string = PAY_CURRENCY,
-  currencyTo: string = PAY_CURRENCY
+  currencyTo: string = PAYOUT_CURRENCY
 ): Promise<number | null> {
   try {
     const json = await npFetch(
-      `/min-amount?currency_from=${encodeURIComponent(currencyFrom)}&currency_to=${encodeURIComponent(currencyTo)}`
+      `/min-amount?currency_from=${encodeURIComponent(currencyFrom)}` +
+        `&currency_to=${encodeURIComponent(currencyTo)}` +
+        `&fiat_equivalent=usd`
     );
-    const v = Number(json?.min_amount);
-    return Number.isFinite(v) ? v : null;
+
+    // Prefer the USD figure when NOWPayments returns one — our pay currencies
+    // are all USD stablecoins, but this keeps the number honest if that ever
+    // changes.
+    const fiat = Number(json?.fiat_equivalent);
+    const raw = Number(json?.min_amount);
+    const base = Number.isFinite(fiat) && fiat > 0 ? fiat : raw;
+
+    if (!Number.isFinite(base) || base <= 0) return null;
+
+    // Safety buffer. NOWPayments rejected a payment quoted at exactly the
+    // reported minimum ("Crypto amount 4.996917 is less than minimal") because
+    // the USD->crypto conversion lands a hair under the limit. Pad it so a
+    // customer paying our stated minimum is never rejected at the boundary.
+    return base * (1 + MIN_BUFFER);
   } catch (err) {
     console.error('[nowpayments] getMinAmount failed:', err);
     return null;
@@ -256,7 +291,7 @@ export async function getNetworkOptions(): Promise<NetworkOption[]> {
   const results = await Promise.all(
     PAY_NETWORKS.map(async (n) => {
       try {
-        const min = await getMinAmount(n.code, n.code);
+        const min = await getMinAmount(n.code, PAYOUT_CURRENCY);
         if (min === null || !Number.isFinite(min) || min <= 0) {
           return { ...n, minUsd: null, available: false };
         }

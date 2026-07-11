@@ -37,7 +37,7 @@ export type CryptoTopupRow = {
  * process and the customer's funds get stuck in a dead invoice.
  */
 export async function getEffectiveMinUsd(payCurrency: string = PAY_CURRENCY): Promise<number> {
-  const npMin = await getMinAmount(payCurrency, payCurrency);
+  const npMin = await getMinAmount(payCurrency); // vs YOUR payout wallet currency
   if (npMin && npMin > MIN_USD) return Math.ceil(npMin * 100) / 100;
   return MIN_USD;
 }

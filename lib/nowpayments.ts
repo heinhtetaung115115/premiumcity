@@ -16,6 +16,78 @@ const API_BASE = 'https://api.nowpayments.io/v1';
 
 export const PAY_CURRENCY = 'usdttrc20';
 
+/**
+ * Networks the customer can pay on.
+ *
+ * Each has a DIFFERENT minimum on NOWPayments, driven by that chain's fees.
+ * We fetch the real minimum per network at runtime rather than hard-coding —
+ * a payment below NOWPayments' minimum will not process, and the customer
+ * would lose the funds to a stuck invoice.
+ *
+ * `code` must match NOWPayments' currency ticker exactly.
+ */
+export type PayNetwork = {
+  code: string;
+  label: string;
+  network: string;
+  note: string;
+};
+
+export const PAY_NETWORKS: PayNetwork[] = [
+  {
+    code: 'usdttrc20',
+    label: 'USDT',
+    network: 'Tron (TRC-20)',
+    note: 'Cheapest fees — recommended',
+  },
+  {
+    code: 'usdtbsc',
+    label: 'USDT',
+    network: 'BNB Smart Chain (BEP-20)',
+    note: 'Low fees',
+  },
+  {
+    code: 'usdtsol',
+    label: 'USDT',
+    network: 'Solana',
+    note: 'Fast, low fees',
+  },
+  {
+    code: 'usdtmatic',
+    label: 'USDT',
+    network: 'Polygon',
+    note: 'Low fees',
+  },
+  {
+    code: 'usdtarb',
+    label: 'USDT',
+    network: 'Arbitrum',
+    note: 'Low fees',
+  },
+  {
+    code: 'usdterc20',
+    label: 'USDT',
+    network: 'Ethereum (ERC-20)',
+    note: 'High gas fees — higher minimum',
+  },
+  {
+    code: 'usdcsol',
+    label: 'USDC',
+    network: 'Solana',
+    note: 'Fast, low fees',
+  },
+  {
+    code: 'usdcbsc',
+    label: 'USDC',
+    network: 'BNB Smart Chain',
+    note: 'Low fees',
+  },
+];
+
+export function findNetwork(code: string): PayNetwork | undefined {
+  return PAY_NETWORKS.find((n) => n.code === code);
+}
+
 function apiKey(): string {
   const k = process.env.NOWPAYMENTS_API_KEY || '';
   if (!k) throw new Error('NOWPAYMENTS_API_KEY not configured');
@@ -96,13 +168,14 @@ export type CreatedPayment = {
 export async function createPayment(params: {
   priceAmount: number; // in USD
   orderId: string;
+  payCurrency?: string;
   orderDescription?: string;
   ipnCallbackUrl?: string;
 }): Promise<CreatedPayment> {
   const body: Record<string, unknown> = {
     price_amount: params.priceAmount,
     price_currency: 'usd',
-    pay_currency: PAY_CURRENCY,
+    pay_currency: params.payCurrency || PAY_CURRENCY,
     order_id: params.orderId,
     order_description: params.orderDescription ?? 'Wallet top-up',
   };
@@ -161,4 +234,46 @@ export function verifyIpnSignature(rawBody: string, signature: string | null): b
   const b = Buffer.from(signature, 'utf8');
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
+}
+
+export type NetworkOption = PayNetwork & {
+  /** Real minimum from NOWPayments, in USD terms. null = couldn't fetch. */
+  minUsd: number | null;
+  available: boolean;
+};
+
+/**
+ * Fetch the live minimum for every supported network, in parallel.
+ *
+ * We ask NOWPayments for the minimum in the pay-currency itself. Because our
+ * accepted coins are all USD stablecoins, that number is ~USD 1:1, which is
+ * what we show the customer.
+ *
+ * A network whose minimum can't be fetched is marked unavailable rather than
+ * guessed at — quoting a wrong minimum means stuck payments.
+ */
+export async function getNetworkOptions(): Promise<NetworkOption[]> {
+  const results = await Promise.all(
+    PAY_NETWORKS.map(async (n) => {
+      try {
+        const min = await getMinAmount(n.code, n.code);
+        if (min === null || !Number.isFinite(min) || min <= 0) {
+          return { ...n, minUsd: null, available: false };
+        }
+        return {
+          ...n,
+          minUsd: Math.ceil(min * 100) / 100,
+          available: true,
+        };
+      } catch {
+        return { ...n, minUsd: null, available: false };
+      }
+    })
+  );
+
+  // Cheapest minimum first — that's what the customer cares about.
+  return results.sort((a, b) => {
+    if (a.available !== b.available) return a.available ? -1 : 1;
+    return (a.minUsd ?? 9e9) - (b.minUsd ?? 9e9);
+  });
 }

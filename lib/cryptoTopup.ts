@@ -1,7 +1,7 @@
 // lib/cryptoTopup.ts
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import { getRateInfo } from '@/lib/cryptoRate';
-import { createPayment, getMinAmount, PAY_CURRENCY } from '@/lib/nowpayments';
+import { createPayment, getMinAmount, findNetwork, PAY_CURRENCY } from '@/lib/nowpayments';
 
 /** Our own floor, in USD. Can be raised by NOWPayments' pair minimum. */
 export const MIN_USD = 5;
@@ -28,12 +28,16 @@ export type CryptoTopupRow = {
 };
 
 /**
- * Effective minimum: the larger of our own floor and whatever NOWPayments
- * says the pair requires. Checked live so we never create an invoice that
- * physically cannot complete.
+ * Effective minimum for a specific network: the larger of our own floor and
+ * whatever NOWPayments says that network requires. Checked live so we never
+ * create an invoice that physically cannot complete.
+ *
+ * NOTE: we cannot simply force our $5 floor — if NOWPayments' minimum for a
+ * chain is higher (Ethereum gas, for instance), a smaller payment will not
+ * process and the customer's funds get stuck in a dead invoice.
  */
-export async function getEffectiveMinUsd(): Promise<number> {
-  const npMin = await getMinAmount(PAY_CURRENCY, PAY_CURRENCY);
+export async function getEffectiveMinUsd(payCurrency: string = PAY_CURRENCY): Promise<number> {
+  const npMin = await getMinAmount(payCurrency, payCurrency);
   if (npMin && npMin > MIN_USD) return Math.ceil(npMin * 100) / 100;
   return MIN_USD;
 }
@@ -48,16 +52,23 @@ export async function getEffectiveMinUsd(): Promise<number> {
 export async function createCryptoTopup(params: {
   userId: string;
   usdAmount: number;
+  payCurrency?: string;
 }): Promise<CryptoTopupRow> {
   const { userId } = params;
   const usdAmount = Math.round(params.usdAmount * 100) / 100;
 
+  // Only allow networks we actually support — never trust the client.
+  const payCurrency = params.payCurrency || PAY_CURRENCY;
+  if (!findNetwork(payCurrency)) {
+    throw new Error('Unsupported network.');
+  }
+
   if (!Number.isFinite(usdAmount)) throw new Error('Invalid amount.');
   if (usdAmount > MAX_USD) throw new Error(`Maximum is $${MAX_USD}.`);
 
-  const minUsd = await getEffectiveMinUsd();
+  const minUsd = await getEffectiveMinUsd(payCurrency);
   if (usdAmount < minUsd) {
-    throw new Error(`Minimum top-up is $${minUsd}.`);
+    throw new Error(`Minimum for this network is $${minUsd}.`);
   }
 
   const rateInfo = await getRateInfo();
@@ -97,6 +108,7 @@ export async function createCryptoTopup(params: {
     payment = await createPayment({
       priceAmount: usdAmount,
       orderId,
+      payCurrency,
       orderDescription: `PremiumCity wallet top-up (${mmkAmount.toLocaleString()} Ks)`,
       ipnCallbackUrl: `${base}/api/crypto/webhook`,
     });

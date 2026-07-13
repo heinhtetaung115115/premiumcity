@@ -226,25 +226,38 @@ export async function fetchBinanceP2P(
 }
 
 // ─────────────────────────────────────────────────────────────
-// SOURCE 2 — OKX P2P
+// SOURCE 2 — BYBIT P2P
 // ─────────────────────────────────────────────────────────────
 //
-// Also an internal, undocumented endpoint. OKX's `side` names the ads it
-// returns, so to SELL our USDT we read the ads where merchants are buying.
-export async function fetchOkxP2P(side: Side = 'SELL'): Promise<RateSourceResult> {
-  const source = 'okx_p2p';
-  // We want to sell -> read the "buy" book (merchants buying from us).
-  const okxSide = side === 'SELL' ? 'buy' : 'sell';
+// Internal, undocumented endpoint (same category as Binance's).
+// Bybit's `side` is a string: we read both and let you compare, because the
+// semantics are not documented and I will not guess with your money.
+export async function fetchBybitP2P(side: Side = 'SELL'): Promise<RateSourceResult> {
+  const source = 'bybit_p2p';
+  // Bybit: "0" and "1" name the ad book. To SELL our USDT we want the ads of
+  // merchants who are BUYING. Verify against the app using the admin table.
+  const bybitSide = side === 'SELL' ? '0' : '1';
 
   try {
-    const url =
-      'https://www.okx.com/v3/c2c/tradingOrders/books' +
-      `?quoteCurrency=MMK&baseCurrency=USDT&side=${okxSide}` +
-      '&paymentMethod=all&userType=all&receivingAds=false&t=' +
-      Date.now();
-
-    const res = await fetch(url, {
-      headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json' },
+    const res = await fetch('https://api2.bybit.com/fiat/otc/item/online', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': BROWSER_UA,
+        Origin: 'https://www.bybit.com',
+      },
+      body: JSON.stringify({
+        userId: '',
+        tokenId: 'USDT',
+        currencyId: 'MMK',
+        payment: [],
+        side: bybitSide,
+        size: '20',
+        page: '1',
+        amount: '',
+        authMaker: false,
+        canTrade: false,
+      }),
       cache: 'no-store',
     });
 
@@ -253,11 +266,9 @@ export async function fetchOkxP2P(side: Side = 'SELL'): Promise<RateSourceResult
     }
 
     const json: any = await res.json();
-    // OKX returns the book under data.buy / data.sell depending on the query.
-    const list: any[] = json?.data?.[okxSide] ?? json?.data?.sell ?? json?.data?.buy ?? [];
-
-    const prices = list
-      .map((o) => Number(o?.price))
+    const items: any[] = json?.result?.items ?? [];
+    const prices = items
+      .map((i) => Number(i?.price))
       .filter((p) => Number.isFinite(p) && p > 0);
 
     if (prices.length < 3) {
@@ -275,24 +286,45 @@ export async function fetchOkxP2P(side: Side = 'SELL'): Promise<RateSourceResult
   }
 }
 
+/** One source, both sides — so you can see the spread and spot an inversion. */
+export type SourcePair = {
+  source: string;
+  sell: RateSourceResult;
+  buy: RateSourceResult;
+};
+
 /**
- * Probe every source on the SELL side (the rate we use), and also grab the
- * BUY side from Binance purely so the admin page can show the spread.
+ * Reference rates from every source, both sides.
  *
- * If "sell" ever comes back HIGHER than "buy", the sides are inverted —
- * that comparison is the whole point of showing both.
+ * These are REFERENCE ONLY. Your manual rate is what actually prices top-ups.
+ * That is deliberate: an undocumented scraper should never silently decide how
+ * much money a customer receives.
  */
+export async function probeReferenceRates(payTypes: string[] = []): Promise<SourcePair[]> {
+  const [binSell, binBuy, bybSell, bybBuy] = await Promise.all([
+    fetchBinanceP2P('SELL', payTypes),
+    fetchBinanceP2P('BUY', payTypes),
+    fetchBybitP2P('SELL'),
+    fetchBybitP2P('BUY'),
+  ]);
+
+  return [
+    { source: 'binance_p2p', sell: binSell, buy: binBuy },
+    { source: 'bybit_p2p', sell: bybSell, buy: bybBuy },
+  ];
+}
+
+/** Back-compat for the cron: SELL side of every source. */
 export async function probeAllSources(payTypes: string[] = []): Promise<{
   sell: RateSourceResult[];
   buyReference: RateSourceResult;
 }> {
-  const [binanceSell, okxSell, binanceBuy] = await Promise.all([
+  const [binSell, bybSell, binBuy] = await Promise.all([
     fetchBinanceP2P('SELL', payTypes),
-    fetchOkxP2P('SELL'),
+    fetchBybitP2P('SELL'),
     fetchBinanceP2P('BUY', payTypes),
   ]);
-
-  return { sell: [binanceSell, okxSell], buyReference: binanceBuy };
+  return { sell: [binSell, bybSell], buyReference: binBuy };
 }
 
 /** Payment methods currently offered on the MMK book (populates the filter). */
@@ -395,10 +427,12 @@ export async function getEffectiveRate(marginPercent = 5): Promise<{
 } | null> {
   const settings = await getRateSettings();
 
+  // MANUAL RATE IS FINAL. No margin is applied — the number you type is the
+  // number customers are priced at. You have already priced your own margin in.
   if (settings.manualEnabled && settings.manualUsdtMmk && sane(settings.manualUsdtMmk)) {
     return {
       marketRate: settings.manualUsdtMmk,
-      effectiveRate: Math.floor(settings.manualUsdtMmk * (1 - marginPercent / 100)),
+      effectiveRate: Math.floor(settings.manualUsdtMmk),
       source: 'manual',
       isManual: true,
       ageMs: settings.updatedAt ? Date.now() - new Date(settings.updatedAt).getTime() : 0,

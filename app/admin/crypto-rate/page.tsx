@@ -4,7 +4,7 @@ import {
   getLatestStoredRate,
   getRateSettings,
   getEffectiveRate,
-  probeAllSources,
+  probeReferenceRates,
 } from '@/lib/cryptoRate';
 import { saveSettingsAction, refreshNowAction } from './actions';
 
@@ -24,31 +24,32 @@ export default async function CryptoRatePage() {
   await requireAdmin();
 
   const settings = await getRateSettings();
-  const [stored, effective, probe] = await Promise.all([
+  const [stored, effective, pairs] = await Promise.all([
     getLatestStoredRate(),
     getEffectiveRate(5),
-    probeAllSources(settings.payTypes),
+    probeReferenceRates(settings.payTypes),
   ]);
-
-  const sellWinner = probe.sell.find((p) => p.ok && p.rate);
-  const buyRef = probe.buyReference;
-
-  // If SELL >= BUY the book is inverted — that would mean over-crediting.
-  const sidesLookWrong =
-    !!sellWinner?.rate && !!buyRef.rate && sellWinner.rate >= buyRef.rate;
 
   // Payment methods discovered on the live book.
   const discovered = Array.from(
-    new Set([...(probe.sell.flatMap((p) => p.payTypesSeen ?? [])), ...settings.payTypes])
+    new Set([
+      ...pairs.flatMap((p) => p.sell.payTypesSeen ?? []),
+      ...settings.payTypes,
+    ])
   ).sort();
+
+  const manualAgeHours = settings.updatedAt
+    ? (Date.now() - new Date(settings.updatedAt).getTime()) / 3_600_000
+    : Infinity;
+  const manualOverdue = !settings.manualEnabled || manualAgeHours > 24;
 
   return (
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-semibold">Crypto rate (MMK / USDT)</h1>
         <p className="mt-1 text-sm text-slate-400">
-          We use the <strong className="text-slate-200">SELL</strong> side — the price a merchant
-          pays you for USDT, because you have to sell what customers send.
+          Your <strong className="text-slate-200">manual rate</strong> is what prices top-ups —
+          used exactly as typed. The feeds below are reference only.
         </p>
       </header>
 
@@ -68,12 +69,18 @@ export default async function CryptoRatePage() {
               <span className="text-base font-medium text-slate-400">Ks per USDT</span>
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              Market {effective.marketRate.toLocaleString()} Ks · 5% margin · source{' '}
-              <span className="font-semibold text-slate-200">{effective.source}</span>
-              {effective.isManual && (
-                <span className="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
-                  MANUAL
-                </span>
+              {effective.isManual ? (
+                <>
+                  Set by you · used exactly as typed (no margin deducted)
+                  <span className="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                    MANUAL
+                  </span>
+                </>
+              ) : (
+                <>
+                  Auto feed · market {effective.marketRate.toLocaleString()} Ks · 5% margin · source{' '}
+                  <span className="font-semibold text-slate-200">{effective.source}</span>
+                </>
               )}
             </p>
           </>
@@ -87,94 +94,79 @@ export default async function CryptoRatePage() {
         )}
       </div>
 
-      {/* SELL vs BUY — verify the sides are the right way round */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
-        <h2 className="mb-1 text-sm font-semibold text-slate-100">Sanity check: SELL vs BUY</h2>
-        <p className="mb-3 text-[11px] text-slate-500">
-          SELL must be LOWER than BUY (the gap is the market spread). Compare these against the
-          Binance app to be certain we&apos;re on the right side of the book.
-        </p>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.06] p-3">
-            <p className="text-[10px] uppercase tracking-wide text-emerald-300/70">
-              SELL — we use this
-            </p>
-            <p className="mt-1 text-xl font-bold text-emerald-300">
-              {sellWinner?.rate ? sellWinner.rate.toLocaleString() : '—'}
-            </p>
-            <p className="text-[10px] text-slate-500">what a merchant pays you</p>
-          </div>
-          <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3">
-            <p className="text-[10px] uppercase tracking-wide text-slate-500">BUY — reference</p>
-            <p className="mt-1 text-xl font-bold text-slate-300">
-              {buyRef.rate ? buyRef.rate.toLocaleString() : '—'}
-            </p>
-            <p className="text-[10px] text-slate-500">what you&apos;d pay to buy</p>
-          </div>
+      {/* Overdue banner */}
+      {manualOverdue && (
+        <div className="rounded-2xl border border-rose-500/50 bg-rose-950/50 p-4">
+          <p className="text-sm font-bold text-rose-200">🔴 Manual rate needs setting</p>
+          <p className="mt-1 text-xs text-rose-200/80">
+            {settings.manualEnabled
+              ? `Last set ${Math.floor(manualAgeHours)}h ago. You get a Telegram reminder at 9 AM daily — set it below.`
+              : 'No manual rate is active. Crypto top-ups are running on the auto feed, or are disabled.'}
+          </p>
         </div>
+      )}
 
-        {sidesLookWrong && (
-          <div className="mt-3 rounded-xl border border-rose-500/50 bg-rose-950/50 p-3">
-            <p className="text-xs font-bold text-rose-200">⚠️ SELL is not below BUY</p>
-            <p className="mt-1 text-[11px] text-rose-200/80">
-              The sides may be inverted, which would mean crediting customers MORE than you can
-              actually cash out. Verify against the Binance app before trusting this rate — and
-              use the manual override in the meantime.
-            </p>
-          </div>
-        )}
-      </section>
-
-      {/* Feed status */}
+      {/* Reference rates — both sources, both sides */}
       <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-100">Feed status (SELL side)</h2>
+        <div className="mb-1 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-100">Reference rates (live)</h2>
           <form action={refreshNowAction}>
             <button
               type="submit"
               className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:border-emerald-500 hover:text-emerald-300"
             >
-              Fetch &amp; store now
+              Re-fetch
             </button>
           </form>
         </div>
+        <p className="mb-3 text-[11px] text-slate-500">
+          <strong className="text-slate-300">SELL</strong> is what a merchant pays YOU for USDT —
+          that&apos;s the number to base your rate on, since you have to sell what customers send.
+          SELL should sit BELOW buy.
+        </p>
 
-        <div className="space-y-2">
-          {probe.sell.map((p) => (
-            <div
-              key={p.source}
-              className={`rounded-xl border p-3 ${
-                p.ok
-                  ? 'border-emerald-500/30 bg-emerald-500/[0.06]'
-                  : 'border-rose-500/25 bg-rose-950/25'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-mono text-xs font-semibold text-slate-100">{p.source}</span>
-                <span
-                  className={`rounded px-2 py-0.5 text-[10px] font-bold ${
-                    p.ok ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
-                  }`}
-                >
-                  {p.ok ? 'OK' : 'FAILED'}
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-slate-400">
-                {p.rate ? (
-                  <span className="font-semibold text-slate-200">
-                    {p.rate.toLocaleString()} Ks ·{' '}
-                  </span>
-                ) : null}
-                {p.detail}
-              </p>
-            </div>
-          ))}
+        <div className="overflow-hidden rounded-xl border border-slate-800">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-950/60 text-[10px] uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-2 text-left font-medium">Source</th>
+                <th className="px-3 py-2 text-right font-medium text-emerald-400">Sell (use this)</th>
+                <th className="px-3 py-2 text-right font-medium">Buy</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pairs.map((p) => {
+                const inverted = !!p.sell.rate && !!p.buy.rate && p.sell.rate >= p.buy.rate;
+                return (
+                  <tr key={p.source} className="border-t border-slate-800">
+                    <td className="px-3 py-2.5">
+                      <span className="font-mono text-xs text-slate-200">{p.source}</span>
+                      {inverted && (
+                        <span className="ml-2 rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-bold text-rose-300">
+                          SIDES LOOK INVERTED
+                        </span>
+                      )}
+                      {!p.sell.ok && (
+                        <p className="mt-0.5 text-[10px] text-rose-300/80">{p.sell.detail}</p>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <span className="text-base font-bold text-emerald-300">
+                        {p.sell.rate ? p.sell.rate.toLocaleString() : '—'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-slate-400">
+                      {p.buy.rate ? p.buy.rate.toLocaleString() : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
 
         <p className="mt-3 text-[11px] text-slate-500">
-          Binance blocks US IPs (HTTP 451). Functions are pinned to Singapore
-          (<span className="font-mono">sin1</span>) in vercel.json for this reason.
+          These are REFERENCE ONLY. Your manual rate below is what actually prices top-ups.
         </p>
       </section>
 
@@ -220,10 +212,12 @@ export default async function CryptoRatePage() {
         </section>
 
         <section className="rounded-2xl border border-amber-500/30 bg-amber-500/[0.05] p-5">
-          <h2 className="text-sm font-semibold text-amber-200">Manual override</h2>
+          <h2 className="text-sm font-semibold text-amber-200">
+            Manual rate — this is the FINAL rate
+          </h2>
           <p className="mt-1 text-xs text-amber-100/70">
-            When enabled this BEATS every feed. Use it if the feeds are down, or if a real market
-            move was blocked by the 10% deviation guard.
+            The number you type is used EXACTLY as-is. No margin is subtracted — price your own
+            margin in. This beats every feed. Set it daily; you get a Telegram nudge at 9 AM.
           </p>
 
           <label className="mt-3 flex items-center gap-2 text-sm text-slate-200">
@@ -238,7 +232,7 @@ export default async function CryptoRatePage() {
 
           <div className="mt-3">
             <label className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">
-              MMK per 1 USDT (market rate — the 5% margin is applied on top)
+              MMK per 1 USDT — used exactly as typed (no % deducted)
             </label>
             <input
               name="manualUsdtMmk"

@@ -5,6 +5,7 @@ import {
   getRateSettings,
   getEffectiveRate,
   probeReferenceRates,
+  fetchBybitPaymentMethods,
 } from '@/lib/cryptoRate';
 import { saveSettingsAction, refreshNowAction } from './actions';
 
@@ -24,19 +25,12 @@ export default async function CryptoRatePage() {
   await requireAdmin();
 
   const settings = await getRateSettings();
-  const [stored, effective, pairs] = await Promise.all([
+  const [stored, effective, pairs, methods] = await Promise.all([
     getLatestStoredRate(),
     getEffectiveRate(5),
     probeReferenceRates(settings.payTypes),
+    fetchBybitPaymentMethods(),
   ]);
-
-  // Payment methods discovered on the live book.
-  const discovered = Array.from(
-    new Set([
-      ...pairs.flatMap((p) => p.sell.payTypesSeen ?? []),
-      ...settings.payTypes,
-    ])
-  ).sort();
 
   const manualAgeHours = settings.updatedAt
     ? (Date.now() - new Date(settings.updatedAt).getTime()) / 3_600_000
@@ -180,25 +174,28 @@ export default async function CryptoRatePage() {
             them.
           </p>
 
-          {discovered.length === 0 ? (
+          {methods.length === 0 ? (
             <p className="mt-3 text-xs text-slate-500">
-              No methods discovered — the Binance feed must succeed at least once to populate this.
+              Could not load Bybit&apos;s payment-method list right now. The rates above blend all
+              methods until this loads.
             </p>
           ) : (
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {discovered.map((pt) => (
+            <div className="mt-3 grid max-h-56 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
+              {methods.map((m) => (
                 <label
-                  key={pt}
+                  key={m.id}
                   className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-2 text-xs text-slate-200"
                 >
                   <input
                     type="checkbox"
                     name="payTypes"
-                    value={pt}
-                    defaultChecked={settings.payTypes.includes(pt)}
-                    className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-900 accent-sky-500"
+                    value={m.id}
+                    defaultChecked={settings.payTypes.includes(m.id)}
+                    className="h-3.5 w-3.5 flex-shrink-0 rounded border-slate-600 bg-slate-900 accent-sky-500"
                   />
-                  <span className="truncate">{pt}</span>
+                  <span className="truncate" title={m.name}>
+                    {m.name}
+                  </span>
                 </label>
               ))}
             </div>

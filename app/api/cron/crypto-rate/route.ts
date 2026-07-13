@@ -1,13 +1,14 @@
 // app/api/cron/crypto-rate/route.ts
 //
-// Refreshes the MMK/USDT rate (SELL side). Wired to Vercel Cron.
-// On failure, Telegram gets the EXACT per-source reason, so a geo-block
-// (HTTP 451) is distinguishable from a changed API shape without digging
-// through logs.
+// Hourly: store the Bybit SELL rate as a FALLBACK.
+//
+// SILENT ON FAILURE — no Telegram alert. You asked for exactly one
+// notification a day (the 9 AM reminder), and a failed fetch here is not an
+// emergency: your MANUAL rate is what prices top-ups. The 9 AM message
+// reports feed health.
 
 import { NextResponse } from 'next/server';
 import { refreshCryptoRate } from '@/lib/cryptoRate';
-import { sendTelegramMessage } from '@/lib/telegram';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,22 +24,9 @@ export async function GET(req: Request) {
 
   const result = await refreshCryptoRate();
 
+  // Log only. Never Telegram from here.
   if (!result.ok) {
-    const lines = result.probes
-      .map((p) => `• <b>${p.source}</b>: ${p.ok ? 'OK' : 'FAILED'} — ${p.detail}`)
-      .join('\n');
-
-    try {
-      await sendTelegramMessage({
-        text:
-          `⚠️ <b>Crypto rate not updated</b>\n\n` +
-          `${result.message}\n\n` +
-          `<b>Sources (SELL side):</b>\n${lines}\n\n` +
-          `Set a manual rate at /admin/crypto-rate if this persists.`,
-      });
-    } catch (err) {
-      console.error('[cron/crypto-rate] telegram failed:', err);
-    }
+    console.error('[cron/crypto-rate]', result.message);
   }
 
   return NextResponse.json(result);

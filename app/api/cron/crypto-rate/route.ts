@@ -1,12 +1,15 @@
 // app/api/cron/crypto-rate/route.ts
 //
-// Refreshes the MMK/USDT rate. Wire this to a Vercel Cron (see vercel.json).
-// Protected by CRON_SECRET so it can't be spammed.
+// Refreshes the MMK/USDT rate (SELL side). Wired to Vercel Cron.
+// On failure, Telegram gets the EXACT per-source reason, so a geo-block
+// (HTTP 451) is distinguishable from a changed API shape without digging
+// through logs.
 
 import { NextResponse } from 'next/server';
-import { refreshRate, getLatestStoredRate } from '@/lib/cryptoRate';
+import { refreshCryptoRate } from '@/lib/cryptoRate';
 import { sendTelegramMessage } from '@/lib/telegram';
 
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
@@ -14,29 +17,27 @@ export async function GET(req: Request) {
   const auth = req.headers.get('authorization') || '';
   const provided = auth.replace(/^Bearer\s+/i, '');
 
-  // Vercel Cron sends the secret as a Bearer token.
   if (secret && provided !== secret) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const result = await refreshRate();
+  const result = await refreshCryptoRate();
 
-  // Alert on trouble — a silently dead rate feed is how you end up quoting
-  // a week-old price.
-  if (!result.stored) {
-    const last = await getLatestStoredRate();
-    const ageHours = last
-      ? Math.round((Date.now() - new Date(last.fetchedAt).getTime()) / 3600000)
-      : null;
+  if (!result.ok) {
+    const lines = result.probes
+      .map((p) => `• <b>${p.source}</b>: ${p.ok ? 'OK' : 'FAILED'} — ${p.detail}`)
+      .join('\n');
 
-    if (result.reason === 'deviation_too_large') {
+    try {
       await sendTelegramMessage({
-        text: `⚠️ Crypto rate REJECTED (deviation too large)\nFetched: ${result.rate}\nKeeping last good rate.\nCheck the P2P feed.`,
-      }).catch(() => {});
-    } else if (ageHours !== null && ageHours >= 3) {
-      await sendTelegramMessage({
-        text: `⚠️ Crypto rate feed failing (${result.reason}).\nLast good rate is ${ageHours}h old.\nSet a manual rate in admin if this continues.`,
-      }).catch(() => {});
+        text:
+          `⚠️ <b>Crypto rate not updated</b>\n\n` +
+          `${result.message}\n\n` +
+          `<b>Sources (SELL side):</b>\n${lines}\n\n` +
+          `Set a manual rate at /admin/crypto-rate if this persists.`,
+      });
+    } catch (err) {
+      console.error('[cron/crypto-rate] telegram failed:', err);
     }
   }
 

@@ -281,6 +281,18 @@ export default async function AdminHomePage() {
             <p className="mt-1 text-[11px] leading-snug text-slate-500">Sales &amp; analytics</p>
           </Card>
         </Link>
+
+        <Link href="/admin/crypto-rate">
+          <Card className="h-full cursor-pointer border-[#26344e] bg-[#151e30] p-4 transition hover:border-emerald-400">
+            <div className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-xl bg-teal-500/15 text-teal-400">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-slate-100">Crypto rate</p>
+            <p className="mt-1 text-[11px] leading-snug text-slate-500">MMK/USDT feed &amp; override</p>
+          </Card>
+        </Link>
       </section>
     </main>
   );

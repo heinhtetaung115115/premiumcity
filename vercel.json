@@ -8,5 +8,8 @@
       "path": "/api/cron/crypto-rate",
       "schedule": "0 * * * *"
     }
+  ],
+  "regions": [
+    "sin1"
   ]
 }

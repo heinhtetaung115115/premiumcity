@@ -1,244 +1,421 @@
 // lib/cryptoRate.ts
+// ─────────────────────────────────────────────────────────────
+// MMK per 1 USDT rate engine.
 //
-// MMK-per-USDT rate engine.
+// WHICH SIDE OF THE BOOK? (this is the thing to get right)
 //
-// Design notes (this is money — read before changing):
-//  - We NEVER price a top-up off a live fetch at request time. The rate is
-//    refreshed by cron into `crypto_rates`, and reads come from the DB.
-//  - We take the MEDIAN of several ads, not the single best price. The best
-//    ad is the easiest to manipulate and is often a bait listing.
-//  - We CLAMP: if a new rate deviates too far from the last good one, we
-//    reject it and keep the previous value. A bad rate = crediting someone
-//    10x too much MMK.
-//  - Admin can force a manual rate, which always wins.
+//   You RECEIVE USDT from a customer and you must SELL it for MMK.
+//   So the rate that matters is what a merchant will PAY YOU for USDT.
+//   That is the SELL side (you are the seller).
 //
-// Env:
-//   CRYPTO_MARGIN_PERCENT   - your spread, e.g. "4" = credit 4% less MMK (default 4)
-//   CRYPTO_RATE_FALLBACK    - hardcoded MMK/USDT used only if DB + fetch both fail
+//   The sell price is always LOWER than the buy price — that gap is the
+//   market's spread. If you ever see our "sell" number come out HIGHER
+//   than our "buy" number, the sides are inverted and you are crediting
+//   customers too much. The admin page shows BOTH so you can eyeball it
+//   against the real Binance app.
+//
+// PAYMENT METHOD MATTERS
+//
+//   KBZ Pay, bank transfer, Wave and AYA trade at DIFFERENT rates in
+//   Myanmar. Leaving payTypes empty blends them all into one average that
+//   matches none of them. Set pay_types in crypto_rate_settings to the
+//   method you ACTUALLY cash out with.
+//
+// OTHER SAFETY (unchanged):
+//   • median of top ads — one fake ad can't move the rate
+//   • deviation guard — a broken feed can't silently 10x what we credit
+//   • manual override — the business never depends on a scraper
+//   • storefront reads a STORED rate, never a live fetch at checkout
+// ─────────────────────────────────────────────────────────────
 
 import { getServiceSupabaseClient } from '@/lib/supabase';
 
-const BINANCE_P2P_URL =
-  'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
+const MAX_DEVIATION = 0.1;
+const MIN_SANE_RATE = 1000;
+const MAX_SANE_RATE = 20000;
+const MAX_RATE_AGE_MS = 24 * 60 * 60 * 1000;
 
-/** Max % a new rate may deviate from the last known good rate before we reject it. */
-const MAX_DEVIATION_PERCENT = 12;
+/** SELL = we sell USDT for MMK (what we need). BUY = shown only for comparison. */
+export type Side = 'SELL' | 'BUY';
 
-export type RateInfo = {
-  /** Raw market rate: MMK per 1 USDT. */
-  marketRate: number;
-  /** Rate actually used to credit the user (market minus your margin). */
-  effectiveRate: number;
-  marginPercent: number;
+export type RateSourceResult = {
   source: string;
-  fetchedAt: string | null;
-  stale: boolean;
+  side: Side;
+  ok: boolean;
+  rate: number | null;
+  detail: string;
+  /** Payment methods seen in the ads we sampled — used to populate the filter. */
+  payTypesSeen?: string[];
 };
 
-function marginPercent(): number {
-  const v = Number(process.env.CRYPTO_MARGIN_PERCENT);
-  return Number.isFinite(v) && v >= 0 && v < 50 ? v : 4;
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+
+function median(nums: number[]): number {
+  if (nums.length === 0) return 0;
+  const s = [...nums].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m];
 }
 
-function median(nums: number[]): number | null {
-  const arr = nums.filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
-  if (arr.length === 0) return null;
-  const mid = Math.floor(arr.length / 2);
-  return arr.length % 2 === 0 ? (arr[mid - 1] + arr[mid]) / 2 : arr[mid];
+function sane(r: number): boolean {
+  return Number.isFinite(r) && r >= MIN_SANE_RATE && r <= MAX_SANE_RATE;
 }
 
-/**
- * Fetch USDT/MMK ads from Binance P2P.
- *
- * IMPORTANT: this is Binance's *internal* frontend endpoint, not a documented
- * public API. It can change or break without notice, and Binance often blocks
- * datacenter IPs — so this may simply fail from Vercel. Every caller must
- * handle null. That is by design, not an oversight.
- *
- * tradeType 'BUY' = ads where merchants SELL you USDT (you'd pay this to buy).
- * tradeType 'SELL' = ads where merchants BUY USDT from you (what you'd get
- * when selling). Since a customer sends us USDT and we credit MMK, we are
- * effectively going to sell that USDT for MMK — so we quote off the SELL side,
- * which is the conservative direction for us.
- */
-export async function fetchBinanceP2PRate(): Promise<number | null> {
+// ─────────────────────────────────────────────────────────────
+// SETTINGS (manual override + payment-method filter)
+// ─────────────────────────────────────────────────────────────
+export type RateSettings = {
+  manualEnabled: boolean;
+  manualUsdtMmk: number | null;
+  /** Binance payType identifiers, e.g. ["KBZPay"]. Empty = all methods. */
+  payTypes: string[];
+  updatedAt: string | null;
+};
+
+export async function getRateSettings(): Promise<RateSettings> {
+  const supabase = getServiceSupabaseClient();
   try {
-    const res = await fetch(BINANCE_P2P_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Binance rejects requests that don't look like the web app.
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
-        Origin: 'https://p2p.binance.com',
-        Referer: 'https://p2p.binance.com/',
-      },
-      body: JSON.stringify({
-        asset: 'USDT',
-        fiat: 'MMK',
-        tradeType: 'SELL',
-        page: 1,
-        rows: 20,
-        payTypes: [],
-        publisherType: null,
-      }),
-      cache: 'no-store',
-      // Don't let a hanging request stall a cron run.
-      signal: AbortSignal.timeout(12_000),
-    });
+    const { data } = await supabase
+      .from('crypto_rate_settings')
+      .select('manual_enabled,manual_usdt_mmk,pay_types,updated_at')
+      .eq('id', 1)
+      .maybeSingle();
+
+    if (!data) {
+      return { manualEnabled: false, manualUsdtMmk: null, payTypes: [], updatedAt: null };
+    }
+    const d: any = data;
+    return {
+      manualEnabled: !!d.manual_enabled,
+      manualUsdtMmk: d.manual_usdt_mmk === null ? null : Number(d.manual_usdt_mmk),
+      payTypes: Array.isArray(d.pay_types) ? d.pay_types : [],
+      updatedAt: d.updated_at ?? null,
+    };
+  } catch (err) {
+    console.error('[cryptoRate] getRateSettings failed:', err);
+    return { manualEnabled: false, manualUsdtMmk: null, payTypes: [], updatedAt: null };
+  }
+}
+
+export async function saveRateSettings(s: {
+  manualEnabled: boolean;
+  manualUsdtMmk: number | null;
+  payTypes: string[];
+}) {
+  const supabase = getServiceSupabaseClient();
+  const now = new Date().toISOString();
+
+  // Our custom Supabase client has NO .upsert() — select then update-or-insert.
+  const { data: existing } = await supabase
+    .from('crypto_rate_settings')
+    .select('id')
+    .eq('id', 1)
+    .maybeSingle();
+
+  const row = {
+    manual_enabled: s.manualEnabled,
+    manual_usdt_mmk: s.manualUsdtMmk,
+    pay_types: s.payTypes,
+    updated_at: now,
+  };
+
+  if (existing) {
+    const { error } = await supabase.from('crypto_rate_settings').update(row).eq('id', 1);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('crypto_rate_settings')
+      .insert({ id: 1, ...row });
+    if (error) throw error;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// SOURCE 1 — BINANCE P2P
+// ─────────────────────────────────────────────────────────────
+//
+// tradeType is the action WE take:
+//   'SELL' -> ads from merchants who will BUY our USDT  <-- the rate we need
+//   'BUY'  -> ads from merchants selling USDT to us
+export async function fetchBinanceP2P(
+  side: Side = 'SELL',
+  payTypes: string[] = []
+): Promise<RateSourceResult> {
+  const source = 'binance_p2p';
+  try {
+    const res = await fetch(
+      'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': BROWSER_UA,
+          Origin: 'https://p2p.binance.com',
+        },
+        body: JSON.stringify({
+          asset: 'USDT',
+          fiat: 'MMK',
+          tradeType: side,
+          page: 1,
+          rows: 20,
+          payTypes, // [] = every method (a blended average — usually NOT what you want)
+          publisherType: null,
+        }),
+        cache: 'no-store',
+      }
+    );
 
     if (!res.ok) {
-      console.error('[cryptoRate] Binance P2P HTTP', res.status);
-      return null;
+      const hint =
+        res.status === 451
+          ? ' (GEO-BLOCKED — Binance blocks US IPs. vercel.json must pin regions to sin1.)'
+          : '';
+      return { source, side, ok: false, rate: null, detail: `HTTP ${res.status}${hint}` };
     }
 
     const json: any = await res.json();
     const ads: any[] = json?.data ?? [];
-    if (!Array.isArray(ads) || ads.length === 0) {
-      console.error('[cryptoRate] Binance P2P returned no ads');
-      return null;
-    }
 
-    // Filter out junk/outlier ads before taking the median.
+    // Every payment method offered across the sampled ads — this is what
+    // populates the filter dropdown in admin.
+    const payTypesSeen = Array.from(
+      new Set(
+        ads.flatMap((a) =>
+          (a?.adv?.tradeMethods ?? [])
+            .map((m: any) => m?.identifier)
+            .filter((x: any) => typeof x === 'string')
+        )
+      )
+    );
+
     const prices = ads
-      .map((a) => ({
-        price: Number(a?.adv?.price),
-        finishRate: Number(a?.advertiser?.monthFinishRate ?? 0),
-        minAmt: Number(a?.adv?.minSingleTransAmount ?? 0),
-      }))
-      // merchants who actually complete trades
-      .filter((a) => a.finishRate >= 0.8 || a.finishRate === 0)
-      .map((a) => a.price)
+      .map((a) => Number(a?.adv?.price))
       .filter((p) => Number.isFinite(p) && p > 0);
 
-    // Use the top ~10 (best-priced) ads, then median them.
-    const top = prices.slice(0, 10);
-    const m = median(top);
-
-    if (!m) {
-      console.error('[cryptoRate] Binance P2P: no usable prices');
-      return null;
+    if (prices.length < 3) {
+      return {
+        source,
+        side,
+        ok: false,
+        rate: null,
+        detail:
+          payTypes.length > 0
+            ? `only ${prices.length} ads for the selected payment method — try removing the filter`
+            : `only ${prices.length} usable ads`,
+        payTypesSeen,
+      };
     }
-    return m;
-  } catch (err) {
-    console.error('[cryptoRate] Binance P2P fetch failed:', err);
-    return null;
+
+    const rate = median(prices.slice(0, 10));
+    if (!sane(rate)) {
+      return { source, side, ok: false, rate, detail: `rate ${rate} outside sane bounds`, payTypesSeen };
+    }
+
+    return {
+      source,
+      side,
+      ok: true,
+      rate,
+      detail: `median of ${Math.min(prices.length, 10)} ads${payTypes.length ? ` (${payTypes.join(', ')})` : ' (all methods)'}`,
+      payTypesSeen,
+    };
+  } catch (err: any) {
+    return { source, side, ok: false, rate: null, detail: `threw: ${err?.message ?? err}` };
   }
 }
 
-/** The most recent stored rate (any source). */
-export async function getLatestStoredRate(): Promise<{
-  rate: number;
-  source: string;
-  fetchedAt: string;
-} | null> {
+// ─────────────────────────────────────────────────────────────
+// SOURCE 2 — OKX P2P
+// ─────────────────────────────────────────────────────────────
+//
+// Also an internal, undocumented endpoint. OKX's `side` names the ads it
+// returns, so to SELL our USDT we read the ads where merchants are buying.
+export async function fetchOkxP2P(side: Side = 'SELL'): Promise<RateSourceResult> {
+  const source = 'okx_p2p';
+  // We want to sell -> read the "buy" book (merchants buying from us).
+  const okxSide = side === 'SELL' ? 'buy' : 'sell';
+
   try {
-    const supabase = getServiceSupabaseClient();
+    const url =
+      'https://www.okx.com/v3/c2c/tradingOrders/books' +
+      `?quoteCurrency=MMK&baseCurrency=USDT&side=${okxSide}` +
+      '&paymentMethod=all&userType=all&receivingAds=false&t=' +
+      Date.now();
+
+    const res = await fetch(url, {
+      headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json' },
+      cache: 'no-store',
+    });
+
+    if (!res.ok) {
+      return { source, side, ok: false, rate: null, detail: `HTTP ${res.status}` };
+    }
+
+    const json: any = await res.json();
+    // OKX returns the book under data.buy / data.sell depending on the query.
+    const list: any[] = json?.data?.[okxSide] ?? json?.data?.sell ?? json?.data?.buy ?? [];
+
+    const prices = list
+      .map((o) => Number(o?.price))
+      .filter((p) => Number.isFinite(p) && p > 0);
+
+    if (prices.length < 3) {
+      return { source, side, ok: false, rate: null, detail: `only ${prices.length} usable ads` };
+    }
+
+    const rate = median(prices.slice(0, 10));
+    if (!sane(rate)) {
+      return { source, side, ok: false, rate, detail: `rate ${rate} outside sane bounds` };
+    }
+
+    return { source, side, ok: true, rate, detail: `median of ${Math.min(prices.length, 10)} ads` };
+  } catch (err: any) {
+    return { source, side, ok: false, rate: null, detail: `threw: ${err?.message ?? err}` };
+  }
+}
+
+/**
+ * Probe every source on the SELL side (the rate we use), and also grab the
+ * BUY side from Binance purely so the admin page can show the spread.
+ *
+ * If "sell" ever comes back HIGHER than "buy", the sides are inverted —
+ * that comparison is the whole point of showing both.
+ */
+export async function probeAllSources(payTypes: string[] = []): Promise<{
+  sell: RateSourceResult[];
+  buyReference: RateSourceResult;
+}> {
+  const [binanceSell, okxSell, binanceBuy] = await Promise.all([
+    fetchBinanceP2P('SELL', payTypes),
+    fetchOkxP2P('SELL'),
+    fetchBinanceP2P('BUY', payTypes),
+  ]);
+
+  return { sell: [binanceSell, okxSell], buyReference: binanceBuy };
+}
+
+/** Payment methods currently offered on the MMK book (populates the filter). */
+export async function discoverPayTypes(): Promise<string[]> {
+  const r = await fetchBinanceP2P('SELL', []);
+  return r.payTypesSeen ?? [];
+}
+
+// ─────────────────────────────────────────────────────────────
+// STORED RATES
+// ─────────────────────────────────────────────────────────────
+export type StoredRate = { usdtMmk: number; source: string; createdAt: string };
+
+export async function getLatestStoredRate(): Promise<StoredRate | null> {
+  const supabase = getServiceSupabaseClient();
+  try {
     const { data } = await supabase
       .from('crypto_rates')
-      .select('mmk_per_usdt,source,fetched_at')
-      .order('fetched_at', { ascending: false })
+      .select('usdt_mmk,source,created_at')
+      .order('created_at', { ascending: false })
       .limit(1);
-
-    const row = (data ?? [])[0] as any;
+    const row: any = (data ?? [])[0];
     if (!row) return null;
-    const rate = Number(row.mmk_per_usdt);
-    if (!Number.isFinite(rate) || rate <= 0) return null;
-    return { rate, source: String(row.source), fetchedAt: String(row.fetched_at) };
+    return {
+      usdtMmk: Number(row.usdt_mmk),
+      source: String(row.source ?? 'unknown'),
+      createdAt: String(row.created_at),
+    };
   } catch (err) {
     console.error('[cryptoRate] getLatestStoredRate failed:', err);
     return null;
   }
 }
 
-/**
- * Refresh the rate (called by cron). Returns what was stored, or null if we
- * declined to store anything.
- *
- * Clamping: a wild swing almost always means a broken/manipulated feed, not a
- * real market move. We'd rather serve a slightly stale rate than a wrong one.
- */
-export async function refreshRate(): Promise<{
-  stored: boolean;
-  rate: number | null;
-  reason: string;
+/** Cron entry point. Always uses the SELL side. */
+export async function refreshCryptoRate(): Promise<{
+  ok: boolean;
+  rate?: number;
+  message: string;
+  probes: RateSourceResult[];
 }> {
-  const fetched = await fetchBinanceP2PRate();
+  const settings = await getRateSettings();
+  const { sell } = await probeAllSources(settings.payTypes);
 
-  if (fetched === null) {
-    return { stored: false, rate: null, reason: 'fetch_failed' };
-  }
-
+  const winner = sell.find((p) => p.ok && p.rate !== null);
   const last = await getLatestStoredRate();
 
-  if (last) {
-    const deviation = Math.abs((fetched - last.rate) / last.rate) * 100;
-    if (deviation > MAX_DEVIATION_PERCENT) {
-      console.error(
-        `[cryptoRate] REJECTED rate ${fetched} — deviates ${deviation.toFixed(1)}% from last good ${last.rate}`
-      );
-      return { stored: false, rate: fetched, reason: 'deviation_too_large' };
+  if (!winner || winner.rate === null) {
+    const detail = sell.map((p) => `${p.source}: ${p.detail}`).join(' | ');
+    return {
+      ok: false,
+      message: last
+        ? `All sources failed — keeping last rate ${last.usdtMmk}. ${detail}`
+        : `All sources failed and NO stored rate exists. Set a manual rate in /admin/crypto-rate. ${detail}`,
+      probes: sell,
+    };
+  }
+
+  const fetched = winner.rate;
+
+  if (last && last.usdtMmk > 0) {
+    const deviation = Math.abs(fetched - last.usdtMmk) / last.usdtMmk;
+    if (deviation > MAX_DEVIATION) {
+      return {
+        ok: false,
+        rate: fetched,
+        message: `REJECTED: ${winner.source} returned ${fetched}, ${(deviation * 100).toFixed(1)}% from last ${last.usdtMmk}. Kept old rate. If the move is real, set it manually.`,
+        probes: sell,
+      };
     }
   }
 
-  try {
-    const supabase = getServiceSupabaseClient();
-    const { error } = await supabase.from('crypto_rates').insert({
-      source: 'binance_p2p',
-      mmk_per_usdt: fetched,
-    });
-    if (error) throw error;
-    return { stored: true, rate: fetched, reason: 'ok' };
-  } catch (err) {
-    console.error('[cryptoRate] failed to store rate:', err);
-    return { stored: false, rate: fetched, reason: 'store_failed' };
-  }
-}
-
-/** Admin: force a manual rate (always becomes the newest row, so it wins). */
-export async function setManualRate(rate: number): Promise<void> {
   const supabase = getServiceSupabaseClient();
-  const { error } = await supabase.from('crypto_rates').insert({
-    source: 'manual',
-    mmk_per_usdt: rate,
-  });
-  if (error) throw error;
+  const { error } = await supabase
+    .from('crypto_rates')
+    .insert({ usdt_mmk: fetched, source: winner.source });
+
+  if (error) {
+    return { ok: false, rate: fetched, message: `DB insert failed: ${error.message}`, probes: sell };
+  }
+
+  return {
+    ok: true,
+    rate: fetched,
+    message: `Rate updated to ${fetched} MMK/USDT (SELL side, ${winner.source})`,
+    probes: sell,
+  };
 }
 
 /**
- * The rate to show/use right now. Falls back gracefully:
- *   stored rate -> env fallback -> throw
+ * The rate the storefront uses, margin applied.
+ * Priority: manual override > newest stored auto rate.
  */
-export async function getRateInfo(): Promise<RateInfo> {
-  const mp = marginPercent();
+export async function getEffectiveRate(marginPercent = 5): Promise<{
+  marketRate: number;
+  effectiveRate: number;
+  source: string;
+  isManual: boolean;
+  ageMs: number;
+} | null> {
+  const settings = await getRateSettings();
+
+  if (settings.manualEnabled && settings.manualUsdtMmk && sane(settings.manualUsdtMmk)) {
+    return {
+      marketRate: settings.manualUsdtMmk,
+      effectiveRate: Math.floor(settings.manualUsdtMmk * (1 - marginPercent / 100)),
+      source: 'manual',
+      isManual: true,
+      ageMs: settings.updatedAt ? Date.now() - new Date(settings.updatedAt).getTime() : 0,
+    };
+  }
+
   const stored = await getLatestStoredRate();
+  if (!stored || !sane(stored.usdtMmk)) return null;
 
-  if (stored) {
-    const ageMs = Date.now() - new Date(stored.fetchedAt).getTime();
-    const stale = ageMs > 2 * 60 * 60 * 1000; // older than 2h
-    return {
-      marketRate: stored.rate,
-      effectiveRate: Math.floor(stored.rate * (1 - mp / 100)),
-      marginPercent: mp,
-      source: stored.source,
-      fetchedAt: stored.fetchedAt,
-      stale,
-    };
-  }
+  const ageMs = Date.now() - new Date(stored.createdAt).getTime();
+  if (ageMs > MAX_RATE_AGE_MS) return null;
 
-  const fallback = Number(process.env.CRYPTO_RATE_FALLBACK);
-  if (Number.isFinite(fallback) && fallback > 0) {
-    return {
-      marketRate: fallback,
-      effectiveRate: Math.floor(fallback * (1 - mp / 100)),
-      marginPercent: mp,
-      source: 'env_fallback',
-      fetchedAt: null,
-      stale: true,
-    };
-  }
-
-  throw new Error(
-    'No MMK/USDT rate available. Set a manual rate in admin or configure CRYPTO_RATE_FALLBACK.'
-  );
+  return {
+    marketRate: stored.usdtMmk,
+    effectiveRate: Math.floor(stored.usdtMmk * (1 - marginPercent / 100)),
+    source: stored.source,
+    isManual: false,
+    ageMs,
+  };
 }

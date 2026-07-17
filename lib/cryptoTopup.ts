@@ -124,7 +124,11 @@ export async function createCryptoTopup(params: {
 
   if (insertErr || !inserted) {
     console.error('[cryptoTopup] insert failed:', insertErr);
-    throw new Error('Could not start the top-up. Please try again.');
+    // Surface the real reason — almost always a missing column on an old
+    // crypto_topups table left over from a previous gateway. Generic
+    // "try again" just hides it.
+    const detail = insertErr?.message || 'no row returned';
+    throw new Error(`Could not start the top-up (db: ${detail})`);
   }
 
   const row: any = inserted;

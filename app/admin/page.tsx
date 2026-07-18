@@ -293,6 +293,18 @@ export default async function AdminHomePage() {
             <p className="mt-1 text-[11px] leading-snug text-slate-500">MMK/USDT feed &amp; override</p>
           </Card>
         </Link>
+
+        <Link href="/admin/renewals">
+          <Card className="h-full cursor-pointer border-[#26344e] bg-[#151e30] p-4 transition hover:border-emerald-400">
+            <div className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-xl bg-red-500/15 text-red-400">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                <path d="M3 12a9 9 0 019-9 9 9 0 016.7 3M21 12a9 9 0 01-9 9 9 9 0 01-6.7-3M21 3v6h-6M3 21v-6h6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-slate-100">Netflix renewals</p>
+            <p className="mt-1 text-[11px] leading-snug text-slate-500">Approve, reject &amp; links</p>
+          </Card>
+        </Link>
       </section>
     </main>
   );

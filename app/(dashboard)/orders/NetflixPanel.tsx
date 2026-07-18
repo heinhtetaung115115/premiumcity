@@ -106,7 +106,45 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
     }
   };
 
-  const codes = messages.filter((m) => m.code);
+  // Codes live ~15 min in the supplier link, then the API drops them. We
+  // mirror that: each code is stamped with when we first saw it, and a ticking
+  // clock removes it after 15 min even if the customer never re-fetches. A
+  // fresh fetch that no longer returns the code also clears it immediately.
+  const CODE_TTL_MS = 15 * 60 * 1000;
+  const [seenAt, setSeenAt] = useState<Record<string, number>>({});
+  const [now, setNow] = useState(() => Date.now());
+
+  // Tick every 10s so expiry happens on its own.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 10_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Stamp newly-seen codes; keep existing stamps.
+  useEffect(() => {
+    const fresh = messages.map((m) => m.code).filter(Boolean) as string[];
+    if (fresh.length === 0) return;
+    setSeenAt((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const c of fresh) {
+        if (!next[c]) {
+          next[c] = Date.now();
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [messages]);
+
+  // A code shows only if (a) the latest fetch still returns it, AND
+  // (b) it's within the 15-min window since we first saw it.
+  const codes = messages.filter((m) => {
+    if (!m.code) return false;
+    const first = seenAt[m.code];
+    if (!first) return true; // just arrived this render; clock starts next tick
+    return now - first < CODE_TTL_MS;
+  });
 
   return (
     <div className="mt-3 overflow-hidden rounded-2xl border border-red-500/25 bg-gradient-to-br from-red-500/[0.08] to-red-800/[0.02] p-4">
@@ -159,15 +197,23 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
 
             {codes.length > 0 && (
               <div className="mt-3 space-y-2">
-                {codes.map((m, i) => (
-                  <div key={i} className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-lg font-bold text-emerald-300">{m.code}</span>
-                      <Copy value={m.code!} />
+                {codes.map((m, i) => {
+                  const first = seenAt[m.code!];
+                  const leftMs = first ? CODE_TTL_MS - (now - first) : CODE_TTL_MS;
+                  const leftMin = Math.max(0, Math.ceil(leftMs / 60000));
+                  return (
+                    <div key={i} className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-lg font-bold text-emerald-300">{m.code}</span>
+                        <Copy value={m.code!} />
+                      </div>
+                      <div className="mt-1 flex items-center justify-between">
+                        {m.subject && <p className="text-[10px] text-slate-400">{m.subject}</p>}
+                        <p className="ml-auto text-[10px] text-amber-300/80">⏳ {leftMin} min left</p>
+                      </div>
                     </div>
-                    {m.subject && <p className="mt-1 text-[10px] text-slate-400">{m.subject}</p>}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

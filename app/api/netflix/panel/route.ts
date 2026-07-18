@@ -22,7 +22,13 @@ export async function GET(req: Request) {
   const userId = session?.user?.id;
   if (!userId) return new NextResponse('Unauthorized', { status: 401 });
 
-  const orderItemId = new URL(req.url).searchParams.get('orderItemId') ?? '';
+  const url = new URL(req.url);
+  const orderItemId = url.searchParams.get('orderItemId') ?? '';
+  // Codes are only fetched/returned when the customer explicitly asks (the
+  // "Get code" button sends codes=1). A normal page load gets profile only,
+  // so codes never reach the browser unrequested and we don't hit the
+  // supplier's message endpoint on every order-page view.
+  const wantCodes = url.searchParams.get('codes') === '1';
   if (!orderItemId) return NextResponse.json({ error: 'missing orderItemId' }, { status: 400 });
 
   const supabase = getServiceSupabaseClient();
@@ -66,6 +72,6 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     profile: panel.profile,
-    messages: panel.messages,
+    messages: wantCodes ? panel.messages : [],
   });
 }

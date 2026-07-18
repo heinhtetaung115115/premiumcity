@@ -57,37 +57,45 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
   const [showModal, setShowModal] = useState(false);
   const [renewState, setRenewState] = useState<'idle' | 'sending' | 'done'>('idle');
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/netflix/panel?orderItemId=${encodeURIComponent(orderItemId)}`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        setError(d?.error || 'Could not load the account.');
-        setProfile(null);
-        return;
+  const load = useCallback(
+    async (withCodes: boolean) => {
+      try {
+        const res = await fetch(
+          `/api/netflix/panel?orderItemId=${encodeURIComponent(orderItemId)}${
+            withCodes ? '&codes=1' : ''
+          }`,
+          { cache: 'no-store' }
+        );
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          setError(d?.error || 'Could not load the account.');
+          setProfile(null);
+          return;
+        }
+        const d = await res.json();
+        setProfile(d.profile);
+        // Only overwrite codes when we actually asked for them, so a plain
+        // profile refresh never wipes a code the customer just fetched.
+        if (withCodes) setMessages(Array.isArray(d.messages) ? d.messages : []);
+        setError(null);
+      } catch {
+        setError('Could not load the account.');
+      } finally {
+        setLoading(false);
       }
-      const d = await res.json();
-      setProfile(d.profile);
-      setMessages(Array.isArray(d.messages) ? d.messages : []);
-      setError(null);
-    } catch {
-      setError('Could not load the account.');
-    } finally {
-      setLoading(false);
-    }
-  }, [orderItemId]);
+    },
+    [orderItemId]
+  );
 
+  // On open: profile only. No codes are fetched or shown until the button.
   useEffect(() => {
-    load();
+    load(false);
   }, [load]);
 
   const getCode = async () => {
     setShowModal(true);
     setCodeLoading(true);
-    // The code is fetched fresh server-side; just reload the panel.
-    await load();
+    await load(true); // this fetch asks for codes
     setCodeLoading(false);
   };
 

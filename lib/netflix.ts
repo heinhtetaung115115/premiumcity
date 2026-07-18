@@ -30,6 +30,8 @@ export type NetflixMessage = {
   code: string | null;
   body: string | null;
   date: string | null;
+  /** Milliseconds since epoch when the message arrived, if we could parse it. */
+  timestamp: number | null;
 };
 
 export type NetflixPanel = {
@@ -88,6 +90,53 @@ function extractCode(msg: any): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Find and parse the message's arrival time from whatever field the supplier
+ * uses. We saw the panel render "13m ago", so a timestamp is present — this
+ * reads the common field names and formats (epoch seconds, epoch millis, ISO
+ * date string) and returns milliseconds since epoch, or null if none found.
+ */
+function parseTimestamp(msg: any): number | null {
+  const candidates = [
+    msg?.timestamp,
+    msg?.date,
+    msg?.createdAt,
+    msg?.created_at,
+    msg?.receivedAt,
+    msg?.received_at,
+    msg?.time,
+    msg?.datetime,
+    msg?.sentAt,
+    msg?.sent_at,
+  ];
+
+  for (const c of candidates) {
+    if (c == null) continue;
+
+    if (typeof c === 'number' && Number.isFinite(c)) {
+      // epoch seconds (10 digits) vs milliseconds (13 digits)
+      return c < 1e12 ? c * 1000 : c;
+    }
+
+    if (typeof c === 'string') {
+      const s = c.trim();
+      if (!s) continue;
+
+      // all-digit string → epoch
+      if (/^\d+$/.test(s)) {
+        const n = Number(s);
+        return n < 1e12 ? n * 1000 : n;
+      }
+
+      // ISO / parseable date string
+      const parsed = Date.parse(s);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+  }
+
+  return null;
+}
+
 function mapMessage(msg: any): NetflixMessage {
   return {
     subject: msg?.subject ?? msg?.title ?? null,
@@ -95,6 +144,7 @@ function mapMessage(msg: any): NetflixMessage {
     code: extractCode(msg),
     body: msg?.body ?? msg?.text ?? msg?.content ?? null,
     date: msg?.date ?? msg?.createdAt ?? msg?.created_at ?? msg?.receivedAt ?? null,
+    timestamp: parseTimestamp(msg),
   };
 }
 

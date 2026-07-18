@@ -15,6 +15,7 @@ type Message = {
   code: string | null;
   body: string | null;
   date: string | null;
+  timestamp: number | null;
 };
 
 function Copy({ value }: { value: string }) {
@@ -107,9 +108,9 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
   };
 
   // Codes live ~15 min in the supplier link, then the API drops them. We
-  // mirror that: each code is stamped with when we first saw it, and a ticking
-  // clock removes it after 15 min even if the customer never re-fetches. A
-  // fresh fetch that no longer returns the code also clears it immediately.
+  // mirror that using the message's REAL arrival timestamp when the supplier
+  // provides one (it does — the panel shows "13m ago"), and fall back to
+  // when-we-first-saw-it only if a timestamp is missing.
   const CODE_TTL_MS = 15 * 60 * 1000;
   const [seenAt, setSeenAt] = useState<Record<string, number>>({});
   const [now, setNow] = useState(() => Date.now());
@@ -120,7 +121,7 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
     return () => clearInterval(t);
   }, []);
 
-  // Stamp newly-seen codes; keep existing stamps.
+  // Stamp first-seen time (fallback only — used when a message has no timestamp).
   useEffect(() => {
     const fresh = messages.map((m) => m.code).filter(Boolean) as string[];
     if (fresh.length === 0) return;
@@ -137,13 +138,19 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
     });
   }, [messages]);
 
+  // The moment a code arrived: the supplier's real timestamp, else first-seen.
+  const arrivedAt = (m: Message): number | null => {
+    if (m.timestamp && Number.isFinite(m.timestamp)) return m.timestamp;
+    return m.code ? seenAt[m.code] ?? null : null;
+  };
+
   // A code shows only if (a) the latest fetch still returns it, AND
-  // (b) it's within the 15-min window since we first saw it.
+  // (b) it's within the 15-min window since it actually arrived.
   const codes = messages.filter((m) => {
     if (!m.code) return false;
-    const first = seenAt[m.code];
-    if (!first) return true; // just arrived this render; clock starts next tick
-    return now - first < CODE_TTL_MS;
+    const t = arrivedAt(m);
+    if (!t) return true; // just arrived this render; clock starts next tick
+    return now - t < CODE_TTL_MS;
   });
 
   return (
@@ -198,8 +205,8 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
             {codes.length > 0 && (
               <div className="mt-3 space-y-2">
                 {codes.map((m, i) => {
-                  const first = seenAt[m.code!];
-                  const leftMs = first ? CODE_TTL_MS - (now - first) : CODE_TTL_MS;
+                  const t = arrivedAt(m);
+                  const leftMs = t ? CODE_TTL_MS - (now - t) : CODE_TTL_MS;
                   const leftMin = Math.max(0, Math.ceil(leftMs / 60000));
                   return (
                     <div key={i} className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">

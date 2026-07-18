@@ -62,6 +62,24 @@ export function DeliveryForm({
           </div>
         )}
 
+        {type === 'NETFLIX_PANEL' && (
+          <div className="space-y-1 md:col-span-2">
+            <label className="text-[11px] uppercase text-slate-500">
+              Supplier account link
+            </label>
+            <Input
+              name="netflixLink"
+              placeholder="https://resellerpanel.store/c/..."
+              className="h-8 text-xs"
+            />
+            <p className="text-[10px] text-slate-500">
+              Paste the per-account link from your supplier. The customer sees a live panel
+              (email, password, PIN, expiry) and a &ldquo;Get code&rdquo; button — data is
+              fetched live, never stored.
+            </p>
+          </div>
+        )}
+
         <div className="space-y-1 md:col-span-2">
           <label className="text-[11px] uppercase text-slate-500">
             {type === 'NOTE' ? 'Note (delivered to customer)' : 'Note (optional)'}

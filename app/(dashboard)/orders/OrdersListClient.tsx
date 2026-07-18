@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Copy, Bell } from 'lucide-react';
 import { credentialToRows } from '@/lib/deliveryTypes';
+import { NetflixPanel } from './NetflixPanel';
 
 type OrdersListClientProps = {
   orders: any[];
@@ -684,7 +685,16 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
 
                           {/* CREDENTIALS (for instant/manual non-VPN stuff) */}
                           {!isVpn && hasCreds && (
-                            <CredentialsBlock credentials={credentials} />
+                            (() => {
+                              const isNetflix = credentials.some(
+                                (c: any) => c && c.type === 'netflix_panel'
+                              );
+                              return isNetflix ? (
+                                <NetflixPanel orderItemId={item.id} />
+                              ) : (
+                                <CredentialsBlock credentials={credentials} />
+                              );
+                            })()
                           )}
 
                           {/* PENDING MANUAL DELIVERY BOX (non VPN only) */}

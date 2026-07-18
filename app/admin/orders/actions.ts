@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/session';
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import { sendEmail, tplManualDeliveryToUser } from '@/lib/email';
 import type { DeliveryType } from '@/lib/deliveryTypes';
+import { isNetflixLink } from '@/lib/netflix';
 
 /* -----------------------------
    Correct type definitions
@@ -38,6 +39,7 @@ export async function fulfillManualItemAction(formData: FormData) {
   const note = String(formData.get('note') ?? '').trim();
   const key = String(formData.get('key') ?? '').trim();
   const inviteLink = String(formData.get('inviteLink') ?? '').trim();
+  const netflixLink = String(formData.get('netflixLink') ?? '').trim();
 
   if (!orderItemId) {
     return { success: false, error: 'Missing order item id' };
@@ -58,6 +60,15 @@ export async function fulfillManualItemAction(formData: FormData) {
       if (!note) return { success: false, error: 'Note is required' };
       payload = { type: 'note', note };
       break;
+    case 'NETFLIX_PANEL': {
+      if (!netflixLink) return { success: false, error: 'Supplier link is required' };
+      if (!isNetflixLink(netflixLink)) {
+        return { success: false, error: 'That does not look like a valid supplier account link.' };
+      }
+      payload = { type: 'netflix_panel', link: netflixLink };
+      if (note) payload.note = note;
+      break;
+    }
     case 'EMAIL_PASSWORD':
     default:
       if (!email && !password && !note) {

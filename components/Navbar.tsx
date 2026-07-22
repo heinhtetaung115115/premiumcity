@@ -121,6 +121,20 @@ export default function Navbar({
 
         {/* MOBILE RIGHT SIDE: Talk to support + profile */}
         <div className="flex items-center gap-2 md:hidden">
+          {/* Admin (admins only) */}
+          {isAdmin && (
+            <Link
+              href="/admin"
+              aria-label="Admin"
+              className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-amber-500/80 bg-slate-900 px-2.5 text-[11px] font-medium text-amber-300 hover:border-amber-400"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M12 2l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V6l7-4z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span>Admin</span>
+            </Link>
+          )}
+
           {/* Talk to support */}
           <Link
             href="/contact"

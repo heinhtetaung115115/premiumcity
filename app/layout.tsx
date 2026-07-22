@@ -10,9 +10,33 @@ import NextTopLoader from 'nextjs-toploader'; // ⬅ Added top progress bar
 import { Analytics } from '@vercel/analytics/react'; // ⬅ Vercel Analytics
 
 export const metadata: Metadata = {
-  title: 'PremiumCity Digital Storefront',
+  metadataBase: new URL('https://pcitystore.com'),
+  title: 'PremiumCity — Premium subscriptions, instant delivery',
   description:
-    'Wallet based storefront for instant and manual digital goods fulfillment.'
+    'Buy Netflix, Prime Video, VPN, AI subscriptions & more. Instant delivery, secure payment, 24/7 support.',
+  openGraph: {
+    type: 'website',
+    url: 'https://pcitystore.com',
+    siteName: 'PremiumCity',
+    title: 'PremiumCity — Premium subscriptions, instant delivery',
+    description:
+      'Buy Netflix, Prime Video, VPN, AI subscriptions & more. Instant delivery, secure payment, 24/7 support.',
+    images: [
+      {
+        url: '/premiumcity-og.png',
+        width: 1200,
+        height: 630,
+        alt: 'PremiumCity — premium subscriptions, instant delivery',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'PremiumCity — Premium subscriptions, instant delivery',
+    description:
+      'Buy Netflix, Prime Video, VPN, AI subscriptions & more. Instant delivery, secure payment, 24/7 support.',
+    images: ['/premiumcity-og.png'],
+  },
 };
 
 export default async function RootLayout({

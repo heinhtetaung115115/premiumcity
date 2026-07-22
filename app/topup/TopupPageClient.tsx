@@ -9,6 +9,66 @@ import CryptoTopupForm from './CryptoTopupForm';
 type BankRow = { id: string; bank_name: string; account_name: string; account_no: string; qr_code_url: string | null; instructions: string | null };
 type Props = { banks: BankRow[]; reason?: string; balance?: number };
 
+// Shows a logo file from /public if it exists, else falls back to the SVG
+// icon passed in. Drop files at the paths below to upgrade automatically:
+//   public/logos/kbzpay.png   public/logos/aya.png + public/logos/wave.png
+function MethodIcon({
+  src,
+  fallback,
+  wrapClass,
+}: {
+  src: string;
+  fallback: React.ReactNode;
+  wrapClass: string;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ${wrapClass}`}>
+        {fallback}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        className="h-full w-full object-contain"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
+
+function MiniLogo({ src, letter }: { src: string; letter: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <span className="flex h-5 w-5 items-center justify-center rounded bg-slate-600 text-[9px] font-bold text-slate-100">
+        {letter}
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" className="h-5 w-5 rounded object-contain" onError={() => setFailed(true)} />
+  );
+}
+
+// Two payment logos side by side (AYA + Wave) in one tile.
+function DualLogo() {
+  return (
+    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center gap-0.5 rounded-xl bg-white px-1">
+      <MiniLogo src="/logos/aya.png" letter="AYA" />
+      <MiniLogo src="/logos/wave.png" letter="W" />
+    </div>
+  );
+}
+
 export default function TopupPageClient({ banks, reason, balance = 0 }: Props) {
   const [selected, setSelected] = useState<null | 'kbz' | 'manual' | 'crypto'>(null);
   const kbzBank = banks.find((b) => b.bank_name.toLowerCase().includes('kbz'));
@@ -42,11 +102,15 @@ export default function TopupPageClient({ banks, reason, balance = 0 }: Props) {
                 onClick={() => setSelected('kbz')}
                 className="flex items-center gap-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.08] p-4 text-left transition hover:border-emerald-500/60 hover:bg-emerald-500/[0.12]"
               >
-                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-500/15">
-                  <svg className="h-6 w-6 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" />
-                  </svg>
-                </div>
+                <MethodIcon
+                  src="/logos/kbzpay.png"
+                  wrapClass="bg-emerald-500/15"
+                  fallback={
+                    <svg className="h-6 w-6 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" />
+                    </svg>
+                  }
+                />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-slate-100">KBZ Pay</p>
@@ -65,11 +129,7 @@ export default function TopupPageClient({ banks, reason, balance = 0 }: Props) {
                 onClick={() => setSelected('manual')}
                 className="flex items-center gap-4 rounded-2xl border border-slate-800 bg-white/[0.03] p-4 text-left transition hover:border-slate-700 hover:bg-white/[0.05]"
               >
-                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-slate-500/10">
-                  <svg className="h-6 w-6 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                    <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
+                <DualLogo />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-slate-100">
@@ -92,7 +152,8 @@ export default function TopupPageClient({ banks, reason, balance = 0 }: Props) {
             >
               <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-teal-500/15">
                 <svg className="h-6 w-6 text-teal-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round" />
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M9.5 8.5h4a2 2 0 010 4h-4m0 0h4.2a2 2 0 010 4H9.5m0-8V7m0 10v-1.5m2-8V7m0 10v-1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
               <div className="flex-1">

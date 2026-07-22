@@ -534,3 +534,112 @@ export async function getProductBySlug(slug: string) {
     tags: Array.isArray((productRow as any).tags) ? (productRow as any).tags : [],
   };
 }
+
+/**
+ * Out-of-stock INSTANT variants, for the admin dashboard.
+ *
+ * A variant is "out of stock" when it has no unused inventory to sell:
+ *   - no unused rows tagged with its own variant_id, AND
+ *   - no unused rows shared across the product (variant_id IS NULL)
+ *
+ * MANUAL products are excluded — they're fulfilled by hand, so "stock" doesn't
+ * apply. Only active variants of active/INSTANT products are checked. An
+ * INSTANT product with no variants at all is flagged as one row if it has zero
+ * shared stock.
+ */
+export type OutOfStockVariant = {
+  productId: string;
+  productName: string;
+  variantId: string | null;
+  variantName: string | null;
+};
+
+export async function getOutOfStockVariants(): Promise<OutOfStockVariant[]> {
+  const supabase = getServiceSupabaseClient();
+
+  // INSTANT products only (MANUAL is always "in stock").
+  const { data: productRows } = await supabase
+    .from('products')
+    .select('id,name,product_type,status')
+    .eq('product_type', 'INSTANT')
+    .limit(1000);
+
+  const products = ((productRows ?? []) as any[]).filter(
+    (p) => String(p.status ?? '').toUpperCase() !== 'ARCHIVED'
+  );
+  if (products.length === 0) return [];
+
+  const productIds = products.map((p) => p.id);
+  const nameById = new Map(products.map((p) => [p.id, p.name as string]));
+
+  // Active variants for those products.
+  const { data: variantRows } = await supabase
+    .from('product_variants')
+    .select('id,product_id,name,is_active')
+    .in('product_id', productIds)
+    .limit(5000);
+
+  const variants = ((variantRows ?? []) as any[]).filter((v) => v.is_active);
+
+  // Unused inventory for those products.
+  const { data: invRows } = await supabase
+    .from('inventory_items')
+    .select('product_id,variant_id,order_item_id')
+    .in('product_id', productIds)
+    .is('order_item_id', null)
+    .limit(10000);
+
+  // Count unused stock per variant, and per-product shared (variant_id null).
+  const unusedByVariant = new Map<string, number>();
+  const sharedByProduct = new Map<string, number>();
+  for (const row of (invRows ?? []) as any[]) {
+    if (row.variant_id) {
+      const k = String(row.variant_id);
+      unusedByVariant.set(k, (unusedByVariant.get(k) ?? 0) + 1);
+    } else {
+      const k = String(row.product_id);
+      sharedByProduct.set(k, (sharedByProduct.get(k) ?? 0) + 1);
+    }
+  }
+
+  const out: OutOfStockVariant[] = [];
+
+  // Variants with zero own-stock AND zero shared stock on their product.
+  const variantsByProduct = new Map<string, any[]>();
+  for (const v of variants) {
+    if (!variantsByProduct.has(v.product_id)) variantsByProduct.set(v.product_id, []);
+    variantsByProduct.get(v.product_id)!.push(v);
+  }
+
+  for (const v of variants) {
+    const own = unusedByVariant.get(String(v.id)) ?? 0;
+    const shared = sharedByProduct.get(String(v.product_id)) ?? 0;
+    if (own === 0 && shared === 0) {
+      out.push({
+        productId: v.product_id,
+        productName: nameById.get(v.product_id) ?? 'Unknown product',
+        variantId: v.id,
+        variantName: v.name,
+      });
+    }
+  }
+
+  // INSTANT products with NO active variants — flag if zero shared stock.
+  for (const p of products) {
+    const hasVariants = (variantsByProduct.get(p.id) ?? []).length > 0;
+    if (hasVariants) continue;
+    const shared = sharedByProduct.get(String(p.id)) ?? 0;
+    if (shared === 0) {
+      out.push({
+        productId: p.id,
+        productName: nameById.get(p.id) ?? 'Unknown product',
+        variantId: null,
+        variantName: null,
+      });
+    }
+  }
+
+  // Sort by product name for a stable, scannable list.
+  out.sort((a, b) => a.productName.localeCompare(b.productName));
+  return out;
+}

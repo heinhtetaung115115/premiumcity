@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { requireAdmin } from '@/lib/session';
 import { Card } from '@/components/ui/card';
 import { listPendingManualDeliveries, getAdminSalesStats } from '@/lib/orders';
+import { getOutOfStockVariants } from '@/lib/catalog';
 import { listPendingTopupsForAdmin } from '@/lib/wallet';
 import { processTopup } from './topups/actions';
 import { dismissManualDeliveryAction } from './orders/actions';
@@ -41,10 +42,11 @@ async function dismissDeliveryFormAction(formData: FormData): Promise<void> {
 export default async function AdminHomePage() {
   await requireAdmin();
 
-  const [pendingDeliveries, pendingTopups, salesStats] = await Promise.all([
+  const [pendingDeliveries, pendingTopups, salesStats, outOfStock] = await Promise.all([
     listPendingManualDeliveries(200),
     listPendingTopupsForAdmin(200),
     getAdminSalesStats(),
+    getOutOfStockVariants(),
   ]);
 
   const deliveriesCount = pendingDeliveries.length;
@@ -226,6 +228,51 @@ export default async function AdminHomePage() {
                 </div>
               </Card>
             ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── OUT OF STOCK: INSTANT variants with no inventory ── */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-slate-100">Out of stock</h2>
+          {outOfStock.length > 0 && (
+            <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">
+              {outOfStock.length}
+            </span>
+          )}
+        </div>
+
+        {outOfStock.length === 0 ? (
+          <div className="rounded-2xl border border-slate-800 bg-white/[0.02] p-4">
+            <p className="text-sm text-slate-400">Everything is in stock.</p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-red-500/25 bg-red-500/[0.04]">
+            <div className="border-t-2 border-red-500/40" />
+            <ul className="divide-y divide-white/5">
+              {outOfStock.map((v) => (
+                <li
+                  key={`${v.productId}-${v.variantId ?? 'base'}`}
+                  className="flex items-center justify-between gap-3 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-100">{v.productName}</p>
+                    {v.variantName && (
+                      <p className="truncate text-[11px] text-slate-400">{v.variantName}</p>
+                    )}
+                  </div>
+                  <span className="flex-shrink-0 rounded-md bg-red-500/15 px-2 py-1 text-[10px] font-semibold text-red-300">
+                    0 left
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="border-t border-white/5 px-4 py-2.5">
+              <Link href="/admin/products" className="text-xs text-emerald-400 hover:text-emerald-300">
+                Manage products &amp; restock →
+              </Link>
+            </div>
           </div>
         )}
       </section>

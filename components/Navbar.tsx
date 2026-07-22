@@ -40,8 +40,13 @@ export default function Navbar({
 
         {/* LEFT: Logo / brand */}
         <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-sm font-bold text-slate-950">
-            PC
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/premiumcity-logo.png"
+              alt="PremiumCity"
+              className="h-full w-full object-contain p-0.5"
+            />
           </span>
           <div className="flex flex-col leading-tight">
             <span className="text-sm font-semibold text-slate-50">PremiumCity</span>

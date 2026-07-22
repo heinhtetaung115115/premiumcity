@@ -37,6 +37,63 @@ const NETWORK_LABEL: Record<string, string> = {
 
 const label = (n: string) => NETWORK_LABEL[n] ?? NETWORK_LABEL[n?.toLowerCase()] ?? n;
 
+// Real coin logos from the MIT-licensed cryptocurrency-icons set. Falls back
+// to a lettered badge for any ticker the set doesn't cover.
+const ICON_BASE =
+  'https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/color';
+
+// A few network names map to a coin ticker for the logo.
+const NETWORK_ICON: Record<string, string> = {
+  tron: 'trx',
+  trc20: 'trx',
+  bsc: 'bnb',
+  'bnb smart chain': 'bnb',
+  polygon: 'matic',
+  pol: 'matic',
+  ethereum: 'eth',
+  erc20: 'eth',
+  solana: 'sol',
+  arbitrum: 'eth',
+  avalanche: 'avax',
+  bitcoin: 'btc',
+  litecoin: 'ltc',
+  dogecoin: 'doge',
+  ton: 'ton',
+};
+
+function iconSlug(key: string): string {
+  const k = (key || '').toLowerCase();
+  return NETWORK_ICON[k] ?? k;
+}
+
+function CoinIcon({ ticker, size = 28 }: { ticker: string; size?: number }) {
+  const [failed, setFailed] = useState(false);
+  const slug = iconSlug(ticker);
+
+  if (failed || !slug) {
+    return (
+      <span
+        style={{ width: size, height: size }}
+        className="flex flex-shrink-0 items-center justify-center rounded-full bg-slate-700 text-[10px] font-bold text-slate-200"
+      >
+        {(ticker || '?').slice(0, 3).toUpperCase()}
+      </span>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`${ICON_BASE}/${slug}.svg`}
+      width={size}
+      height={size}
+      alt={ticker}
+      onError={() => setFailed(true)}
+      className="flex-shrink-0"
+    />
+  );
+}
+
 export default function CryptoTopupForm({ onBack }: { onBack: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -172,30 +229,42 @@ export default function CryptoTopupForm({ onBack }: { onBack: () => void }) {
             </div>
           )}
 
-          {/* Coin */}
+          {/* 1. Coin — icon grid */}
           <div>
-            <p className="mb-2 text-sm font-semibold text-slate-100">Coin</p>
-            <div className="flex flex-wrap gap-2">
-              {currencies.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => pickCurrency(c)}
-                  className={`rounded-xl border px-3.5 py-2 text-xs font-semibold transition ${
-                    currency === c
-                      ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
-                      : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
+            <p className="mb-2 text-sm font-semibold text-slate-100">1. Choose coin</p>
+            <div className="grid grid-cols-3 gap-2">
+              {currencies.map((c) => {
+                const active = currency === c;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => pickCurrency(c)}
+                    className={`flex flex-col items-center gap-1.5 rounded-xl border py-3 transition ${
+                      active
+                        ? 'border-emerald-500 bg-emerald-500/10'
+                        : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
+                    }`}
+                  >
+                    <CoinIcon ticker={c} size={28} />
+                    <span
+                      className={`text-xs font-semibold ${
+                        active ? 'text-emerald-300' : 'text-slate-300'
+                      }`}
+                    >
+                      {c}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Network */}
+          {/* 2. Network — list for the chosen coin */}
           <div>
-            <p className="mb-2 text-sm font-semibold text-slate-100">Network</p>
+            <p className="mb-2 text-sm font-semibold text-slate-100">
+              2. Choose network{currency ? ` for ${currency}` : ''}
+            </p>
             <div className="space-y-2">
               {networksFor.map((n) => {
                 const active = n.network === network;
@@ -213,23 +282,24 @@ export default function CryptoTopupForm({ onBack }: { onBack: () => void }) {
                         : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
                     }`}
                   >
-                    <span
-                      className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 ${
-                        active ? 'border-emerald-400' : 'border-slate-600'
-                      }`}
-                    >
-                      {active && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
-                    </span>
+                    <CoinIcon ticker={n.network} size={24} />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-slate-100">{label(n.network)}</p>
                       <p className="text-[10px] text-slate-500">
                         {n.minUsd !== null
-                          ? `Min $${Math.max(minUsd, n.minUsd)}`
-                          : `Min ${n.minAmount} ${n.currency}`}
+                          ? `min $${Math.max(minUsd, n.minUsd)}`
+                          : `min ${n.minAmount} ${n.currency}`}
                         {' · '}
                         {n.commissionPercent}% fee
                       </p>
                     </div>
+                    {active ? (
+                      <svg className="h-5 w-5 flex-shrink-0 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                        <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : (
+                      <span className="h-4 w-4 flex-shrink-0 rounded-full border-2 border-slate-600" />
+                    )}
                   </button>
                 );
               })}

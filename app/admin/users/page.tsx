@@ -62,56 +62,57 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
 
   const supabase = getServiceSupabaseClient();
 
-  // Load users newest-first so recent signups are included.
-  // Wrapped defensively so a query hiccup can't blank the whole page.
-  let allUsers: {
+  type UserRow = {
     id: string;
     email: string;
     name: string | null;
     created_at: string;
     avatar_url: string | null;
-  }[] = [];
+  };
 
-  try {
-    const { data: usersData, error: usersError } = await supabase
-      .from('users')
-      .select('id,email,name,created_at,avatar_url')
-      .order('created_at', { ascending: false })
-      .limit(1000);
-    if (usersError) throw usersError;
-    allUsers = (usersData ?? []) as typeof allUsers;
-  } catch (err) {
-    console.error('admin/users: failed to load users:', err);
-    // Fallback: try a minimal select in case avatar_url or ordering caused it.
-    try {
-      const { data: fallback } = await supabase
-        .from('users')
-        .select('id,email,name,created_at')
-        .limit(1000);
-      allUsers = ((fallback ?? []) as any[]).map((u) => ({
-        id: u.id,
-        email: u.email,
-        name: u.name ?? null,
-        created_at: u.created_at,
-        avatar_url: null,
-      }));
-    } catch (err2) {
-      console.error('admin/users: fallback user load also failed:', err2);
-      allUsers = [];
-    }
-  }
+  // Search happens IN THE DATABASE so it covers every user, not just a page of
+  // them. (This previously loaded the newest 1000 users and filtered in JS, so
+  // anyone outside that window was unfindable.)
+  let matches: UserRow[] = [];
 
-  // PARTIAL, case-insensitive match on email OR name. Show up to 20 matches.
-  let matches: typeof allUsers = [];
   if (emailFilter) {
-    const q = emailFilter.toLowerCase();
-    matches = allUsers
-      .filter(
-        (u) =>
-          (typeof u.email === 'string' && u.email.toLowerCase().includes(q)) ||
-          (typeof u.name === 'string' && u.name.toLowerCase().includes(q))
-      )
-      .slice(0, 20);
+    // Strip characters that would break PostgREST's or=(...) syntax.
+    const safe = emailFilter.replace(/[(),"*]/g, '').trim();
+
+    if (safe) {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id,email,name,created_at,avatar_url')
+          .or(`email.ilike.*${safe}*,name.ilike.*${safe}*`)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        if (error) throw error;
+        matches = (data ?? []) as UserRow[];
+      } catch (err) {
+        console.error('admin/users: db search failed, falling back:', err);
+        // Fallback: scan a page of users in JS. Not exhaustive, but better
+        // than showing nothing if the OR filter isn't supported.
+        try {
+          const { data } = await supabase
+            .from('users')
+            .select('id,email,name,created_at,avatar_url')
+            .order('created_at', { ascending: false })
+            .limit(1000);
+          const q = safe.toLowerCase();
+          matches = ((data ?? []) as UserRow[])
+            .filter(
+              (u) =>
+                (typeof u.email === 'string' && u.email.toLowerCase().includes(q)) ||
+                (typeof u.name === 'string' && u.name.toLowerCase().includes(q))
+            )
+            .slice(0, 20);
+        } catch (err2) {
+          console.error('admin/users: fallback search failed:', err2);
+          matches = [];
+        }
+      }
+    }
   }
 
   // Exact match is auto-selected; otherwise if exactly one partial match, select it.

@@ -8,7 +8,9 @@ type QueryResponse<T = unknown> = {
 type Filter =
   | { type: 'eq'; column: string; value: unknown }
   | { type: 'in'; column: string; values: unknown[] }
-  | { type: 'is'; column: string; value: null | boolean };
+  | { type: 'is'; column: string; value: null | boolean }
+  | { type: 'ilike'; column: string; value: string }
+  | { type: 'or'; expression: string };
 
 type Order = { column: string; ascending: boolean };
 
@@ -122,6 +124,12 @@ class SupabaseRestClient {
         url.searchParams.append(filter.column, `in.(${encoded})`);
       } else if (filter.type === 'is') {
         url.searchParams.append(filter.column, `is.${encodeValue(filter.value)}`);
+      } else if (filter.type === 'ilike') {
+        // Case-insensitive partial match. Caller supplies the * wildcards.
+        url.searchParams.append(filter.column, `ilike.${filter.value}`);
+      } else if (filter.type === 'or') {
+        // PostgREST OR across columns: or=(a.ilike.*x*,b.ilike.*x*)
+        url.searchParams.append('or', `(${filter.expression})`);
       }
     }
 
@@ -218,6 +226,21 @@ class SupabaseSelectQuery {
 
   is(column: string, value: null | boolean) {
     this.filters.push({ type: 'is', column, value });
+    return this;
+  }
+
+  /** Case-insensitive partial match, e.g. ilike('email', '*john*'). */
+  ilike(column: string, value: string) {
+    this.filters.push({ type: 'ilike', column, value });
+    return this;
+  }
+
+  /**
+   * PostgREST OR filter. Pass the inner expression WITHOUT the wrapping
+   * parentheses, e.g. or('email.ilike.*a*,name.ilike.*a*').
+   */
+  or(expression: string) {
+    this.filters.push({ type: 'or', expression });
     return this;
   }
 

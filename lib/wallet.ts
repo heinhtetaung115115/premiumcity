@@ -319,3 +319,148 @@ export async function rejectTopup(topupId: string, reason?: string, skipEmail = 
     }
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// WALLET PAGE — balance + full top-up and spending history
+// ─────────────────────────────────────────────────────────────
+//
+// Top-ups come from TWO places, so we merge them:
+//   • topup_requests  — manual bank/KBZ transfers (can be PENDING)
+//   • crypto_topups   — Heleket payments (auto-credited)
+// Spending is read from wallet_transactions DEBIT rows, which is the ledger
+// every purchase and renewal writes to.
+
+export type WalletTopupEntry = {
+  id: string;
+  amount: number; // MMK
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CREDITED' | 'FAILED';
+  source: 'MANUAL' | 'CRYPTO';
+  detail: string | null; // e.g. "USDT · tron" or the bank last4
+  createdAt: string;
+};
+
+export type WalletSpendEntry = {
+  id: string;
+  amount: number; // MMK
+  description: string | null;
+  createdAt: string;
+};
+
+export type WalletPageData = {
+  balance: number;
+  topups: WalletTopupEntry[];
+  spending: WalletSpendEntry[];
+  totalToppedUp: number; // credited only
+  totalSpent: number;
+};
+
+export async function getWalletPageData(userId: string): Promise<WalletPageData> {
+  const supabase = getServiceSupabaseClient();
+
+  // Balance + wallet id
+  let balance = 0;
+  let walletId: string | null = null;
+  try {
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('id,balance')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (wallet) {
+      walletId = (wallet as any).id;
+      balance = Number((wallet as any).balance ?? 0);
+    }
+  } catch {
+    /* keep defaults */
+  }
+
+  // ── Manual top-up requests (table is `topups`) ──
+  const topups: WalletTopupEntry[] = [];
+  try {
+    const { data: rows } = await supabase
+      .from('topups')
+      .select('id,amount,status,created_at,last4,method')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    for (const r of ((rows ?? []) as any[])) {
+      const method = r.method ? String(r.method) : null;
+      const last4 = r.last4 ? `••${r.last4}` : null;
+      topups.push({
+        id: String(r.id),
+        amount: Number(r.amount ?? 0),
+        status: (String(r.status ?? 'PENDING').toUpperCase() as any) ?? 'PENDING',
+        source: 'MANUAL',
+        detail: [method, last4].filter(Boolean).join(' ') || null,
+        createdAt: r.created_at,
+      });
+    }
+  } catch {
+    /* table shape differences shouldn't break the page */
+  }
+
+  // ── Crypto top-ups ──
+  try {
+    const { data: rows } = await supabase
+      .from('crypto_topups')
+      .select('id,mmk_amount,usd_amount,pay_currency,network,status,credited,created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    for (const r of ((rows ?? []) as any[])) {
+      // Only show crypto attempts that actually went somewhere — a customer
+      // who opened the page and never paid shouldn't see clutter.
+      const credited = !!r.credited;
+      const status = String(r.status ?? '').toUpperCase();
+      if (!credited && !['FAILED', 'CANCEL', 'EXPIRED'].includes(status)) {
+        // still waiting / never paid — skip unless it was credited
+        if (status !== 'PAID' && status !== 'PAID_OVER') continue;
+      }
+      const coin = r.pay_currency ? String(r.pay_currency) : null;
+      const net = r.network ? String(r.network) : null;
+      topups.push({
+        id: String(r.id),
+        amount: Number(r.mmk_amount ?? 0),
+        status: credited ? 'CREDITED' : 'FAILED',
+        source: 'CRYPTO',
+        detail: [coin, net].filter(Boolean).join(' · ') || null,
+        createdAt: r.created_at,
+      });
+    }
+  } catch {
+    /* crypto table may not exist in older deployments */
+  }
+
+  topups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // ── Spending (DEBIT ledger rows) ──
+  const spending: WalletSpendEntry[] = [];
+  if (walletId) {
+    try {
+      const { data: rows } = await supabase
+        .from('wallet_transactions')
+        .select('id,amount,direction,description,created_at')
+        .eq('wallet_id', walletId)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      for (const r of ((rows ?? []) as any[])) {
+        if (String(r.direction ?? '').toUpperCase() !== 'DEBIT') continue;
+        spending.push({
+          id: String(r.id),
+          amount: Number(r.amount ?? 0),
+          description: r.description ?? null,
+          createdAt: r.created_at,
+        });
+      }
+    } catch {
+      /* keep empty */
+    }
+  }
+
+  const totalToppedUp = topups
+    .filter((t) => t.status === 'APPROVED' || t.status === 'CREDITED')
+    .reduce((sum, t) => sum + t.amount, 0);
+  const totalSpent = spending.reduce((sum, s) => sum + s.amount, 0);
+
+  return { balance, topups, spending, totalToppedUp, totalSpent };
+}

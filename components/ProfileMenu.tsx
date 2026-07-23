@@ -35,6 +35,16 @@ export function ProfileMenu({ userName, avatarUrl, initials, variant }: Props) {
 
   const menuItems = [
     {
+      href: '/wallet',
+      label: 'My Wallet',
+      icon: (
+        <>
+          <path d="M3 7a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+          <path d="M16 11h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a2 2 0 010-4z" />
+        </>
+      ),
+    },
+    {
       href: '/account',
       label: 'My Account',
       icon: (

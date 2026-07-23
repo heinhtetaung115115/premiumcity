@@ -3,7 +3,7 @@ import type { HTMLAttributes } from 'react';
 import { requireAdmin } from '@/lib/session';
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import { listOrdersForUser } from '@/lib/orders';
-import { getWalletOverview } from '@/lib/wallet';
+import { getWalletPageData } from '@/lib/wallet';
 import { Button } from '@/components/ui';
 import { credentialToRows } from '@/lib/deliveryTypes';
 
@@ -129,12 +129,20 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     }
   }
 
-  // Wallet + derived stats
+  // Wallet + derived stats (same helper the customer wallet page uses)
   let balance = 0;
+  let walletTopups: any[] = [];
+  let walletSpending: any[] = [];
+  let walletToppedUp = 0;
+  let walletSpent = 0;
   if (user) {
     try {
-      const ov = await getWalletOverview(user.id);
+      const ov = await getWalletPageData(user.id);
       balance = ov.balance;
+      walletTopups = ov.topups;
+      walletSpending = ov.spending;
+      walletToppedUp = ov.totalToppedUp;
+      walletSpent = ov.totalSpent;
     } catch {
       balance = 0;
     }
@@ -317,6 +325,124 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
               </p>
             )}
           </Panel>
+
+          {/* Wallet history */}
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-slate-100">Wallet history</h2>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Panel className="p-3">
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Topped up</p>
+                <p className="mt-1 text-base font-bold text-emerald-400">
+                  {walletToppedUp.toLocaleString('en-US')} <span className="text-xs">Ks</span>
+                </p>
+              </Panel>
+              <Panel className="p-3">
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Wallet spent</p>
+                <p className="mt-1 text-base font-bold text-rose-400">
+                  {walletSpent.toLocaleString('en-US')} <span className="text-xs">Ks</span>
+                </p>
+              </Panel>
+            </div>
+
+            {/* Top-ups */}
+            <Panel className="p-4">
+              <details>
+                <summary className="flex cursor-pointer list-none items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-100">
+                    Top-ups ({walletTopups.length})
+                  </span>
+                  <span className="text-xs text-slate-500">show / hide</span>
+                </summary>
+                <div className="mt-3 border-t border-slate-800 pt-3">
+                  {walletTopups.length === 0 ? (
+                    <p className="text-xs text-slate-500">No top-ups yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {walletTopups.map((t: any) => {
+                        const st = String(t.status).toUpperCase();
+                        const ok = st === 'APPROVED' || st === 'CREDITED';
+                        const pending = st === 'PENDING';
+                        return (
+                          <li
+                            key={t.id}
+                            className="flex items-center justify-between gap-3 rounded-lg bg-slate-950/50 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-slate-200">
+                                {t.source === 'CRYPTO' ? 'Crypto top-up' : 'Bank top-up'}
+                                <span
+                                  className={`ml-2 rounded px-1.5 py-0.5 text-[9px] font-bold ${
+                                    ok
+                                      ? 'bg-emerald-500/15 text-emerald-300'
+                                      : pending
+                                      ? 'bg-amber-500/15 text-amber-300'
+                                      : 'bg-rose-500/15 text-rose-300'
+                                  }`}
+                                >
+                                  {st}
+                                </span>
+                              </p>
+                              <p className="mt-0.5 truncate text-[10px] text-slate-500">
+                                {formatDate(t.createdAt)}
+                                {t.detail ? ` · ${t.detail}` : ''}
+                              </p>
+                            </div>
+                            <span
+                              className={`flex-shrink-0 text-xs font-semibold ${
+                                ok ? 'text-emerald-400' : 'text-slate-400'
+                              }`}
+                            >
+                              {ok ? '+' : ''}
+                              {Number(t.amount).toLocaleString('en-US')} Ks
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </details>
+            </Panel>
+
+            {/* Spending */}
+            <Panel className="p-4">
+              <details>
+                <summary className="flex cursor-pointer list-none items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-100">
+                    Spending ({walletSpending.length})
+                  </span>
+                  <span className="text-xs text-slate-500">show / hide</span>
+                </summary>
+                <div className="mt-3 border-t border-slate-800 pt-3">
+                  {walletSpending.length === 0 ? (
+                    <p className="text-xs text-slate-500">No wallet spending yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {walletSpending.map((sp: any) => (
+                        <li
+                          key={sp.id}
+                          className="flex items-center justify-between gap-3 rounded-lg bg-slate-950/50 px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium text-slate-200">
+                              {sp.description || 'Purchase'}
+                            </p>
+                            <p className="mt-0.5 text-[10px] text-slate-500">
+                              {formatDate(sp.createdAt)}
+                            </p>
+                          </div>
+                          <span className="flex-shrink-0 text-xs font-semibold text-rose-400">
+                            -{Number(sp.amount).toLocaleString('en-US')} Ks
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </details>
+            </Panel>
+          </section>
 
           {/* Orders */}
           <section className="space-y-3">

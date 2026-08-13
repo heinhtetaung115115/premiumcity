@@ -2,9 +2,10 @@
 // Reads a reseller "account panel" link and returns the live account data.
 //
 // HOW THE LINK WORKS (discovered by inspecting the panel):
-//   The customer-facing page is:   https://resellerpanel.store/c/<token>
-//   Its data comes from a JSON API: https://resellerpanel.store/api/c/<token>
+//   The customer-facing page is:   https://<supplier-host>/c/<token>
+//   Its data comes from a JSON API: https://<supplier-host>/api/c/<token>
 //   i.e. the SAME url with "/api" inserted before the path.
+//   Known supplier hosts: resellerpanel.store, txtl.online (same JSON shape).
 //
 // The JSON looks like:
 //   { success: true, data: {
@@ -42,7 +43,13 @@ export type NetflixPanel = {
 };
 
 /** Only allow links from the known supplier host — never fetch arbitrary URLs. */
-const ALLOWED_HOSTS = new Set(['resellerpanel.store', 'www.resellerpanel.store']);
+/** Only allow links from known supplier hosts — never fetch arbitrary URLs. */
+const ALLOWED_HOSTS = new Set([
+  'resellerpanel.store',
+  'www.resellerpanel.store',
+  'txtl.online',
+  'www.txtl.online',
+]);
 
 /** Convert a customer web link to its JSON API form. Returns null if invalid. */
 export function toApiUrl(rawLink: string): string | null {

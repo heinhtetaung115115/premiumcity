@@ -73,5 +73,8 @@ export async function GET(req: Request) {
   return NextResponse.json({
     profile: panel.profile,
     messages: wantCodes ? panel.messages : [],
+    // The admin's note is stored on the delivery payload — pass it through so
+    // the customer actually sees it. Fetched on every load (not just codes=1).
+    note: typeof payload.note === 'string' && payload.note.trim() ? payload.note : null,
   });
 }

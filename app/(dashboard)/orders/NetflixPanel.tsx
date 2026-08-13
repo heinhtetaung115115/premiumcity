@@ -49,6 +49,7 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +74,7 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
         }
         const d = await res.json();
         setProfile(d.profile);
+        setNote(typeof d.note === 'string' && d.note.trim() ? d.note : null);
         // Only overwrite codes when we actually asked for them, so a plain
         // profile refresh never wipes a code the customer just fetched.
         if (withCodes) setMessages(Array.isArray(d.messages) ? d.messages : []);
@@ -229,6 +231,13 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
               <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2.5">
                 <span className="font-mono text-[13px] text-slate-100">{profile.endDate}</span>
               </div>
+            </div>
+          )}
+
+          {note && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2.5">
+              <p className="mb-0.5 text-[9px] uppercase tracking-[0.05em] text-amber-300/80">Note</p>
+              <p className="whitespace-pre-wrap break-words text-[13px] text-amber-100">{note}</p>
             </div>
           )}
 

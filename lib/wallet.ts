@@ -464,3 +464,89 @@ export async function getWalletPageData(userId: string): Promise<WalletPageData>
 
   return { balance, topups, spending, totalToppedUp, totalSpent };
 }
+
+/**
+ * Admin manual credit — for cases like a top-up that failed on the gateway but
+ * the customer really paid (verified by slip). Reuses the exact
+ * create-wallet-if-missing → credit → log pattern as approveTopup, so it
+ * handles a user who has NEVER had a wallet row (their first top-up failed, so
+ * no wallet exists yet — which is exactly when you need this).
+ *
+ * Every manual credit writes a wallet_transactions row tagged with the reason
+ * and the admin, so there's always an audit trail. Returns the new balance.
+ */
+export async function adminCreditWallet(params: {
+  userId: string;
+  amount: number;
+  reason: string;
+  adminEmail?: string;
+}): Promise<{ ok: boolean; error?: string; balance?: number }> {
+  const supabase = getServiceSupabaseClient();
+  const amount = Math.round(Number(params.amount));
+
+  if (!params.userId) return { ok: false, error: 'Missing user.' };
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { ok: false, error: 'Amount must be a positive number.' };
+  }
+  if (amount > 10_000_000) {
+    // A sanity ceiling so a stray extra digit can't credit millions by accident.
+    return { ok: false, error: 'Amount is too large — double-check it.' };
+  }
+
+  // Confirm the user exists (so a bad id can't create an orphan wallet).
+  const { data: user } = await supabase
+    .from('users')
+    .select('id')
+    .eq('id', params.userId)
+    .maybeSingle();
+  if (!user) return { ok: false, error: 'User not found.' };
+
+  try {
+    const { data: walletRow, error: wErr } = await supabase
+      .from('wallets')
+      .select('id,balance')
+      .eq('user_id', params.userId)
+      .maybeSingle();
+    if (wErr) throw wErr;
+
+    let walletId: string;
+    let newBalance: number;
+
+    if (!walletRow) {
+      // First-ever wallet for this user — the "no row yet" case.
+      const { data: nw, error: cErr } = await supabase
+        .from('wallets')
+        .insert({ user_id: params.userId, balance: amount })
+        .select('id,balance')
+        .maybeSingle();
+      if (cErr) throw cErr;
+      walletId = (nw as any).id;
+      newBalance = Number((nw as any).balance ?? amount);
+    } else {
+      walletId = (walletRow as any).id;
+      const current = Number((walletRow as any).balance ?? 0);
+      newBalance = current + amount;
+      const { error: uErr } = await supabase
+        .from('wallets')
+        .update({ balance: newBalance })
+        .eq('id', walletId);
+      if (uErr) throw uErr;
+    }
+
+    const desc = `Manual admin credit — ${params.reason}${
+      params.adminEmail ? ` (by ${params.adminEmail})` : ''
+    }`;
+    const { error: txErr } = await supabase.from('wallet_transactions').insert({
+      wallet_id: walletId,
+      amount,
+      direction: 'CREDIT',
+      description: desc,
+    });
+    if (txErr) throw txErr;
+
+    return { ok: true, balance: newBalance };
+  } catch (err: any) {
+    console.error('adminCreditWallet failed:', err);
+    return { ok: false, error: err?.message || 'Could not credit the wallet.' };
+  }
+}

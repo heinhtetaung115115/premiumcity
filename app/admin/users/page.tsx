@@ -6,6 +6,7 @@ import { listOrdersForUser } from '@/lib/orders';
 import { getWalletPageData } from '@/lib/wallet';
 import { Button } from '@/components/ui';
 import { credentialToRows } from '@/lib/deliveryTypes';
+import { AdminTopupForm } from './AdminTopupForm';
 
 type PageProps = {
   searchParams?: {
@@ -329,6 +330,8 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
           {/* Wallet history */}
           <section className="space-y-3">
             <h2 className="text-lg font-semibold text-slate-100">Wallet history</h2>
+
+            <AdminTopupForm userId={user.id} />
 
             <div className="grid grid-cols-2 gap-3">
               <Panel className="p-3">

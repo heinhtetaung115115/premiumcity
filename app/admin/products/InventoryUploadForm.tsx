@@ -36,6 +36,22 @@ export function InventoryUploadForm({
 }) {
   const [kind, setKind] = useState<Kind>('email_password');
   const [bulk, setBulk] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Call the server action ourselves so a returned { success:false, error }
+  // is SHOWN instead of silently dropped. On success the action redirects,
+  // which Next.js still handles normally.
+  async function submit(formData: FormData) {
+    setError(null);
+    try {
+      const res: any = await (addInventoryAction as any)(formData);
+      if (res && res.success === false) setError(res.error || 'Upload failed.');
+    } catch (err: any) {
+      // redirect() is delivered as a thrown NEXT_REDIRECT — let it through.
+      if (String(err?.digest ?? err?.message ?? '').includes('NEXT_REDIRECT')) throw err;
+      setError(err?.message || 'Upload failed — check the server logs.');
+    }
+  }
 
   const inputCls =
     'w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-50 outline-none focus:border-emerald-500';
@@ -43,7 +59,7 @@ export function InventoryUploadForm({
   const canBulk = kind === 'email_password' || kind === 'key' || kind === 'invite_link';
 
   return (
-    <form action={addInventoryAction as any} className="space-y-3">
+    <form action={submit} className="space-y-3">
       <input type="hidden" name="productId" value={productId} />
       <input type="hidden" name="kind" value={kind} />
 
@@ -209,6 +225,12 @@ export function InventoryUploadForm({
           placeholder="Note / instructions delivered to the customer"
           className={inputCls}
         />
+      )}
+
+      {error && (
+        <div className="rounded-lg border border-rose-500/40 bg-rose-950/40 px-3 py-2 text-xs text-rose-200">
+          {error}
+        </div>
       )}
 
       <div className="flex justify-end">

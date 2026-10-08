@@ -142,6 +142,32 @@ export async function createVariantAction(formData: FormData) {
  * Stock status is now derived purely from number of available inventory rows,
  * so we don't need to touch is_in_stock here.
  */
+/**
+ * Insert inventory rows in chunks so one huge paste (hundreds of keys) is never
+ * a single oversized request. Stops at the first failure and reports how many
+ * rows already went in, so a retry doesn't silently create duplicates.
+ */
+async function insertInventoryChunked(
+  supabase: ReturnType<typeof getServiceSupabaseClient>,
+  rows: any[]
+): Promise<{ error: string | null }> {
+  const CHUNK = 200;
+  let done = 0;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const { error } = await supabase.from('inventory_items').insert(rows.slice(i, i + CHUNK));
+    if (error) {
+      return {
+        error:
+          done > 0
+            ? `${error.message} — ${done} of ${rows.length} rows were already added; remove those lines before retrying.`
+            : error.message,
+      };
+    }
+    done += Math.min(CHUNK, rows.length - i);
+  }
+  return { error: null };
+}
+
 export async function addInventoryAction(formData: FormData) {
   await requireAdmin();
   const productId = String(formData.get('productId') ?? '');
@@ -175,8 +201,8 @@ export async function addInventoryAction(formData: FormData) {
         if (inserts.length === 0) {
           return { success: false, error: 'No valid rows found (need email,password[,note])' };
         }
-        const { error } = await supabase.from('inventory_items').insert(inserts);
-        if (error) return { success: false, error: error.message };
+        const { error } = await insertInventoryChunked(supabase, inserts);
+        if (error) return { success: false, error };
         revalidatePath('/admin/products');
         redirect('/admin/products?m=inventory_added_bulk');
       }
@@ -210,8 +236,8 @@ export async function addInventoryAction(formData: FormData) {
           variant_id: variantId || null,
           payload: { type: 'key', key, ...(sharedNote ? { note: sharedNote } : {}) },
         }));
-        const { error } = await supabase.from('inventory_items').insert(inserts);
-        if (error) return { success: false, error: error.message };
+        const { error } = await insertInventoryChunked(supabase, inserts);
+        if (error) return { success: false, error };
         revalidatePath('/admin/products');
         redirect('/admin/products?m=inventory_added_bulk');
       }
@@ -240,8 +266,8 @@ export async function addInventoryAction(formData: FormData) {
           variant_id: variantId || null,
           payload: { type: 'invite_link', inviteLink, ...(sharedNote ? { note: sharedNote } : {}) },
         }));
-        const { error } = await supabase.from('inventory_items').insert(inserts);
-        if (error) return { success: false, error: error.message };
+        const { error } = await insertInventoryChunked(supabase, inserts);
+        if (error) return { success: false, error };
         revalidatePath('/admin/products');
         redirect('/admin/products?m=inventory_added_bulk');
       }
@@ -313,8 +339,8 @@ export async function addInventoryAction(formData: FormData) {
   if (inserts.length === 0) {
     return { success: false, error: 'No valid CSV rows found (need email,password[,note])' };
   }
-  const { error } = await supabase.from('inventory_items').insert(inserts);
-  if (error) return { success: false, error: error.message };
+  const { error } = await insertInventoryChunked(supabase, inserts);
+  if (error) return { success: false, error };
   revalidatePath('/admin/products');
   redirect('/admin/products?m=inventory_added_bulk');
 }

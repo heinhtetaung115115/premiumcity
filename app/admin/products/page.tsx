@@ -127,6 +127,11 @@ export default async function AdminProductsPage({
       .select(
         'id,name,slug,description,category_id,product_type,status,is_in_stock,input_schema,delivery_note,image_url,tags,category:categories(id,name),variants:product_variants!product_id(*),inventory_items!product_id(id,order_item_id,variant_id,payload)'
       )
+      // Only UNSOLD stock. Previously this embedded every inventory row ever
+      // created (sold ones included, with full payloads) — for a best-seller
+      // like Express VPN that grows forever and eventually breaks the page,
+      // which re-renders after every upload.
+      .is('inventory_items.order_item_id', null)
       .order('created_at', { ascending: false }),
     supabase
       .from('bank_accounts')
@@ -472,7 +477,7 @@ export default async function AdminProductsPage({
                           <p className="text-sm text-slate-400">{unused.length} in stock</p>
                           {unused.length > 0 && (
                             <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs text-slate-300">
-                              {unused.map((item) => {
+                              {unused.slice(0, 50).map((item) => {
                                 const preview = item.payload
                                   ? Object.entries(item.payload)
                                       .filter(([k]) => k !== 'type')
@@ -499,6 +504,11 @@ export default async function AdminProductsPage({
                                 );
                               })}
                             </ul>
+                          )}
+                          {unused.length > 50 && (
+                            <p className="mt-1 text-[11px] text-slate-500">
+                              Showing 50 of {unused.length}.
+                            </p>
                           )}
                         </>
                       );

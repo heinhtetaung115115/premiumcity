@@ -628,7 +628,10 @@ export async function createOrderForUser(
       const { data: inventoryRows } = await supabase
         .from('inventory_items')
         .select('product_id,variant_id,order_item_id')
-        .in('product_id', productIds);
+        .in('product_id', productIds)
+        // Unsold only — fetching sold rows too hit Supabase's 1,000-row cap on
+        // best-sellers and falsely reported "stock depleted" after each sale.
+        .is('order_item_id', null);
 
       const remainingByKey: Record<string, number> = {};
       for (const row of (inventoryRows ?? []) as any[]) {

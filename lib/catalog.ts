@@ -122,6 +122,36 @@ function mapProduct(
  * Home page – fetch ALL active products across all categories,
  * with their variants, inventory counts, and category info.
  */
+
+/**
+ * Unsold inventory rows for many products, fetched PER PRODUCT.
+ *
+ * Supabase caps any response at 1,000 rows. A single query across all products
+ * would silently drop rows once total unsold stock passes 1,000, making some
+ * products look out of stock. One query per product (in parallel) keeps every
+ * product's stock visible. (A single product with >1,000 unsold rows reports
+ * 1,000 — still correctly "in stock".)
+ */
+async function fetchUnusedInventory(
+  supabase: ReturnType<typeof getServiceSupabaseClient>,
+  productIds: string[],
+  columns: string
+): Promise<any[]> {
+  const results = await Promise.all(
+    productIds.map(async (pid) => {
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .select(columns)
+        .eq('product_id', pid)
+        .is('order_item_id', null)
+        .limit(1000);
+      if (error) throw error;
+      return (data ?? []) as any[];
+    })
+  );
+  return results.flat();
+}
+
 export async function getAllProducts() {
   const supabase = getServiceSupabaseClient();
 
@@ -162,12 +192,9 @@ export async function getAllProducts() {
       .from('product_variants')
       .select('id,product_id,name,price,is_default,is_active,position,created_at')
       .in('product_id', productIds),
-    supabase
-      .from('inventory_items')
-      .select('product_id,order_item_id')
-      .in('product_id', productIds)
-      .is('order_item_id', null)
-      .limit(10000),
+    fetchUnusedInventory(supabase, productIds, 'product_id,order_item_id').then(
+      (data) => ({ data, error: null as any })
+    ),
   ]);
 
   if (varError) throw varError;
@@ -371,14 +398,11 @@ export async function getCategoryBySlug(slug: string) {
   }
 
   // 4) Inventory for these products (only unused items)
-  const { data: inventoryRows, error: invError } = await supabase
-    .from('inventory_items')
-    .select('product_id,order_item_id')
-    .in('product_id', productIds)
-    .is('order_item_id', null)
-    .limit(10000);
-
-  if (invError) throw invError;
+  const inventoryRows = await fetchUnusedInventory(
+    supabase,
+    productIds,
+    'product_id,order_item_id'
+  );
 
   const inventory = (inventoryRows ?? []) as InventoryRow[];
 
@@ -478,7 +502,11 @@ export async function getProductBySlug(slug: string) {
   const { data: inventoryRows, error: invError } = await supabase
     .from('inventory_items')
     .select('order_item_id,variant_id')
-    .eq('product_id', productRow.id);
+    .eq('product_id', productRow.id)
+    // Unsold rows only. Supabase caps a response at 1,000 rows, so fetching
+    // ALL rows (sold included) made best-sellers like Express VPN show "out
+    // of stock": the 1,000 returned were the oldest — all already sold.
+    .is('order_item_id', null);
 
   if (invError) throw invError;
 
@@ -582,12 +610,11 @@ export async function getOutOfStockVariants(): Promise<OutOfStockVariant[]> {
   const variants = ((variantRows ?? []) as any[]).filter((v) => v.is_active);
 
   // Unused inventory for those products.
-  const { data: invRows } = await supabase
-    .from('inventory_items')
-    .select('product_id,variant_id,order_item_id')
-    .in('product_id', productIds)
-    .is('order_item_id', null)
-    .limit(10000);
+  const invRows = await fetchUnusedInventory(
+    supabase,
+    productIds,
+    'product_id,variant_id,order_item_id'
+  );
 
   // Count unused stock per variant, and per-product shared (variant_id null).
   const unusedByVariant = new Map<string, number>();

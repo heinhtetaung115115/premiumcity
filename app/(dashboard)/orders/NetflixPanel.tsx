@@ -338,7 +338,7 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
             </p>
 
             <p className="mb-3 text-[12px] leading-relaxed text-slate-300">
-              Household code နှင့် OTP login code များ ရယူရန် get code ကိုနှိပ်ပေးပါ
+              Household link နှင့် OTP login code များ ရယူရန် Get code or link ကိုနှိပ်ပေးပါ
             </p>
 
             <button
@@ -347,7 +347,7 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
               disabled={codeLoading}
               className="w-full rounded-lg bg-emerald-500 px-3 py-2.5 text-[13px] font-bold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
             >
-              {codeLoading ? 'Code ကိုရယူနေပါသည်…' : 'Get code'}
+              {codeLoading ? 'Code ကိုရယူနေပါသည်…' : 'Get code or link'}
             </button>
 
             {codes.length > 0 && (
@@ -485,7 +485,7 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
                 <p className="text-sm font-semibold text-slate-100">Code မတွေ့သေးပါ</p>
                 <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
                   ၄ မိနစ်စောင့်ပေမယ့် code မရောက်လာသေးပါ။ Netflix ဖန်သားပြင်မှာ code တောင်းထားကြောင်း
-                  သေချာပြီးမှ Get code ကို ထပ်နှိပ်ပေးပါ။ ဆက်မရပါက support ကို ဆက်သွယ်ပါ။
+                  သေချာပြီးမှ Get code or link ကို ထပ်နှိပ်ပေးပါ။ ဆက်မရပါက support ကို ဆက်သွယ်ပါ။
                 </p>
                 <button
                   type="button"

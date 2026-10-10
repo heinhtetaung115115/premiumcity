@@ -13,6 +13,8 @@ type Message = {
   subject: string | null;
   from: string | null;
   code: string | null;
+  link?: string | null;
+  linkLabel?: string | null;
   body: string | null;
   date: string | null;
   timestamp: number | null;
@@ -45,6 +47,45 @@ function Row({ label, value }: { label: string; value: string }) {
       </div>
     </div>
   );
+}
+
+/** A sign-in code (copyable), or for household emails a button to Netflix's confirm link. */
+function CodeOrLink({ m, size }: { m: Message; size: 'sm' | 'lg' }) {
+  if (m.code) {
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className={`font-mono font-bold text-emerald-300 ${
+            size === 'lg' ? 'text-2xl tracking-wider' : 'text-lg'
+          }`}
+        >
+          {m.code}
+        </span>
+        <Copy value={m.code} />
+      </div>
+    );
+  }
+  if (m.link) {
+    return (
+      <div className="space-y-1.5 text-left">
+        <a
+          href={m.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400"
+        >
+          {m.linkLabel || 'Open link'}
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}>
+            <path d="M7 17L17 7M9 7h8v8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </a>
+        <p className="text-[10px] leading-relaxed text-slate-400">
+          Netflix Household အတည်ပြုရန် အပေါ်ကခလုတ်ကိုနှိပ်ပါ (၁၅ မိနစ်အတွင်း)
+        </p>
+      </div>
+    );
+  }
+  return null;
 }
 
 export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
@@ -174,7 +215,7 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
 
   // Stamp first-seen time (fallback only — used when a message has no timestamp).
   useEffect(() => {
-    const fresh = messages.map((m) => m.code).filter(Boolean) as string[];
+    const fresh = messages.map((m) => m.code || m.link).filter(Boolean) as string[];
     if (fresh.length === 0) return;
     setSeenAt((prev) => {
       const next = { ...prev };
@@ -192,13 +233,16 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
   // The moment a code arrived: the supplier's real timestamp, else first-seen.
   const arrivedAt = (m: Message): number | null => {
     if (m.timestamp && Number.isFinite(m.timestamp)) return m.timestamp;
-    return m.code ? seenAt[m.code] ?? null : null;
+    const key = m.code || m.link;
+    return key ? seenAt[key] ?? null : null;
   };
 
   // A code shows only if (a) the latest fetch still returns it, AND
   // (b) it's within the 15-min window since it actually arrived.
+  // Items to show: sign-in codes, and household / temporary-access emails,
+  // which carry a confirm link instead of a number.
   const codes = messages.filter((m) => {
-    if (!m.code) return false;
+    if (!m.code && !m.link) return false;
     const t = arrivedAt(m);
     if (!t) return true; // just arrived this render; clock starts next tick
     return now - t < CODE_TTL_MS;
@@ -268,10 +312,7 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
                   const leftMin = Math.max(0, Math.ceil(leftMs / 60000));
                   return (
                     <div key={i} className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-lg font-bold text-emerald-300">{m.code}</span>
-                        <Copy value={m.code!} />
-                      </div>
+                      <CodeOrLink m={m} size="sm" />
                       <div className="mt-1 flex items-center justify-between">
                         {m.subject && <p className="text-[10px] text-slate-400">{m.subject}</p>}
                         <p className="ml-auto text-[10px] text-amber-300/80">⏳ {leftMin} min left</p>
@@ -341,12 +382,7 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
                 <div className="mt-2 space-y-2">
                   {codes.map((m, i) => (
                     <div key={i} className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-2xl font-bold tracking-wider text-emerald-300">
-                          {m.code}
-                        </span>
-                        <Copy value={m.code!} />
-                      </div>
+                      <CodeOrLink m={m} size="lg" />
                       {m.subject && <p className="mt-1 text-left text-[10px] text-slate-400">{m.subject}</p>}
                     </div>
                   ))}

@@ -31,6 +31,12 @@ export type NetflixMessage = {
   code: string | null;
   body: string | null;
   date: string | null;
+  /**
+   * Action link from the email's button — Netflix Household / temporary-access
+   * emails ("Yes, This Was Me", "Get Code") have a link, not a number.
+   */
+  link: string | null;
+  linkLabel: string | null;
   /** Milliseconds since epoch when the message arrived, if we could parse it. */
   timestamp: number | null;
 };
@@ -83,18 +89,98 @@ export function isNetflixLink(rawLink: string): boolean {
  * The panel had no live message to inspect, so we read the common shapes
  * defensively AND scan the text for a Netflix-style code as a fallback.
  */
-function extractCode(msg: any): string | null {
-  // direct fields the API might use
+/** Remove URLs so tracking ids inside links (e.g. "...-1234-...") can't pass as codes. */
+function stripUrls(t: string): string {
+  return t.replace(/\[?https?:\/\/[^\s\]]+\]?/gi, ' ');
+}
+
+/** Turn an email's HTML into plain text (fallback when there's no text part). */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<(style|script)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Pull the code out of a message.
+ *
+ * The supplier now sends the WHOLE email (subject/text/html) rather than a
+ * ready-made `code` field. Emails are full of other digits — tracking ids in
+ * links, addresses, years — so we only accept a 4–8 digit number that sits
+ * near the word "code", after stripping URLs. Household emails contain a link
+ * instead of a number; for those this returns null and extractLink() applies.
+ */
+function extractCode(msg: any, strict = false): string | null {
+  // A ready-made field, if the supplier ever sends one again.
   for (const k of ['code', 'otp', 'verificationCode', 'verification_code']) {
     const v = msg?.[k];
     if (typeof v === 'string' && v.trim()) return v.trim();
   }
-  // otherwise scan subject/body/text for a 4-8 digit code or a 6-char token
-  const text = [msg?.subject, msg?.body, msg?.text, msg?.content, msg?.html]
-    .filter((x) => typeof x === 'string')
-    .join(' ');
-  const m = text.match(/\b(\d{4,8})\b/) || text.match(/\b([A-Z0-9]{6})\b/);
-  return m ? m[1] : null;
+
+  const raw =
+    typeof msg?.text === 'string' && msg.text.trim()
+      ? msg.text
+      : typeof msg?.body === 'string' && msg.body.trim()
+      ? msg.body
+      : typeof msg?.content === 'string' && msg.content.trim()
+      ? msg.content
+      : typeof msg?.html === 'string'
+      ? htmlToText(msg.html)
+      : '';
+  const text = stripUrls(String(raw)).replace(/\s+/g, ' ');
+  if (!text) return null;
+
+  // "Enter this code to sign in 5329" / "Your code is 123456"
+  const near = text.match(/code[^0-9]{0,80}?\b(\d{4,8})\b/i);
+  if (near) return near[1];
+
+  // Subject says it's a code email, but the wording differs: first number.
+  // Skipped in strict mode (email has an action link) — there, any loose
+  // number is noise like the ZIP code in Netflix's footer address.
+  if (!strict && /code/i.test(String(msg?.subject ?? ''))) {
+    const first = text.match(/\b(\d{4,8})\b/);
+    if (first) return first[1];
+  }
+  return null;
+}
+
+/** Button labels that mark the action link in Netflix household / access emails. */
+const ACTION_LABEL =
+  /(get\s*code|yes,?\s*(it|this)\s*was\s*me|this\s*was\s*me|update\s*(netflix\s*)?household|confirm|verify|approve|send\s*(me\s*)?(the\s*)?code)/i;
+
+function isNetflixUrl(u: string): boolean {
+  try {
+    const h = new URL(u).hostname.toLowerCase();
+    return u.startsWith('https://') && (h === 'netflix.com' || h.endsWith('.netflix.com'));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Find the email's action button link (household / temporary-access emails).
+ * Only https netflix.com links whose button text looks like an action are
+ * accepted — never help, legal or "review activity" footer links.
+ */
+function extractLink(msg: any): { link: string; label: string } | null {
+  const html = typeof msg?.html === 'string' ? msg.html : '';
+  for (const m of html.matchAll(/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const url = m[1].replace(/&amp;/gi, '&').trim();
+    const label = htmlToText(m[2]).trim();
+    if (label && ACTION_LABEL.test(label) && isNetflixUrl(url)) {
+      return { link: url, label };
+    }
+  }
+  // Plain-text form: "Get Code [https://www.netflix.com/...]"
+  const text = typeof msg?.text === 'string' ? msg.text : '';
+  for (const m of text.matchAll(/([^\n\[\]]{2,60}?)\s*\[(https:\/\/[^\s\]]+)\]/g)) {
+    const label = m[1].trim();
+    if (ACTION_LABEL.test(label) && isNetflixUrl(m[2])) return { link: m[2], label };
+  }
+  return null;
 }
 
 /**
@@ -148,7 +234,14 @@ function mapMessage(msg: any): NetflixMessage {
   return {
     subject: msg?.subject ?? msg?.title ?? null,
     from: msg?.from ?? msg?.sender ?? null,
-    code: extractCode(msg),
+    ...(() => {
+      const l = extractLink(msg);
+      return {
+        code: extractCode(msg, !!l),
+        link: l?.link ?? null,
+        linkLabel: l?.label ?? null,
+      };
+    })(),
     body: msg?.body ?? msg?.text ?? msg?.content ?? null,
     date: msg?.date ?? msg?.createdAt ?? msg?.created_at ?? msg?.receivedAt ?? null,
     timestamp: parseTimestamp(msg),

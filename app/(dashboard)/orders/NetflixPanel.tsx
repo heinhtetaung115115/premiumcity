@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 type Profile = {
   email: string | null;
@@ -111,17 +111,20 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
           const d = await res.json().catch(() => ({}));
           setError(d?.error || 'Could not load the account.');
           setProfile(null);
-          return;
+          return null;
         }
         const d = await res.json();
         setProfile(d.profile);
         setNote(typeof d.note === 'string' && d.note.trim() ? d.note : null);
         // Only overwrite codes when we actually asked for them, so a plain
         // profile refresh never wipes a code the customer just fetched.
-        if (withCodes) setMessages(Array.isArray(d.messages) ? d.messages : []);
+        const msgs: Message[] = Array.isArray(d.messages) ? d.messages : [];
+        if (withCodes) setMessages(msgs);
         setError(null);
+        return msgs;
       } catch {
         setError('Could not load the account.');
+        return null;
       } finally {
         setLoading(false);
       }
@@ -134,12 +137,55 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
     load(false);
   }, [load]);
 
+  // The supplier receives Netflix's email 2–3 minutes after the customer
+  // requests it. So "Get code" keeps checking every 10s (up to 4 min) and
+  // shows the code the moment it lands, instead of saying "not found" at once.
+  const POLL_EVERY_MS = 10_000;
+  const MAX_WAIT_MS = 4 * 60_000;
+  const pollRun = useRef(0); // bumping this cancels a running poll
+  const [waitStart, setWaitStart] = useState<number | null>(null);
+  const [tick, setTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!codeLoading) return;
+    const t = setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [codeLoading]);
+
+  const hasFreshItem = (msgs: Message[] | null) =>
+    !!msgs?.some((m) => {
+      if (!m.code && !m.link) return false;
+      if (!m.timestamp || !Number.isFinite(m.timestamp)) return true;
+      return Date.now() - m.timestamp < 15 * 60 * 1000;
+    });
+
   const getCode = async () => {
+    const run = ++pollRun.current;
     setShowModal(true);
     setCodeLoading(true);
-    await load(true); // this fetch asks for codes
-    setCodeLoading(false);
+    const started = Date.now();
+    setWaitStart(started);
+    setTick(started);
+
+    while (pollRun.current === run) {
+      const msgs = await load(true); // this fetch asks for codes
+      if (pollRun.current !== run) return; // closed or restarted meanwhile
+      if (hasFreshItem(msgs) || Date.now() - started >= MAX_WAIT_MS) break;
+      await new Promise((r) => setTimeout(r, POLL_EVERY_MS));
+    }
+    if (pollRun.current === run) setCodeLoading(false);
   };
+
+  const closeCodeModal = () => {
+    pollRun.current++; // stop polling
+    setCodeLoading(false);
+    setShowModal(false);
+  };
+
+  // Stop polling if the panel unmounts (customer leaves the page).
+  useEffect(() => () => {
+    pollRun.current++;
+  }, []);
 
   // Renewal: open picker -> load plans -> choose -> confirm (debits wallet).
   const [renewOpen, setRenewOpen] = useState(false);
@@ -349,7 +395,7 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
       {showModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-          onClick={() => !codeLoading && setShowModal(false)}
+          onClick={closeCodeModal}
         >
           <div
             className="w-full max-w-xs rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
@@ -369,7 +415,41 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
                   </span>
                 </div>
                 <p className="text-sm font-semibold text-slate-100">Code ကိုရယူနေပါသည်…</p>
-                <p className="mt-1 text-[11px] text-slate-500">ခဏစောင့်ပေးပါ</p>
+                {(() => {
+                  const elapsed = waitStart ? Math.max(0, tick - waitStart) : 0;
+                  const secs = Math.floor(elapsed / 1000);
+                  const mmss = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+                  // Fills over the usual 3 minutes, then holds near the end.
+                  const pct = Math.min(95, (elapsed / (3 * 60_000)) * 95);
+                  return (
+                    <>
+                      <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+                        Netflix မှ code ရောက်လာရန် ၂-၃ မိနစ်ခန့် ကြာနိုင်ပါသည်။
+                        <br />
+                        Code ရောက်တာနဲ့ ဒီမှာ အလိုအလျောက် ပြပေးပါမည်။
+                      </p>
+                      <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                        <div
+                          className="h-full rounded-full bg-emerald-500 transition-[width] duration-1000 ease-linear"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <p className="mt-1.5 font-mono text-[11px] text-slate-500">{mmss}</p>
+                      {secs >= 150 && (
+                        <p className="mt-1 text-[10px] text-amber-300/80">
+                          နည်းနည်းပိုကြာနေပါတယ် — ခဏလေး ထပ်စောင့်ပေးပါ
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
+                <button
+                  type="button"
+                  onClick={closeCodeModal}
+                  className="mt-4 w-full rounded-lg border border-slate-700 py-2 text-xs font-semibold text-slate-400 hover:bg-slate-800"
+                >
+                  ပယ်ဖျက်မယ်
+                </button>
               </div>
             ) : codes.length > 0 ? (
               <div className="text-center">
@@ -404,8 +484,16 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
                 </div>
                 <p className="text-sm font-semibold text-slate-100">Code မတွေ့သေးပါ</p>
                 <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-                  Netflix ဖန်သားပြင်တွင် code တောင်းပြီးမှ ထပ်မံ Get code နှိပ်ပေးပါ။ Code သည် ၁၅ မိနစ်ခန့် ပေါ်နေပါမည်။
+                  ၄ မိနစ်စောင့်ပေမယ့် code မရောက်လာသေးပါ။ Netflix ဖန်သားပြင်မှာ code တောင်းထားကြောင်း
+                  သေချာပြီးမှ Get code ကို ထပ်နှိပ်ပေးပါ။ ဆက်မရပါက support ကို ဆက်သွယ်ပါ။
                 </p>
+                <button
+                  type="button"
+                  onClick={getCode}
+                  className="mt-4 w-full rounded-lg bg-emerald-500 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400"
+                >
+                  ထပ်စမ်းမယ်
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}

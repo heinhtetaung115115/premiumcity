@@ -449,66 +449,6 @@ export function tplStockDepletedAdmin(
 
 /* ---------- Manual delivery to user template ---------- */
 
-export function tplManualDeliveryToUser(
-  userEmail: string,
-  orderNumber: string | number | null,
-  note?: string
-) {
-  const orderLabel = orderNumber ? `#${orderNumber}` : '';
-  const safeNote = note?.trim();
-
-  const subject = orderLabel
-    ? `Your Premium City order ${orderLabel} is ready`
-    : 'Your Premium City order is ready';
-
-  const htmlNote = safeNote
-    ? `<p style="margin-top:8px;"><strong>Note from our team:</strong><br/>${safeNote}</p>`
-    : '';
-
-  const textNote = safeNote
-    ? `\nNote from our team:\n${safeNote}\n`
-    : '';
-
-  const html = `
-    <div style="font-family:system-ui,Segoe UI,Arial; font-size:14px; line-height:1.5%;">
-      <h2 style="margin-bottom:8px;">Your manual order is ready</h2>
-      <p>Hi,</p>
-      <p>
-        We have delivered the manual product(s) for your Premium City order
-        <strong>${orderLabel || ''}</strong>.
-      </p>
-      <p>
-        You can now view your login details / access information in the
-        <strong>Orders</strong> page after signing in to your Premium City account
-        (${userEmail}).
-      </p>
-      <p>
-        Please keep your credentials safe and do not share them with anyone you do not trust.
-      </p>
-      ${htmlNote}
-      <p style="margin-top:16px;">
-        Thank you for using Premium City,<br/>
-        <strong>Premium City Support</strong>
-      </p>
-    </div>
-  `;
-
-  const text = `Your manual order is ready
-
-We have delivered the manual product(s) for your Premium City order ${orderLabel || ''}.
-
-You can now view your login details / access information in the Orders page after signing in to your Premium City account (${userEmail}).
-
-Please keep your credentials safe and do not share them with anyone you do not trust.${textNote}
-
-Thank you,
-Premium City Support`;
-
-  return { subject, html, text };
-}
-
-/* ---------- Admin recipients helper ---------- */
-
 export function getAdminRecipients(): string[] {
   const raw = process.env.ADMIN_EMAILS || '';
   return raw
@@ -517,57 +457,159 @@ export function getAdminRecipients(): string[] {
     .filter(Boolean);
 }
 
+// ─────────────────────────────────────────────────────────────
+// Customer order emails — shared layout
+// ─────────────────────────────────────────────────────────────
+
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://pcitystore.com').replace(/\/$/, '');
+const ORDERS_URL = `${SITE_URL}/orders`;
+const ORDERS_URL_LABEL = ORDERS_URL.replace(/^https?:\/\//, '');
+
+function esc(v: string): string {
+  return v
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Short order label shown to customers, e.g. "#a1b2c3d4" (matches the Orders page). */
+export function shortOrderLabel(orderId: string | null | undefined): string {
+  return orderId ? `#${String(orderId).slice(0, 8)}` : '';
+}
+
+/**
+ * One layout for order emails. Table-based with inline styles so it renders
+ * in Gmail / Outlook / phone mail apps. `accent` gives each email its own look.
+ */
+function orderEmailLayout(o: {
+  accent: string; // header + button colour
+  badge: string; // small label in the coloured header
+  title: string;
+  name: string;
+  paragraphs: string[]; // already-escaped HTML
+  note?: string;
+  buttonLabel: string;
+}): string {
+  const noteHtml = o.note
+    ? `<tr><td style="padding:0 28px 8px;">
+         <div style="background:#f8fafc;border-left:3px solid ${o.accent};padding:10px 14px;font-size:14px;color:#334155;">
+           <strong>Note from our team:</strong><br/>${esc(o.note).replace(/\n/g, '<br/>')}
+         </div>
+       </td></tr>`
+    : '';
+
+  return `<!doctype html>
+<html><body style="margin:0;padding:0;background:#f1f5f9;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;">
+  <tr><td style="background:${o.accent};padding:18px 28px;">
+    <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#ffffff;opacity:.85;">${esc(o.badge)}</div>
+    <div style="font-size:20px;font-weight:700;color:#ffffff;margin-top:4px;">${esc(o.title)}</div>
+  </td></tr>
+  <tr><td style="padding:24px 28px 8px;font-size:15px;line-height:1.6;color:#0f172a;">
+    <p style="margin:0 0 12px;">Hi ${esc(o.name)},</p>
+    ${o.paragraphs.map((p) => `<p style="margin:0 0 12px;">${p}</p>`).join('\n    ')}
+  </td></tr>
+  ${noteHtml}
+  <tr><td align="center" style="padding:12px 28px 8px;">
+    <a href="${ORDERS_URL}" target="_blank"
+       style="display:inline-block;background:${o.accent};color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 28px;border-radius:8px;">
+      ${esc(o.buttonLabel)}
+    </a>
+  </td></tr>
+  <tr><td align="center" style="padding:4px 28px 20px;font-size:13px;color:#64748b;">
+    or open <a href="${ORDERS_URL}" target="_blank" style="color:${o.accent};">${ORDERS_URL_LABEL}</a>
+  </td></tr>
+  <tr><td style="padding:16px 28px 22px;border-top:1px solid #e2e8f0;font-size:13px;color:#64748b;line-height:1.5;">
+    Please keep your login details private.<br/>
+    Thank you for shopping with <strong style="color:#0f172a;">Premium City</strong>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>`;
+}
+
+/** Sent when a manual order has been delivered. Green "ready" style. */
+export function tplManualDeliveryToUser(o: {
+  name: string;
+  orderId: string | null;
+  productName?: string | null;
+  note?: string;
+}) {
+  const label = shortOrderLabel(o.orderId);
+  const product = o.productName?.trim() || 'your order';
+  const subject = `Your ${product} is ready${label ? ` (order ${label})` : ''}`;
+  const note = o.note?.trim() || undefined;
+
+  const html = orderEmailLayout({
+    accent: '#059669',
+    badge: 'Order ready',
+    title: 'Your order is ready',
+    name: o.name,
+    paragraphs: [
+      `Good news! We have delivered <strong>${esc(product)}</strong>${
+        label ? ` for your order <strong>${esc(label)}</strong>` : ''
+      }.`,
+      'Your login details are waiting on your Orders page.',
+    ],
+    note,
+    buttonLabel: 'View my order',
+  });
+
+  const text = `Hi ${o.name},
+
+Good news! We have delivered ${product}${label ? ` for your order ${label}` : ''}.
+Your login details are waiting on your Orders page:
+${ORDERS_URL}
+${note ? `\nNote from our team:\n${note}\n` : ''}
+Please keep your login details private.
+Thank you for shopping with Premium City`;
+
+  return { subject, html, text };
+}
+
 /**
  * Sent when an admin updates the login details on an already-delivered order
- * (e.g. a warranty replacement). Like the delivery email, it does NOT include
- * the password — the customer views it on their Orders page.
+ * (e.g. a warranty replacement). Amber "updated" style. The new password is
+ * NOT included — the customer sees it on their Orders page.
  */
-export function tplAccountUpdatedToUser(
-  userEmail: string,
-  orderLabel: string,
-  productName: string,
-  note?: string
-) {
-  const safeNote = note?.trim();
-  const subject = `Your ${productName} account details were updated`;
+export function tplAccountUpdatedToUser(o: {
+  name: string;
+  orderId: string | null;
+  productName?: string | null;
+  note?: string;
+}) {
+  const label = shortOrderLabel(o.orderId);
+  const product = o.productName?.trim() || 'your product';
+  const subject = `We've updated your ${product} account${label ? ` (order ${label})` : ''}`;
+  const note = o.note?.trim() || undefined;
 
-  const htmlNote = safeNote
-    ? `<p style="margin-top:8px;"><strong>Note from our team:</strong><br/>${safeNote
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/\n/g, '<br/>')}</p>`
-    : '';
-  const textNote = safeNote ? `\nNote from our team:\n${safeNote}\n` : '';
+  const html = orderEmailLayout({
+    accent: '#d97706',
+    badge: 'Account updated',
+    title: 'Your account details were updated',
+    name: o.name,
+    paragraphs: [
+      `We have updated the login details for <strong>${esc(product)}</strong>${
+        label ? ` in your order <strong>${esc(label)}</strong>` : ''
+      }.`,
+      'Please use the new email / password from your Orders page — the old details will no longer work.',
+    ],
+    note,
+    buttonLabel: 'See updated details',
+  });
 
-  const html = `
-    <div style="font-family:system-ui,Segoe UI,Arial; font-size:14px; line-height:1.5;">
-      <h2 style="margin-bottom:8px;">Your account details were updated</h2>
-      <p>Hi,</p>
-      <p>
-        We have updated the login details for <strong>${productName}</strong>
-        in your Premium City order <strong>${orderLabel}</strong>.
-      </p>
-      <p>
-        Please sign in to your Premium City account (${userEmail}) and open the
-        <strong>Orders</strong> page to see the new email / password. The old
-        details will no longer work.
-      </p>
-      ${htmlNote}
-      <p style="margin-top:16px;">
-        Thank you for using Premium City,<br/>
-        <strong>Premium City Support</strong>
-      </p>
-    </div>
-  `;
+  const text = `Hi ${o.name},
 
-  const text = `Your account details were updated
-
-We have updated the login details for ${productName} in your Premium City order ${orderLabel}.
-
-Please sign in to your Premium City account (${userEmail}) and open the Orders page to see the new email / password. The old details will no longer work.${textNote}
-
-Thank you,
-Premium City Support`;
+We have updated the login details for ${product}${label ? ` in your order ${label}` : ''}.
+Please use the new email / password from your Orders page — the old details will no longer work:
+${ORDERS_URL}
+${note ? `\nNote from our team:\n${note}\n` : ''}
+Please keep your login details private.
+Thank you for shopping with Premium City`;
 
   return { subject, html, text };
 }

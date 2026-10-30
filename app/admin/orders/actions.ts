@@ -15,6 +15,8 @@ type OrderItemRow = {
   order_id: string;
   product_id: string;
   product_type: 'INSTANT' | 'MANUAL';
+  product_name?: string | null;
+  variant_name?: string | null;
 };
 
 type ManualItemRow = { id: string };
@@ -88,7 +90,7 @@ export async function fulfillManualItemAction(formData: FormData) {
   // --------------------------------------
   const { data: rawItem, error: itemError } = await supabase
     .from('order_items')
-    .select('id,order_id,product_id,product_type')
+    .select('id,order_id,product_id,product_type,product_name,variant_name')
     .eq('id', orderItemId)
     .maybeSingle();
 
@@ -159,7 +161,7 @@ export async function fulfillManualItemAction(formData: FormData) {
       // Load user email using user_id
       const { data: userRow, error: userError } = await supabase
         .from('users')
-        .select('email')
+        .select('email,name')
         .eq('id', order.user_id)
         .maybeSingle();
 
@@ -198,11 +200,12 @@ export async function fulfillManualItemAction(formData: FormData) {
         // Since order_number column doesn't exist, just use the order id as label
         const orderNumber = order.id;
 
-        const { subject, html, text } = tplManualDeliveryToUser(
-          targetEmail,
-          orderNumber,
-          note || undefined
-        );
+        const { subject, html, text } = tplManualDeliveryToUser({
+          name: (userRow as any)?.name || targetEmail.split('@')[0],
+          orderId: orderNumber,
+          productName: [item.product_name, item.variant_name].filter(Boolean).join(' · ') || null,
+          note: note || undefined,
+        });
 
         console.log(
           '[fulfillManualItemAction] Sending manual delivery email to:',
@@ -453,14 +456,18 @@ export async function updateDeliveredCredentialAction(
       : { data: null };
     const o: any = order ?? {};
     const { data: user } = o.user_id
-      ? await supabase.from('users').select('email').eq('id', o.user_id).maybeSingle()
+      ? await supabase.from('users').select('email,name').eq('id', o.user_id).maybeSingle()
       : { data: null };
     const userEmail: string = (user as any)?.email ?? '';
     if (!userEmail) return { ok: true, emailed: false, error: 'Saved, but no customer email found.' };
 
     const productName = [it.product_name, it.variant_name].filter(Boolean).join(' · ') || 'your product';
-    const orderLabel = o.id ? `#${String(o.id).slice(0, 8)}` : '';
-    const { subject, html, text } = tplAccountUpdatedToUser(userEmail, orderLabel, productName, note);
+    const { subject, html, text } = tplAccountUpdatedToUser({
+      name: (user as any)?.name || userEmail.split('@')[0],
+      orderId: o.id ?? null,
+      productName,
+      note,
+    });
     const sent: any = await sendEmail({ to: userEmail, subject, html, text });
     if (sent?.ok === false || sent?.skipped) {
       return { ok: true, emailed: false, error: 'Saved, but the email could not be sent.' };

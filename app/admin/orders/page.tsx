@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fulfillManualItemAction } from './actions';
 import { DeliveryForm } from './DeliveryForm';
+import { EditCredentialForm } from './EditCredentialForm';
 import { credentialToRows } from '@/lib/deliveryTypes';
 
 export const runtime = 'nodejs';
@@ -200,6 +201,15 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                               <ul className="space-y-1">
                                 {item.credentials.map((cred: any, idx: number) => {
                                   const rows = credentialToRows(cred);
+                                  const credId: string | undefined = item.credentialIds?.[idx];
+                                  const editable =
+                                    !!credId &&
+                                    cred &&
+                                    typeof cred === 'object' &&
+                                    (cred.type === 'email_password' ||
+                                      (!cred.type &&
+                                        (typeof cred.email === 'string' ||
+                                          typeof cred.password === 'string')));
                                   return (
                                     <li
                                       key={idx}
@@ -221,6 +231,28 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                                         <pre className="mt-1 whitespace-pre-wrap text-[11px] text-slate-300">
                                           {JSON.stringify(cred, null, 2)}
                                         </pre>
+                                      )}
+                                      {Array.isArray(cred?.history) && cred.history.length > 0 && (
+                                        <p className="mt-1 text-[10px] text-slate-500">
+                                          Updated {cred.history.length}× · last{' '}
+                                          {new Date(
+                                            cred.history[cred.history.length - 1].changedAt
+                                          ).toLocaleString('en-GB', {
+                                            day: '2-digit',
+                                            month: 'short',
+                                            year: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                          })}
+                                        </p>
+                                      )}
+                                      {editable && (
+                                        <EditCredentialForm
+                                          inventoryItemId={credId!}
+                                          email={String(cred.email ?? '')}
+                                          password={String(cred.password ?? '')}
+                                          note={String(cred.note ?? '')}
+                                        />
                                       )}
                                     </li>
                                   );

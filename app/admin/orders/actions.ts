@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/session';
 import { getServiceSupabaseClient } from '@/lib/supabase';
-import { sendEmail, tplManualDeliveryToUser } from '@/lib/email';
+import { sendEmail, tplManualDeliveryToUser, tplAccountUpdatedToUser } from '@/lib/email';
 import type { DeliveryType } from '@/lib/deliveryTypes';
 import { isNetflixLink } from '@/lib/netflix';
 
@@ -361,4 +361,113 @@ export async function dismissManualDeliveryAction(formData: FormData) {
   revalidatePath('/orders');
 
   return { success: true };
+}
+
+
+export type UpdateCredentialResult = { ok: boolean; error?: string; emailed?: boolean };
+
+/**
+ * Edit the email/password on an account that was ALREADY delivered on an order
+ * (e.g. a warranty replacement). The customer's Orders page reads the same row,
+ * so they see the new details immediately. Optionally emails the customer.
+ *
+ * Only email/password credentials can be edited here — keys, invite links and
+ * Netflix supplier links are a different shape (Netflix links have their own
+ * "Replace supplier link" tool on /admin/renewals).
+ */
+export async function updateDeliveredCredentialAction(
+  formData: FormData
+): Promise<UpdateCredentialResult> {
+  await requireAdmin();
+
+  const inventoryItemId = String(formData.get('inventoryItemId') ?? '').trim();
+  const email = String(formData.get('email') ?? '').trim();
+  const password = String(formData.get('password') ?? '').trim();
+  const note = String(formData.get('note') ?? '').trim();
+  const notify = formData.get('notify') === 'on';
+
+  if (!inventoryItemId) return { ok: false, error: 'Missing credential id.' };
+  if (!email && !password) return { ok: false, error: 'Email or password is required.' };
+
+  const supabase = getServiceSupabaseClient();
+
+  const { data: row, error: rowErr } = await supabase
+    .from('inventory_items')
+    .select('id,order_item_id,payload')
+    .eq('id', inventoryItemId)
+    .maybeSingle();
+  if (rowErr) return { ok: false, error: rowErr.message };
+  if (!row) return { ok: false, error: 'Credential not found.' };
+
+  const r: any = row;
+  if (!r.order_item_id) {
+    return { ok: false, error: 'This credential is unsold stock, not a delivered order.' };
+  }
+
+  const old: any = r.payload && typeof r.payload === 'object' ? r.payload : {};
+  const isEmailPassword =
+    old.type === 'email_password' ||
+    (!old.type && (typeof old.email === 'string' || typeof old.password === 'string'));
+  if (!isEmailPassword) {
+    return { ok: false, error: 'Only email/password accounts can be edited here.' };
+  }
+
+  if (email === (old.email ?? '') && password === (old.password ?? '') && note === (old.note ?? '')) {
+    return { ok: false, error: 'Nothing changed.' };
+  }
+
+  // Keep a short audit trail of WHEN details changed (no old passwords stored —
+  // this payload is also sent to the customer's Orders page).
+  const history = Array.isArray(old.history) ? old.history.slice(-4) : [];
+  history.push({ email: old.email ?? null, changedAt: new Date().toISOString() });
+
+  const payload: Record<string, unknown> = {
+    type: 'email_password', // also upgrades legacy untyped rows
+    ...(email ? { email } : {}),
+    ...(password ? { password } : {}),
+    ...(note ? { note } : {}),
+    history,
+  };
+
+  const { error: updErr } = await supabase
+    .from('inventory_items')
+    .update({ payload })
+    .eq('id', inventoryItemId);
+  if (updErr) return { ok: false, error: updErr.message };
+
+  revalidatePath('/admin/orders');
+  revalidatePath('/orders');
+
+  if (!notify) return { ok: true, emailed: false };
+
+  // Email the customer who owns this order.
+  try {
+    const { data: item } = await supabase
+      .from('order_items')
+      .select('order_id,product_name,variant_name')
+      .eq('id', r.order_item_id)
+      .maybeSingle();
+    const it: any = item ?? {};
+    const { data: order } = it.order_id
+      ? await supabase.from('orders').select('id,user_id').eq('id', it.order_id).maybeSingle()
+      : { data: null };
+    const o: any = order ?? {};
+    const { data: user } = o.user_id
+      ? await supabase.from('users').select('email').eq('id', o.user_id).maybeSingle()
+      : { data: null };
+    const userEmail: string = (user as any)?.email ?? '';
+    if (!userEmail) return { ok: true, emailed: false, error: 'Saved, but no customer email found.' };
+
+    const productName = [it.product_name, it.variant_name].filter(Boolean).join(' · ') || 'your product';
+    const orderLabel = o.id ? `#${String(o.id).slice(0, 8)}` : '';
+    const { subject, html, text } = tplAccountUpdatedToUser(userEmail, orderLabel, productName, note);
+    const sent: any = await sendEmail({ to: userEmail, subject, html, text });
+    if (sent?.ok === false || sent?.skipped) {
+      return { ok: true, emailed: false, error: 'Saved, but the email could not be sent.' };
+    }
+    return { ok: true, emailed: true };
+  } catch (err) {
+    console.error('[updateDeliveredCredential] email failed:', err);
+    return { ok: true, emailed: false, error: 'Saved, but the email could not be sent.' };
+  }
 }

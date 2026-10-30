@@ -516,3 +516,58 @@ export function getAdminRecipients(): string[] {
     .map((s) => s.trim())
     .filter(Boolean);
 }
+
+/**
+ * Sent when an admin updates the login details on an already-delivered order
+ * (e.g. a warranty replacement). Like the delivery email, it does NOT include
+ * the password — the customer views it on their Orders page.
+ */
+export function tplAccountUpdatedToUser(
+  userEmail: string,
+  orderLabel: string,
+  productName: string,
+  note?: string
+) {
+  const safeNote = note?.trim();
+  const subject = `Your ${productName} account details were updated`;
+
+  const htmlNote = safeNote
+    ? `<p style="margin-top:8px;"><strong>Note from our team:</strong><br/>${safeNote
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/\n/g, '<br/>')}</p>`
+    : '';
+  const textNote = safeNote ? `\nNote from our team:\n${safeNote}\n` : '';
+
+  const html = `
+    <div style="font-family:system-ui,Segoe UI,Arial; font-size:14px; line-height:1.5;">
+      <h2 style="margin-bottom:8px;">Your account details were updated</h2>
+      <p>Hi,</p>
+      <p>
+        We have updated the login details for <strong>${productName}</strong>
+        in your Premium City order <strong>${orderLabel}</strong>.
+      </p>
+      <p>
+        Please sign in to your Premium City account (${userEmail}) and open the
+        <strong>Orders</strong> page to see the new email / password. The old
+        details will no longer work.
+      </p>
+      ${htmlNote}
+      <p style="margin-top:16px;">
+        Thank you for using Premium City,<br/>
+        <strong>Premium City Support</strong>
+      </p>
+    </div>
+  `;
+
+  const text = `Your account details were updated
+
+We have updated the login details for ${productName} in your Premium City order ${orderLabel}.
+
+Please sign in to your Premium City account (${userEmail}) and open the Orders page to see the new email / password. The old details will no longer work.${textNote}
+
+Thank you,
+Premium City Support`;
+
+  return { subject, html, text };
+}

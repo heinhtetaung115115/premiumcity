@@ -29,6 +29,8 @@ export type OrderItemView = {
   productType: 'INSTANT' | 'MANUAL' | 'VPN_OUTLINE' | string;
   manualInput: Record<string, string> | null;
   credentials: any[]; // array of payload objects from inventory_items
+  /** inventory_items ids, same order as `credentials`. Admin views only. */
+  credentialIds?: string[];
 
   // === VPN-specific fields (for VPN items whose VARIANT has vpn_plan_id) ===
   vpnCountry?: string | null;
@@ -1627,6 +1629,7 @@ export async function listOrdersForAdmin(opts: {
 
   // Credentials (chunked)
   let credsByItem: Record<string, any[]> = {};
+  const credIdsByItem: Record<string, string[]> = {};
   if (itemIds.length > 0) {
     credsByItem = {};
     for (const ids of chunk(itemIds, IN_CHUNK_SIZE)) {
@@ -1643,6 +1646,7 @@ export async function listOrdersForAdmin(opts: {
           credsByItem[row.order_item_id] = [];
         }
         credsByItem[row.order_item_id]!.push(row.payload);
+        (credIdsByItem[row.order_item_id] ??= []).push(String(row.id));
       }
     }
   }
@@ -1706,6 +1710,7 @@ export async function listOrdersForAdmin(opts: {
         | Record<string, string>
         | null,
       credentials: credsByItem[item.id] ?? [],
+      credentialIds: credIdsByItem[item.id] ?? [],
 
       vpnCountry: primaryVpn?.country ?? null,
       vpnPlanName: primaryVpn?.plan_name ?? null,

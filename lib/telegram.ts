@@ -195,6 +195,63 @@ export async function notifyNewTopup(topup: {
   });
 }
 
+/**
+ * Sent when the slip-reading AI (Claude API) fails for a KBZ auto top-up.
+ * Includes the slip photo, because slips aren't stored anywhere else — this
+ * message is the admin's only way to see what the customer uploaded.
+ * Falls back to a text-only message if the photo upload fails.
+ */
+export async function notifySlipAiDown(opts: {
+  topupId: string;
+  userEmail: string;
+  amount: number;
+  problem: string;
+  imageBase64: string;
+  mediaType: string;
+}): Promise<boolean> {
+  const caption = [
+    '🚨 <b>Slip AI is DOWN</b>',
+    `⚠️ ${esc(opts.problem)}`,
+    'KBZ auto top-up moved to <b>manual review</b>. Check the slip below.',
+    '',
+    `👤 <b>User:</b> ${esc(opts.userEmail)}`,
+    `💵 <b>Amount entered:</b> ${opts.amount.toLocaleString()} MMK`,
+  ].join('\n');
+
+  const buttons: InlineButton[][] = [
+    [
+      { text: '✅ Approve', callback_data: `approve_topup:${opts.topupId}` },
+      { text: '❌ Reject', callback_data: `reject_topup:${opts.topupId}` },
+    ],
+    [{ text: '🔗 Open Admin Panel', url: `${SITE_URL}/admin/topups` }],
+  ];
+
+  if (BOT_TOKEN && CHAT_ID && opts.imageBase64) {
+    try {
+      const bytes = Buffer.from(opts.imageBase64, 'base64');
+      const ext = opts.mediaType.includes('png') ? 'png' : opts.mediaType.includes('webp') ? 'webp' : 'jpg';
+      const form = new FormData();
+      form.append('chat_id', String(CHAT_ID));
+      form.append('caption', caption);
+      form.append('parse_mode', 'HTML');
+      form.append('reply_markup', JSON.stringify({ inline_keyboard: buttons }));
+      form.append('photo', new Blob([new Uint8Array(bytes)], { type: opts.mediaType || 'image/jpeg' }), `slip.${ext}`);
+
+      const res = await fetch(tgApi('sendPhoto'), { method: 'POST', body: form });
+      if (res.ok) return true;
+      console.error('[telegram] sendPhoto failed:', res.status, await res.text().catch(() => ''));
+    } catch (err) {
+      console.error('[telegram] sendPhoto exception:', err);
+    }
+  }
+
+  // Fallback: text only (e.g. photo too large)
+  return sendTelegramMessage({
+    text: caption + '\n\n(Slip photo could not be attached.)',
+    buttons,
+  });
+}
+
 export async function notifyNewManualOrder(order: {
   orderId: string;
   userEmail: string;

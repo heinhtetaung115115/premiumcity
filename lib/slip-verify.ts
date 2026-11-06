@@ -10,6 +10,35 @@ const ADMIN_ACCOUNTS = [
 
 const AUTO_APPROVE_MAX = 50000;
 
+/**
+ * Thrown when the slip-reading AI itself can't be used (missing/invalid key,
+ * no credits, rate limit, outage, network). This is OUR problem, not a bad
+ * image from the customer, so the caller should fall back to manual review
+ * and alert the admin instead of telling the customer their slip is unclear.
+ */
+export class SlipAiUnavailableError extends Error {
+  status: number | null;
+  constructor(message: string, status: number | null = null) {
+    super(message);
+    this.name = 'SlipAiUnavailableError';
+    this.status = status;
+  }
+}
+
+/** Short human hint for the admin alert, based on the API error. */
+export function describeAiFailure(err: SlipAiUnavailableError): string {
+  const s = err.status;
+  const m = err.message.toLowerCase();
+  if (s === null && m.includes('not configured')) return 'ANTHROPIC_API_KEY is not set in Vercel env';
+  if (m.includes('credit')) return 'API credit balance is too low — top up credits';
+  if (s === 401) return 'API key is invalid or revoked';
+  if (s === 403) return 'API key has no permission (account may be disabled)';
+  if (s === 429) return 'Rate limited by the API';
+  if (s === 529 || (s !== null && s >= 500)) return 'Claude API is down / overloaded';
+  if (s === null) return 'Could not reach the Claude API (network error)';
+  return `Claude API error ${s}`;
+}
+
 // ── QR Scanning ─────────────────────────────────────────
 
 export async function scanQrFromImage(imageBase64: string): Promise<string | null> {
@@ -128,9 +157,11 @@ export type SlipData = {
 };
 
 export async function extractSlipData(imageBase64: string, mediaType: string = 'image/jpeg'): Promise<SlipData> {
-  if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
+  if (!ANTHROPIC_API_KEY) throw new SlipAiUnavailableError('ANTHROPIC_API_KEY not configured');
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  let response: Response;
+  try {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
@@ -173,11 +204,21 @@ Return ONLY a JSON object, no backticks:
       }],
     }),
   });
+  } catch (netErr: any) {
+    console.error('[slip-verify] Claude API network error:', netErr);
+    throw new SlipAiUnavailableError(`Network error: ${netErr?.message ?? netErr}`);
+  }
 
   if (!response.ok) {
     const err = await response.text().catch(() => '');
     console.error('[slip-verify] Claude API error:', response.status, err);
-    throw new Error(`Claude API error ${response.status}: ${err}`);
+    // A plain 400 usually means the image itself was rejected (too big, bad
+    // format) — that's the customer's image. Everything else (auth, no
+    // credits — which the API reports as a 400 — rate limit, outage) is the
+    // AI being unavailable.
+    const isImageProblem = response.status === 400 && !/credit/i.test(err);
+    if (isImageProblem) throw new Error(`Claude API error ${response.status}: ${err}`);
+    throw new SlipAiUnavailableError(`Claude API error ${response.status}: ${err.slice(0, 300)}`, response.status);
   }
 
   const data = await response.json();

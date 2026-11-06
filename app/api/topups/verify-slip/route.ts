@@ -3,9 +3,9 @@ import { NextResponse } from 'next/server';
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import { getServerSession } from 'next-auth';
 import { authConfig } from '@/lib/auth';
-import { verifyKbzSlip } from '@/lib/slip-verify';
+import { verifyKbzSlip, SlipAiUnavailableError, describeAiFailure } from '@/lib/slip-verify';
 import { approveTopup, rejectTopup, TopupAlreadyProcessedError } from '@/lib/wallet';
-import { notifyNewTopup } from '@/lib/telegram';
+import { notifyNewTopup, notifySlipAiDown } from '@/lib/telegram';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
@@ -130,6 +130,45 @@ export async function POST(req: Request) {
       checkDuplicate,
     });
   } catch (err: any) {
+    // ── AI itself is down (bad key, no credits, outage) ──
+    // Not the customer's fault: keep the top-up PENDING for manual review,
+    // alert admin on Telegram with the slip photo, and reassure the customer.
+    if (err instanceof SlipAiUnavailableError) {
+      const problem = describeAiFailure(err);
+      console.error('[verify-slip] Slip AI unavailable:', problem, '|', err.message);
+
+      await supabase.from('topups').update({
+        metadata: {
+          slip_verification: {
+            decision: 'MANUAL_REVIEW',
+            reason: `Slip AI unavailable: ${problem}`,
+            ai_error: err.message.slice(0, 500),
+            verified_at: new Date().toISOString(),
+          },
+          verified_transaction_id: null,
+        },
+      }).eq('id', topupId);
+
+      try {
+        await notifySlipAiDown({
+          topupId,
+          userEmail: (session.user as any).email || '',
+          amount: Number(t.amount),
+          problem,
+          imageBase64,
+          mediaType: mediaType || 'image/jpeg',
+        });
+      } catch (tgErr) {
+        console.error('[verify-slip] Telegram alert failed:', tgErr);
+      }
+
+      return NextResponse.json({
+        status: 'manual_review',
+        reason_mm: 'Payment Slip လက်ခံရရှိပါသည်။ စစ်ဆေးပြီးပါက အသိပေးပါမည်',
+        reason_en: 'Payment slip received. Our team will verify shortly.',
+      });
+    }
+
     console.error('[verify-slip] error:', err);
     return NextResponse.json(
       { error: 'Could not verify slip. Ensure image is clear.' },

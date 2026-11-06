@@ -5,7 +5,8 @@ import { getServiceSupabaseClient } from '@/lib/supabase';
 import { listOrdersForUser } from '@/lib/orders';
 import { getWalletPageData } from '@/lib/wallet';
 import { Button } from '@/components/ui';
-import { credentialToRows } from '@/lib/deliveryTypes';
+import { credentialToRows, isEditableCredential } from '@/lib/deliveryTypes';
+import { EditCredentialForm } from '../orders/EditCredentialForm';
 import { AdminTopupForm } from './AdminTopupForm';
 
 type PageProps = {
@@ -512,6 +513,8 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                   <ul className="space-y-1">
                                     {item.credentials.map((cred: any, idx: number) => {
                                       const rows = credentialToRows(cred);
+                                      const credId: string | undefined = item.credentialIds?.[idx];
+                                      const editable = !!credId && isEditableCredential(cred);
                                       return (
                                         <li
                                           key={idx}
@@ -533,6 +536,20 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                             <pre className="mt-1 whitespace-pre-wrap text-[11px] text-slate-300">
                                               {JSON.stringify(cred, null, 2)}
                                             </pre>
+                                          )}
+                                          {Array.isArray(cred?.history) && cred.history.length > 0 && (
+                                            <p className="mt-1 text-[10px] text-slate-500">
+                                              Updated {cred.history.length}× · last{' '}
+                                              {formatDate(cred.history[cred.history.length - 1].changedAt)}
+                                            </p>
+                                          )}
+                                          {editable && (
+                                            <EditCredentialForm
+                                              inventoryItemId={credId!}
+                                              email={String(cred.email ?? '')}
+                                              password={String(cred.password ?? '')}
+                                              note={String(cred.note ?? '')}
+                                            />
                                           )}
                                         </li>
                                       );

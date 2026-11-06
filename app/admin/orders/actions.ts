@@ -439,6 +439,7 @@ export async function updateDeliveredCredentialAction(
   if (updErr) return { ok: false, error: updErr.message };
 
   revalidatePath('/admin/orders');
+  revalidatePath('/admin/users');
   revalidatePath('/orders');
 
   if (!notify) return { ok: true, emailed: false };

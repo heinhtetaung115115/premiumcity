@@ -980,6 +980,8 @@ export async function listOrdersForUser(
 
   // Credentials
   let credsByItem: Record<string, any[]> = {};
+  // Only caller is the admin user page, which needs ids for "Edit account".
+  const credIdsByItem: Record<string, string[]> = {};
   if (itemIds.length > 0) {
     const { data: credRows, error: credError } = await supabase
       .from('inventory_items')
@@ -993,8 +995,10 @@ export async function listOrdersForUser(
       if (!row.order_item_id) continue;
       if (!credsByItem[row.order_item_id]) {
         credsByItem[row.order_item_id] = [];
+        credIdsByItem[row.order_item_id] = [];
       }
       credsByItem[row.order_item_id]!.push(row.payload);
+      credIdsByItem[row.order_item_id]!.push(String(row.id));
     }
   }
 
@@ -1055,6 +1059,7 @@ export async function listOrdersForUser(
         | Record<string, string>
         | null,
       credentials: credsByItem[item.id] ?? [],
+      credentialIds: credIdsByItem[item.id] ?? [],
 
       vpnCountry: primaryVpn?.country ?? null,
       vpnPlanName: primaryVpn?.plan_name ?? null,

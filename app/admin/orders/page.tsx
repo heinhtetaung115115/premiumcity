@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { fulfillManualItemAction } from './actions';
 import { DeliveryForm } from './DeliveryForm';
 import { EditCredentialForm } from './EditCredentialForm';
-import { credentialToRows } from '@/lib/deliveryTypes';
+import { credentialToRows, isEditableCredential } from '@/lib/deliveryTypes';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -202,14 +202,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                                 {item.credentials.map((cred: any, idx: number) => {
                                   const rows = credentialToRows(cred);
                                   const credId: string | undefined = item.credentialIds?.[idx];
-                                  const editable =
-                                    !!credId &&
-                                    cred &&
-                                    typeof cred === 'object' &&
-                                    (cred.type === 'email_password' ||
-                                      (!cred.type &&
-                                        (typeof cred.email === 'string' ||
-                                          typeof cred.password === 'string')));
+                                  const editable = !!credId && isEditableCredential(cred);
                                   return (
                                     <li
                                       key={idx}

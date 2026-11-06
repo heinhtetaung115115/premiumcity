@@ -70,3 +70,13 @@ export function credentialToRows(payload: Record<string, unknown> | null | undef
   }
   return rows;
 }
+
+/** True when a delivered credential is an email/password account the admin can edit. */
+export function isEditableCredential(cred: unknown): boolean {
+  if (!cred || typeof cred !== 'object') return false;
+  const c = cred as any;
+  return (
+    c.type === 'email_password' ||
+    (!c.type && (typeof c.email === 'string' || typeof c.password === 'string'))
+  );
+}

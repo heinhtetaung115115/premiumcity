@@ -36,7 +36,9 @@ export function isValidSession(value: string | undefined | null): boolean {
 }
 
 export function checkPassword(input: string): boolean {
-  const real = process.env.PANEL_ADMIN_PASSWORD || '';
+  // Trim both: a space/newline pasted into Vercel's env field is invisible.
+  const real = (process.env.PANEL_ADMIN_PASSWORD || '').trim();
+  input = String(input || '').trim();
   if (!real || !input) return false;
   const a = crypto.createHash('sha256').update(input).digest();
   const b = crypto.createHash('sha256').update(real).digest();

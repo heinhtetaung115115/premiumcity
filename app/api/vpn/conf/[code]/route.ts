@@ -13,9 +13,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(_req: Request, { params }: { params: { code: string } }) {
   const result = await getDynamicConfig(params.code);
   const headers = { 'Cache-Control': 'no-store', 'Content-Type': 'application/json' };
-  if ('error' in result) {
+  if (result.error || !result.config) {
     // Outline shows error.message to the user inside the app.
-    return new NextResponse(JSON.stringify({ error: { message: result.error } }), { status: 200, headers });
+    return new NextResponse(JSON.stringify({ error: { message: result.error || 'Key not available.' } }), { status: 200, headers });
   }
   return new NextResponse(JSON.stringify(result.config), { status: 200, headers });
 }

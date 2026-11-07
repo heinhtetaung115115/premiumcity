@@ -313,7 +313,7 @@ type RotateOptions = {
 export async function rotateKey(
   subscriptionId: string,
   opts: RotateOptions
-): Promise<{ ok: true; serverName: string | null } | { ok: false; error: string }> {
+): Promise<{ ok: boolean; serverName?: string | null; error?: string }> {
   const supabase = getServiceSupabaseClient();
 
   const { data: locked } = await supabase.rpc('vpn_try_lock', { p_subscription_id: subscriptionId });
@@ -442,7 +442,7 @@ export async function replacementsLeft(subscriptionId: string): Promise<number> 
 
 export async function customerRequestNewKey(
   code: string
-): Promise<{ ok: true; left: number } | { ok: false; error: string; left?: number }> {
+): Promise<{ ok: boolean; left?: number; error?: string }> {
   const supabase = getServiceSupabaseClient();
   const sub = await getSubscriptionByCode(code);
   if (!sub || isExpired(sub)) return { ok: false, error: 'This VPN plan has expired.' };
@@ -596,7 +596,7 @@ export async function getStatusView(code: string): Promise<VpnStatusView | null>
 /** JSON for the Outline app (dynamic access key). */
 export async function getDynamicConfig(
   code: string
-): Promise<{ config: SsConfig } | { error: string }> {
+): Promise<{ config?: SsConfig; error?: string }> {
   const sub = await getSubscriptionByCode(code);
   if (!sub) return { error: 'Key not found. Please contact PremiumCity.' };
   if (isExpired(sub)) return { error: 'Your VPN plan has expired. Renew at PremiumCity (pcitystore.com).' };

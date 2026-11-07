@@ -34,13 +34,15 @@ export async function addServerAction(formData: FormData): Promise<Result> {
   }
 
   const supabase = getServiceSupabaseClient();
+  const isBackup = formData.get('isBackup') === 'on';
   const { error } = await supabase.from('vpn_servers').insert({
     name,
     country,
     api_url: apiUrl,
     paid_until: paidUntil || null,
     is_active: true,
-    accepting_new: true,
+    accepting_new: !isBackup,
+    is_backup: isBackup,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath('/admin/vpn');
@@ -55,6 +57,11 @@ export async function updateServerAction(formData: FormData): Promise<Result> {
   if (formData.has('paidUntil')) patch.paid_until = String(formData.get('paidUntil') || '') || null;
   if (formData.has('acceptingNew')) patch.accepting_new = formData.get('acceptingNew') === 'true';
   if (formData.has('isActive')) patch.is_active = formData.get('isActive') === 'true';
+  if (formData.has('isBackup')) {
+    const backup = formData.get('isBackup') === 'true';
+    patch.is_backup = backup;
+    patch.accepting_new = !backup; // backups stay empty until a failover
+  }
   const supabase = getServiceSupabaseClient();
   const { error } = await supabase.from('vpn_servers').update(patch).eq('id', id);
   if (error) return { ok: false, error: error.message };

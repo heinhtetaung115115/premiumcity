@@ -71,6 +71,10 @@ export function AddServerForm({ action }: { action: (fd: FormData) => Promise<Re
         className={input}
         required
       />
+      <label className="flex items-center gap-2 text-xs text-slate-300">
+        <input type="checkbox" name="isBackup" />
+        Backup server (stays empty; customers move here only when the main server is down)
+      </label>
       <button
         disabled={busy}
         className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
@@ -89,6 +93,7 @@ export function ServerControls({
   paidUntil,
   acceptingNew,
   isActive,
+  isBackup,
   activeCustomers,
   otherServers,
   updateAction,
@@ -98,6 +103,7 @@ export function ServerControls({
   paidUntil: string | null;
   acceptingNew: boolean;
   isActive: boolean;
+  isBackup: boolean;
   activeCustomers: number;
   otherServers: { id: string; label: string }[];
   updateAction: (fd: FormData) => Promise<Result>;
@@ -118,6 +124,13 @@ export function ServerControls({
           </label>
           <button disabled={upd.busy} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-emerald-400">
             Save
+          </button>
+        </form>
+        <form action={upd.run}>
+          <input type="hidden" name="serverId" value={serverId} />
+          <input type="hidden" name="isBackup" value={String(!isBackup)} />
+          <button disabled={upd.busy} className="rounded-lg border border-sky-500/40 px-3 py-2 text-xs font-semibold text-sky-300 hover:bg-sky-500/10">
+            {isBackup ? 'Make main (not backup)' : 'Make backup'}
           </button>
         </form>
         <form action={upd.run}>

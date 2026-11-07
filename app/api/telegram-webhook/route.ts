@@ -10,6 +10,7 @@ import {
   getDashboardButtons,
   getDashboardText,
 } from '@/lib/telegram';
+import { queueMoveToBackup, processPendingMoves } from '@/lib/vpn';
 import {
   sendEmail,
   tplTopupApproved,
@@ -18,6 +19,8 @@ import {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// "Move all to backup" runs inside the button press for up to ~45s.
+export const maxDuration = 60;
 
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const ADMIN_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
@@ -221,6 +224,25 @@ async function handleCallback(cb: any) {
   if (data.startsWith('reject_topup:')) {
     const topupId = data.replace('reject_topup:', '');
     await handleRejectTopup(topupId, cb.id, chatId, messageId);
+    return;
+  }
+
+  // ── VPN: move all customers to the backup server ──
+  if (data.startsWith('vpnmv:')) {
+    const serverId = data.replace('vpnmv:', '');
+    await answerCallbackQuery(cb.id, '⏳ Starting move…');
+    const q = await queueMoveToBackup(serverId);
+    if (!q.ok) {
+      await sendTelegramMessage({ text: `❌ Could not start move: ${q.error}` });
+      return;
+    }
+    await editMessageText(
+      chatId,
+      messageId,
+      `⏳ <b>Moving customers</b>\n${q.fromName || 'server'} → <b>${q.toName || 'backup'}</b>\nYou will get a message when it is done.`
+    );
+    // Do as much as fits in this request; the 5-minute health check finishes the rest.
+    await processPendingMoves(45_000);
     return;
   }
 

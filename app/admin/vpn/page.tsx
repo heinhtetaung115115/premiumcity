@@ -137,7 +137,16 @@ export default async function AdminVpnPage({ searchParams }: PageProps) {
                     <span className={`rounded-full px-2 py-0.5 font-semibold ${s.is_active === false ? 'bg-slate-800 text-slate-400' : 'bg-emerald-500/15 text-emerald-300'}`}>
                       {s.is_active === false ? 'Off' : 'On'}
                     </span>
-                    {s.is_active !== false && s.accepting_new === false && (
+                    {s.is_backup && (
+                      <span className="rounded-full bg-sky-500/15 px-2 py-0.5 font-semibold text-sky-300">Backup</span>
+                    )}
+                    {s.is_active !== false && (s.health_fail_count ?? 0) >= 2 && (
+                      <span className="rounded-full bg-rose-500/20 px-2 py-0.5 font-semibold text-rose-300">Down</span>
+                    )}
+                    {s.pending_move_to && (
+                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">Moving…</span>
+                    )}
+                    {s.is_active !== false && !s.is_backup && s.accepting_new === false && (
                       <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">No new sales</span>
                     )}
                   </div>
@@ -148,13 +157,16 @@ export default async function AdminVpnPage({ searchParams }: PageProps) {
                     💳 Paid until {s.paid_until ?? '—'}
                     {daysLeft != null ? ` (${daysLeft}d)` : ''}
                   </span>
-                  <span className="text-slate-500">Synced {s.last_usage_sync_at ? fmtDate(s.last_usage_sync_at) : 'never'}</span>
+                  <span className="text-slate-500">
+                    Checked {s.last_health_at ? new Date(s.last_health_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Yangon' }) : 'never'}
+                  </span>
                 </div>
                 <ServerControls
                   serverId={s.id}
                   paidUntil={s.paid_until}
                   acceptingNew={s.accepting_new !== false}
                   isActive={s.is_active !== false}
+                  isBackup={s.is_backup === true}
                   activeCustomers={customers}
                   otherServers={activeServers.filter((o) => o.id !== s.id).map((o) => ({ id: o.id, label: serverLabel(o) }))}
                   updateAction={updateServerAction}

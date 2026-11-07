@@ -40,6 +40,12 @@ export type VpnServer = {
   paid_until: string | null;
   last_usage_sync_at: string | null;
   created_at: string | null;
+  is_backup: boolean | null;
+  health_fail_count: number | null;
+  last_health_at: string | null;
+  down_alerted_at: string | null;
+  blocked_alerted_at: string | null;
+  pending_move_to: string | null;
 };
 
 export type VpnSubscription = {
@@ -85,7 +91,7 @@ const SUB_COLS =
 const KEY_COLS =
   'id,subscription_id,vpn_server_id,outline_key_id,ss_uri,used_bytes,is_current,created_at,user_id,order_id,order_item_id,vpn_plan_id,country,plan_name';
 const SERVER_COLS =
-  'id,name,country,api_url,is_active,accepting_new,paid_until,last_usage_sync_at,created_at';
+  'id,name,country,api_url,is_active,accepting_new,paid_until,last_usage_sync_at,created_at,is_backup,health_fail_count,last_health_at,down_alerted_at,blocked_alerted_at,pending_move_to';
 
 // ─── Small helpers ──────────────────────────────────────
 
@@ -198,6 +204,7 @@ export async function pickServer(country: string | null, excludeId?: string | nu
     (s) =>
       s.is_active !== false &&
       s.accepting_new !== false &&
+      s.is_backup !== true &&
       s.id !== excludeId &&
       (!c || String(s.country || '').toUpperCase() === c)
   );
@@ -313,16 +320,27 @@ type RotateOptions = {
   knownUsage?: Record<string, number> | null;
   /** Old server is unreachable: don't wait on it. */
   oldServerDead?: boolean;
+  /** Only swap if the current key is still on this server (makes moves safe to repeat). */
+  onlyIfOnServerId?: string | null;
 };
 
 export async function rotateKey(
   subscriptionId: string,
   opts: RotateOptions
-): Promise<{ ok: boolean; serverName?: string | null; error?: string }> {
+): Promise<{
+  ok: boolean;
+  serverName?: string | null;
+  fromServerId?: string | null;
+  error?: string;
+  busy?: boolean;
+  skipped?: boolean;
+}> {
   const supabase = getServiceSupabaseClient();
 
   const { data: locked } = await supabase.rpc('vpn_try_lock', { p_subscription_id: subscriptionId });
-  if (locked !== true) return { ok: false, error: 'This key is being updated right now. Try again in a minute.' };
+  if (locked !== true) {
+    return { ok: false, busy: true, error: 'This key is being updated right now. Try again in a minute.' };
+  }
 
   try {
     const sub = await getSubscriptionById(subscriptionId);
@@ -330,6 +348,10 @@ export async function rotateKey(
 
     const oldKey = await getCurrentKey(sub.id);
     const oldServer = oldKey ? await getServer(oldKey.vpn_server_id) : null;
+
+    if (opts.onlyIfOnServerId && oldKey?.vpn_server_id !== opts.onlyIfOnServerId) {
+      return { ok: true, skipped: true, serverName: null }; // already moved
+    }
 
     let target: VpnServer | null = null;
     if (opts.targetServerId) target = await getServer(opts.targetServerId);
@@ -408,8 +430,25 @@ export async function rotateKey(
       })
       .eq('id', sub.id);
 
-    // customer_request rows are written by vpn_claim_replacement already
-    if (opts.reason !== 'customer_request') {
+    // customer_request rows are written by vpn_claim_replacement already —
+    // just record which server the complaint was about.
+    if (opts.reason === 'customer_request') {
+      const { data: claimRows } = await supabase
+        .from('vpn_key_replacements')
+        .select('id')
+        .eq('subscription_id', sub.id)
+        .eq('reason', 'customer_request')
+        .is('from_server_id', null)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const claimId = ((claimRows ?? []) as any[])[0]?.id;
+      if (claimId) {
+        await supabase
+          .from('vpn_key_replacements')
+          .update({ from_server_id: oldServer?.id ?? null, to_server_id: target.id })
+          .eq('id', claimId);
+      }
+    } else {
       await supabase.from('vpn_key_replacements').insert({
         subscription_id: sub.id,
         reason: opts.reason,
@@ -423,7 +462,7 @@ export async function rotateKey(
       await outlineDeleteKey(oldServer.api_url, oldKey.outline_key_id);
     }
 
-    return { ok: true, serverName: target.name };
+    return { ok: true, serverName: target.name, fromServerId: oldServer?.id ?? null };
   } finally {
     await supabase.rpc('vpn_unlock', { p_subscription_id: subscriptionId });
   }
@@ -478,6 +517,9 @@ export async function customerRequestNewKey(
   }
 
   const left = await replacementsLeft(sub.id);
+  if (res.fromServerId) {
+    await checkMaybeBlocked(res.fromServerId).catch(() => {});
+  }
 
   // Tell admin: several complaints about the same server = it may be blocked.
   try {
@@ -704,25 +746,35 @@ export async function moveAllCustomers(
 
   let moved = 0;
   let failed = 0;
+  let busy = 0;
+  let skippedOrMoved = 0; // processed in this run (moved, skipped, busy or failed)
   const errors: string[] = [];
   for (const id of activeIds) {
     if (Date.now() - started > budgetMs) break;
+    skippedOrMoved++;
     const res = await rotateKey(id, {
       reason: 'server_move',
       targetServerId: to.id,
       knownUsage: usage ?? {},
       oldServerDead: !alive,
+      onlyIfOnServerId: from.id,
     });
-    if (res.ok) moved++;
-    else {
+    if (res.ok) {
+      if (!res.skipped) moved++;
+    } else if (res.busy) {
+      busy++; // another run is moving this one right now — count as remaining
+    } else {
       failed++;
       if (errors.length < 5) errors.push(res.error);
     }
   }
 
-  const remaining = activeIds.length - moved - failed;
+  // Not reached because of the time budget, plus ones another run was busy with.
+  const remaining = activeIds.length - skippedOrMoved + busy;
   if (remaining === 0 && failed === 0) {
-    await supabase.from('vpn_servers').update({ is_active: false }).eq('id', from.id);
+    await supabase.from('vpn_servers').update({ is_active: false, pending_move_to: null }).eq('id', from.id);
+    // The server we moved to now carries customers: let it take new sales.
+    await supabase.from('vpn_servers').update({ accepting_new: true, is_backup: false }).eq('id', to.id);
   }
   return { moved, failed, remaining, errors };
 }
@@ -837,7 +889,6 @@ export async function runDailyMaintenance(budgetMs = 250_000): Promise<Record<st
   for (const s of servers) {
     if (s.is_active === false) continue;
     const lines: string[] = [];
-    if (deadServers.has(s.id)) lines.push('❌ Server is NOT answering (down?).');
     if (s.paid_until) {
       const daysLeft = Math.ceil((new Date(s.paid_until).getTime() - today.getTime()) / DAY_MS);
       if (daysLeft <= 3) {
@@ -911,4 +962,198 @@ export async function attachVpnStatus(orders: { items: any[] }[]): Promise<void>
   } catch (e) {
     console.warn('attachVpnStatus failed:', e);
   }
+}
+
+// ─── Health checks, backup failover (semi-automatic) ────
+
+const MOVE_CB_PREFIX = 'vpnmv:'; // Telegram button: vpnmv:<serverId>
+const BLOCKED_THRESHOLD = 3; // different customers replacing keys…
+const BLOCKED_WINDOW_MIN = 60; // …on the same server within this many minutes
+
+function moveButtons(serverId: string) {
+  return [
+    [{ text: '🔁 Move all to backup', callback_data: `${MOVE_CB_PREFIX}${serverId}` }],
+    [{ text: '🔗 VPN admin', url: `${siteUrl()}/admin/vpn` }],
+  ];
+}
+
+async function customersOnServer(serverId: string): Promise<number> {
+  const supabase = getServiceSupabaseClient();
+  const { data } = await supabase
+    .from('vpn_keys')
+    .select('id')
+    .eq('vpn_server_id', serverId)
+    .eq('is_current', true)
+    .limit(5000);
+  return ((data ?? []) as any[]).length;
+}
+
+/** Best live backup for a server: same country first. */
+export async function findBackupFor(serverId: string): Promise<VpnServer | null> {
+  const servers = await listServers();
+  const down = servers.find((s) => s.id === serverId);
+  const c = String(down?.country || '').toUpperCase();
+  const candidates = servers
+    .filter((s) => s.id !== serverId && s.is_active !== false && s.is_backup === true && !s.pending_move_to)
+    .sort((a, b) => {
+      const sa = String(a.country || '').toUpperCase() === c ? 0 : 1;
+      const sb = String(b.country || '').toUpperCase() === c ? 0 : 1;
+      return sa - sb;
+    });
+  for (const b of candidates) {
+    if (await outlinePing(b.api_url)) return b;
+  }
+  return null;
+}
+
+/** Queue "move all customers" from a server to its backup (Telegram button / admin). */
+export async function queueMoveToBackup(
+  serverId: string
+): Promise<{ ok: boolean; error?: string; fromName?: string; toName?: string }> {
+  const supabase = getServiceSupabaseClient();
+  const from = await getServer(serverId);
+  if (!from) return { ok: false, error: 'Server not found.' };
+  if (from.pending_move_to) {
+    const to = await getServer(from.pending_move_to);
+    return { ok: true, fromName: from.name ?? '', toName: to?.name ?? '' };
+  }
+  const backup = await findBackupFor(serverId);
+  if (!backup) {
+    return { ok: false, error: 'No working backup server. Add one in VPN admin and mark it as Backup.' };
+  }
+  await supabase
+    .from('vpn_servers')
+    .update({ pending_move_to: backup.id, accepting_new: false })
+    .eq('id', serverId);
+  return { ok: true, fromName: from.name ?? '', toName: backup.name ?? '' };
+}
+
+/** Run queued moves (called by the Telegram button and every health check). */
+export async function processPendingMoves(budgetMs: number): Promise<void> {
+  const started = Date.now();
+  const servers = await listServers();
+  for (const from of servers.filter((s) => s.pending_move_to)) {
+    const left = budgetMs - (Date.now() - started);
+    if (left < 15_000) break;
+    const to = servers.find((s) => s.id === from.pending_move_to);
+    try {
+      const r = await moveAllCustomers(from.id, from.pending_move_to as string, left - 5_000);
+      if (r.remaining === 0) {
+        if (r.failed > 0) {
+          // Leave the queue cleared; admin decides about the failures.
+          await getServiceSupabaseClient().from('vpn_servers').update({ pending_move_to: null }).eq('id', from.id);
+        }
+        await sendTelegramMessage({
+          text: [
+            r.failed === 0 ? '✅ <b>Moved to backup</b>' : '⚠️ <b>Move finished with errors</b>',
+            '',
+            `🖥 ${escapeHtml(from.name || 'server')} → <b>${escapeHtml(to?.name || 'backup')}</b>`,
+            `👥 Moved: ${r.moved}${r.failed ? ` · Failed: ${r.failed}` : ''}`,
+            r.failed ? `Errors: ${escapeHtml(r.errors.join(' | '))}` : 'Expiry dates and remaining data kept. Outline users switch on reconnect; Hiddify/V2Box within 1 hour.',
+          ].join('\n'),
+          buttons: [[{ text: '🔗 VPN admin', url: `${siteUrl()}/admin/vpn` }]],
+        }).catch(() => false);
+      }
+    } catch (e) {
+      console.error('[vpn] pending move failed', from.id, e);
+    }
+  }
+}
+
+/** Several different customers replaced keys on one server recently → maybe blocked. */
+async function checkMaybeBlocked(serverId: string): Promise<void> {
+  const supabase = getServiceSupabaseClient();
+  const server = await getServer(serverId);
+  if (!server) return;
+  if (server.blocked_alerted_at && Date.now() - new Date(server.blocked_alerted_at).getTime() < 3 * 60 * 60 * 1000) {
+    return; // alerted in the last 3 hours
+  }
+  const { data } = await supabase
+    .from('vpn_key_replacements')
+    .select('subscription_id,created_at')
+    .eq('from_server_id', serverId)
+    .eq('reason', 'customer_request')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  const since = Date.now() - BLOCKED_WINDOW_MIN * 60 * 1000;
+  const subs = new Set(
+    ((data ?? []) as any[]).filter((r) => new Date(r.created_at).getTime() > since).map((r) => r.subscription_id)
+  );
+  if (subs.size < BLOCKED_THRESHOLD) return;
+
+  await supabase.from('vpn_servers').update({ blocked_alerted_at: new Date().toISOString() }).eq('id', serverId);
+  await sendTelegramMessage({
+    text: [
+      '🚧 <b>Server may be blocked in Myanmar</b>',
+      '',
+      `🖥 <b>${escapeHtml(server.name || 'server')}</b>`,
+      `${subs.size} different customers replaced their key in the last ${BLOCKED_WINDOW_MIN} minutes.`,
+      'The server still answers us, so it is probably blocked by local internet providers.',
+    ].join('\n'),
+    buttons: moveButtons(serverId),
+  }).catch(() => false);
+}
+
+/**
+ * Every 5 minutes: ping each active server. Alert after 2 failed checks in a
+ * row (with a one-tap "Move all to backup" button), say when it recovers,
+ * save usage hourly, and continue any queued move.
+ */
+export async function runHealthChecks(budgetMs = 240_000): Promise<Record<string, number>> {
+  const started = Date.now();
+  const supabase = getServiceSupabaseClient();
+  const stats = { checked: 0, down: 0, alerts: 0, recovered: 0, usageSynced: 0 };
+  const servers = (await listServers()).filter((s) => s.is_active !== false);
+
+  for (const s of servers) {
+    stats.checked++;
+    const alive = await outlinePing(s.api_url);
+    const nowIso = new Date().toISOString();
+
+    if (!alive) {
+      stats.down++;
+      const fails = (s.health_fail_count ?? 0) + 1;
+      const patch: Record<string, unknown> = { health_fail_count: fails, last_health_at: nowIso };
+      if (fails >= 2 && !s.down_alerted_at) {
+        patch.down_alerted_at = nowIso;
+        const customers = await customersOnServer(s.id);
+        const isBackup = s.is_backup === true;
+        await sendTelegramMessage({
+          text: [
+            isBackup ? '❌ <b>BACKUP server is down</b>' : '❌ <b>VPN server is DOWN</b>',
+            '',
+            `🖥 <b>${escapeHtml(s.name || 'server')}</b> (${escapeHtml(s.country || '?')})`,
+            `Not answering for ${fails} checks (~${fails * 5} min).`,
+            isBackup ? 'Failover will not work until it is back or you add another backup.' : `👥 ${customers} customer key(s) on this server.`,
+          ].join('\n'),
+          buttons: !isBackup && customers > 0 ? moveButtons(s.id) : [[{ text: '🔗 VPN admin', url: `${siteUrl()}/admin/vpn` }]],
+        }).catch(() => false);
+        stats.alerts++;
+      }
+      await supabase.from('vpn_servers').update(patch).eq('id', s.id);
+      continue;
+    }
+
+    // Alive
+    const patch: Record<string, unknown> = { health_fail_count: 0, last_health_at: nowIso };
+    if (s.down_alerted_at) {
+      patch.down_alerted_at = null;
+      stats.recovered++;
+      await sendTelegramMessage({
+        text: `✅ <b>${escapeHtml(s.name || 'Server')}</b> is answering again.${
+          s.pending_move_to ? ' (Move to backup already started — it will continue.)' : ''
+        }`,
+      }).catch(() => false);
+    }
+    await supabase.from('vpn_servers').update(patch).eq('id', s.id);
+
+    // Save usage at most once an hour, so a dead server loses at most ~1h of usage.
+    const lastSync = s.last_usage_sync_at ? new Date(s.last_usage_sync_at).getTime() : 0;
+    if (Date.now() - lastSync > 55 * 60 * 1000 && Date.now() - started < budgetMs - 60_000) {
+      if (await syncServerUsage(s)) stats.usageSynced++;
+    }
+  }
+
+  await processPendingMoves(Math.max(0, budgetMs - (Date.now() - started)));
+  return stats;
 }

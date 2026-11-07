@@ -143,6 +143,12 @@ function PurchaseFormInner({
     [vpnVariants]
   );
 
+  // Per-country stock from the server (admin switch + working server).
+  // Missing map (older data) = treat every country as available.
+  const vpnStock: Record<string, boolean> | null =
+    isOutlineVpn && product?.vpnStock && typeof product.vpnStock === 'object' ? product.vpnStock : null;
+  const countryInStock = (code: string) => (vpnStock ? vpnStock[code] === true : true);
+
   const [selectedCountry, setSelectedCountry] = useState<string>('');
   const [selectedPlan, setSelectedPlan] = useState<string>('');
 
@@ -151,7 +157,7 @@ function PurchaseFormInner({
     if (!isOutlineVpn) return;
     if (!countryOptions.length) return;
     if (!selectedCountry) {
-      setSelectedCountry(countryOptions[0]);
+      setSelectedCountry(countryOptions.find((c) => countryInStock(c)) ?? countryOptions[0]);
     }
   }, [isOutlineVpn, countryOptions, selectedCountry]);
 
@@ -351,8 +357,9 @@ function PurchaseFormInner({
                 {countryOptions.map((code) => {
                   const label = COUNTRY_LABELS[code] ?? code;
                   return (
-                    <option key={code} value={code}>
+                    <option key={code} value={code} disabled={!countryInStock(code)}>
                       {flagForCountry(code)} {label}
+                      {countryInStock(code) ? '' : ' — Out of stock'}
                     </option>
                   );
                 })}
@@ -519,8 +526,15 @@ function PurchaseFormInner({
         </div>
       )}
 
+      {/* VPN: selected country out of stock */}
+      {isOutlineVpn && product.isInStock && selectedCountry && !countryInStock(selectedCountry) && (
+        <p className="text-xs text-red-400">
+          This country is out of stock right now. Please choose another country.
+        </p>
+      )}
+
       {/* Stock message for INSTANT products (whole product) */}
-      {isInstant && !product.isInStock && (
+      {(isInstant || isOutlineVpn) && !product.isInStock && (
         <p className="text-xs text-red-400">
           Currently out of stock. Check back soon.
         </p>
@@ -529,7 +543,11 @@ function PurchaseFormInner({
       {/* CTA – disabled while pending or cannot purchase */}
       <button
         type="submit"
-        disabled={!product.isInStock || pending}
+        disabled={
+          !product.isInStock ||
+          pending ||
+          (isOutlineVpn && !!selectedCountry && !countryInStock(selectedCountry))
+        }
         className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <span>💳</span>

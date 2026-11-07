@@ -1184,3 +1184,76 @@ export async function runHealthChecks(budgetMs = 240_000): Promise<Record<string
   await processPendingMoves(Math.max(0, budgetMs - (Date.now() - started)));
   return stats;
 }
+
+// ─── Stock per country (product page + admin switches) ──
+
+export type VpnCountryStock = {
+  country: string;
+  /** Admin switch (default ON). */
+  manualInStock: boolean;
+  /** At least one server On, taking new sales, not backup, not down. */
+  hasServer: boolean;
+  /** What customers see: manual switch AND a usable server. */
+  inStock: boolean;
+};
+
+export async function getVpnStock(): Promise<Record<string, VpnCountryStock>> {
+  const supabase = getServiceSupabaseClient();
+  const out: Record<string, VpnCountryStock> = {};
+  const ensure = (c: string) => {
+    const k = c.trim().toUpperCase();
+    if (!k) return null;
+    if (!out[k]) out[k] = { country: k, manualInStock: true, hasServer: false, inStock: false };
+    return out[k];
+  };
+
+  // Countries that are sold (VPN variants) …
+  const { data: variants } = await supabase
+    .from('product_variants')
+    .select('vpn_country,is_active')
+    .limit(2000);
+  for (const v of (variants ?? []) as any[]) {
+    if (v.vpn_country && v.is_active !== false) ensure(String(v.vpn_country));
+  }
+
+  // … and usable servers
+  let servers: VpnServer[] = [];
+  try {
+    servers = await listServers();
+  } catch {
+    servers = [];
+  }
+  for (const s of servers) {
+    const row = s.country ? ensure(String(s.country)) : null;
+    if (!row) continue;
+    if (s.is_active !== false && s.accepting_new !== false && s.is_backup !== true && !s.down_alerted_at) {
+      row.hasServer = true;
+    }
+  }
+
+  // Admin switches (table may not exist yet → everything defaults ON)
+  const { data: switches } = await supabase.from('vpn_country_stock').select('country,in_stock').limit(500);
+  for (const r of (switches ?? []) as any[]) {
+    const row = ensure(String(r.country));
+    if (row) row.manualInStock = r.in_stock !== false;
+  }
+
+  for (const row of Object.values(out)) row.inStock = row.manualInStock && row.hasServer;
+  return out;
+}
+
+export async function setVpnCountryStock(country: string, inStock: boolean): Promise<void> {
+  const supabase = getServiceSupabaseClient();
+  const c = country.trim().toUpperCase();
+  const { data: existing } = await supabase.from('vpn_country_stock').select('country').eq('country', c).maybeSingle();
+  if (existing) {
+    const { error } = await supabase
+      .from('vpn_country_stock')
+      .update({ in_stock: inStock, updated_at: new Date().toISOString() })
+      .eq('country', c);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from('vpn_country_stock').insert({ country: c, in_stock: inStock });
+    if (error) throw error;
+  }
+}

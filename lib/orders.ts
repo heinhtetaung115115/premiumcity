@@ -1,7 +1,7 @@
 import { getServiceSupabaseClient } from './supabase';
 import { sendEmail, getAdminRecipients, tplStockDepletedAdmin } from './email';
 import { notifyNewManualOrder } from './telegram';
-import { createSubscription as createVpnSubscription, attachVpnStatus } from './vpn';
+import { createSubscription as createVpnSubscription, attachVpnStatus, getVpnStock } from './vpn';
 
 type PurchasePayload = {
   userId: string;
@@ -60,6 +60,9 @@ export type OrderView = {
 };
 
 function normaliseErrorMessage(msg: string): string {
+  if (msg.includes('VPN_OUT_OF_STOCK')) {
+    return 'This VPN location is out of stock right now. Please choose another country or check back soon.';
+  }
   if (msg.includes('INSUFFICIENT_STOCK')) {
     return 'Not enough stock available for this product.';
   }
@@ -447,6 +450,24 @@ export async function createOrderForUser(
     Number.isFinite(payload.quantity) && payload.quantity > 0
       ? payload.quantity
       : 1;
+
+  // VPN: refuse BEFORE the wallet is charged if this country can't be sold
+  // (switched off by admin, or no working server) — otherwise the customer
+  // would pay and key creation would fail afterwards.
+  if (payload.variantId) {
+    const { data: vRow } = await supabase
+      .from('product_variants')
+      .select('vpn_country,vpn_plan_id')
+      .eq('id', payload.variantId)
+      .maybeSingle();
+    const vpnCountry = (vRow as any)?.vpn_plan_id ? String((vRow as any)?.vpn_country || '').toUpperCase() : '';
+    if (vpnCountry) {
+      const stock = await getVpnStock();
+      if (!stock[vpnCountry]?.inStock) {
+        throw new Error(normaliseErrorMessage('VPN_OUT_OF_STOCK'));
+      }
+    }
+  }
 
   const { data, error } = await supabase.rpc('create_order', {
     p_user_id: payload.userId,

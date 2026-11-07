@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { requireAdmin } from '@/lib/session';
 import { getServiceSupabaseClient } from '@/lib/supabase';
-import { dynamicKeyFor, isExpired, listServers, statusPageUrl, subscriptionLinkFor } from '@/lib/vpn';
+import { dynamicKeyFor, getVpnStock, isExpired, listServers, statusPageUrl, subscriptionLinkFor } from '@/lib/vpn';
+import { VpnStockPanel } from './VpnStockPanel';
 import {
   addServerAction,
   adminReplaceKeyAction,
@@ -9,6 +10,7 @@ import {
   extendAction,
   moveAllAction,
   revokeAction,
+  setVpnStockAction,
   updateServerAction,
 } from './actions';
 import {
@@ -91,6 +93,13 @@ export default async function AdminVpnPage({ searchParams }: PageProps) {
     for (const u of (users ?? []) as any[]) emailById[u.id] = u.email;
   }
 
+  let stockRows: Awaited<ReturnType<typeof getVpnStock>>[string][] = [];
+  try {
+    stockRows = Object.values(await getVpnStock()).sort((a, b) => a.country.localeCompare(b.country));
+  } catch {
+    stockRows = [];
+  }
+
   const serverLabel = (s: any) => `${s.name || 'Server'} · ${s.country || '?'}`;
   const activeServers = servers.filter((s) => s.is_active !== false);
   const serverById: Record<string, any> = Object.fromEntries(servers.map((s) => [s.id, s]));
@@ -112,6 +121,12 @@ export default async function AdminVpnPage({ searchParams }: PageProps) {
           Database not ready: {setupError}. Run <code>supabase/migrations/0002_vpn_subscriptions.sql</code> in the Supabase SQL editor.
         </div>
       )}
+
+      {/* Stock */}
+      <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+        <h2 className="mb-3 text-lg font-semibold text-slate-100">Stock (what customers can buy)</h2>
+        <VpnStockPanel rows={stockRows} action={setVpnStockAction} />
+      </section>
 
       {/* Servers */}
       <section className="space-y-3">

@@ -11,6 +11,7 @@ import {
   moveAllCustomers,
   revokeSubscription,
   rotateKey,
+  setVpnCountryStock,
   statusPageUrl,
 } from '@/lib/vpn';
 
@@ -145,4 +146,24 @@ export async function revokeAction(formData: FormData): Promise<Result> {
   await revokeSubscription(id);
   revalidatePath('/admin/vpn');
   return { ok: true, message: 'Revoked. Key deleted.' };
+}
+
+export async function setVpnStockAction(formData: FormData): Promise<Result> {
+  await requireAdmin();
+  const country = String(formData.get('country') ?? '').trim().toUpperCase();
+  const inStock = formData.get('inStock') === 'true';
+  if (!country) return { ok: false, error: 'Missing country.' };
+  try {
+    await setVpnCountryStock(country, inStock);
+  } catch (e: any) {
+    return {
+      ok: false,
+      error: `${e?.message ?? 'Failed'} — run supabase/migrations/0004_vpn_country_stock.sql in Supabase.`,
+    };
+  }
+  revalidatePath('/admin');
+  revalidatePath('/admin/vpn');
+  revalidatePath('/product/outline-vpn');
+  revalidatePath('/');
+  return { ok: true };
 }

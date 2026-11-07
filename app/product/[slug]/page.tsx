@@ -45,9 +45,11 @@ export default async function ProductPage({
   const isInstant = product.productType === 'INSTANT';
   const isManual = product.productType === 'MANUAL';
 
+  // outline-vpn stock is per country (admin switch + working server), not inventory.
+  const isOutlineVpn = product.slug === 'outline-vpn';
   const canPurchase =
     hasVariants &&
-    (isManual || (isInstant && product.isInStock));
+    (isOutlineVpn ? product.isInStock : isManual || (isInstant && product.isInStock));
 
   const categorySlug = product.category?.slug ?? null;
 
@@ -97,7 +99,7 @@ export default async function ProductPage({
               <span className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium text-emerald-300 backdrop-blur-sm">
                 {isInstant ? '⚡ Instant' : '📦 Manual'}
               </span>
-              {isInstant && (
+              {(isInstant || isOutlineVpn) && (
                 <span
                   className={`inline-flex items-center rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium backdrop-blur-sm ${
                     product.isInStock ? 'text-emerald-300' : 'text-red-300'

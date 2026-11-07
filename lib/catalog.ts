@@ -1,4 +1,5 @@
 import { getServiceSupabaseClient } from './supabase';
+import { getVpnStock } from './vpn';
 import type { ProductInputField } from '@/types/product';
 
 type CategoryRow = {
@@ -152,6 +153,29 @@ async function fetchUnusedInventory(
   return results.flat();
 }
 
+/**
+ * outline-vpn isn't sold from uploaded inventory: its stock is per country
+ * (admin switch + a working server). Sets product.isInStock (any country)
+ * and product.vpnStock { JP: true, SG: false, … } for the country picker.
+ */
+async function applyVpnStock<T extends { slug: string }>(products: T[]): Promise<T[]> {
+  if (!products.some((p) => p.slug === 'outline-vpn')) return products;
+  let stock: Record<string, { inStock: boolean }> = {};
+  try {
+    stock = await getVpnStock();
+  } catch (e) {
+    console.warn('applyVpnStock failed:', e);
+    return products;
+  }
+  const map: Record<string, boolean> = {};
+  for (const [c, v] of Object.entries(stock)) map[c] = v.inStock;
+  return products.map((p) =>
+    p.slug === 'outline-vpn'
+      ? ({ ...p, isInStock: Object.values(map).some(Boolean), vpnStock: map } as T)
+      : p
+  );
+}
+
 export async function getAllProducts() {
   const supabase = getServiceSupabaseClient();
 
@@ -245,7 +269,7 @@ export async function getAllProducts() {
     .filter((c) => usedCategoryIds.has(c.id))
     .map((c) => ({ id: c.id, name: c.name, slug: c.slug }));
 
-  return { categories: activeCategories, products: resultProducts };
+  return { categories: activeCategories, products: await applyVpnStock(resultProducts) };
 }
 
 /**
@@ -427,7 +451,7 @@ export async function getCategoryBySlug(slug: string) {
     name: category.name,
     slug: category.slug,
     description: category.description,
-    products: resultProducts,
+    products: await applyVpnStock(resultProducts),
   };
 }
 
@@ -554,8 +578,9 @@ export async function getProductBySlug(slug: string) {
     soldCount = 100;
   }
 
+  const [withStock] = await applyVpnStock([base]);
   return {
-    ...base,
+    ...withStock,
     imageUrl: (productRow as any).image_url ?? null,
     soldCount,
     category: productRow.category,
@@ -588,12 +613,13 @@ export async function getOutOfStockVariants(): Promise<OutOfStockVariant[]> {
   // INSTANT products only (MANUAL is always "in stock").
   const { data: productRows } = await supabase
     .from('products')
-    .select('id,name,product_type,status')
+    .select('id,name,slug,product_type,status')
     .eq('product_type', 'INSTANT')
     .limit(1000);
 
+  // outline-vpn stock is per country (VPN stock switches), not inventory.
   const products = ((productRows ?? []) as any[]).filter(
-    (p) => String(p.status ?? '').toUpperCase() !== 'ARCHIVED'
+    (p) => String(p.status ?? '').toUpperCase() !== 'ARCHIVED' && p.slug !== 'outline-vpn'
   );
   if (products.length === 0) return [];
 

@@ -150,6 +150,16 @@ export function ServerControls({
       </div>
       <ResultLine res={upd.res} />
 
+      {otherServers.length === 0 && activeCustomers > 0 && (
+        <div className="rounded-xl border border-slate-700 bg-slate-950/50 p-3 text-xs text-slate-400">
+          <p className="font-semibold text-slate-200">Move all {activeCustomers} customers to another server</p>
+          <p className="mt-1">
+            No other server is <b className="text-emerald-300">On</b> to move to. Add next month&apos;s server below
+            (it starts On), or press <b>Switch on</b> on another server — then the Move button appears here.
+          </p>
+        </div>
+      )}
+
       {otherServers.length > 0 && activeCustomers > 0 && (
         <form action={mv.run} className="rounded-xl border border-amber-500/30 bg-amber-500/[0.05] p-3">
           <input type="hidden" name="fromServerId" value={serverId} />

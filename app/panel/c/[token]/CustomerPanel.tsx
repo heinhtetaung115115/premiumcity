@@ -252,7 +252,7 @@ export function CustomerPanel(props: {
                   rel="noopener noreferrer"
                   className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-emerald-400 py-2.5 text-sm font-bold text-slate-950 hover:bg-emerald-300"
                 >
-                  <ExternalLink className="h-4 w-4" /> Open verification link
+                  <ExternalLink className="h-4 w-4" /> Verify · This was me
                 </a>
               )}
               {!m.code && !m.link && <p className="mt-2 text-xs leading-relaxed text-slate-300">{m.snippet}</p>}

@@ -7,7 +7,7 @@
 export default {
   async email(message, env) {
     const raw = await new Response(message.raw).text();
-    const res = await fetch('https://pcity.online/api/panel/inbound', {
+    const res = await fetch('https://www.pcity.online/api/panel/inbound', {
       method: 'POST',
       headers: {
         'content-type': 'text/plain; charset=utf-8',
@@ -16,6 +16,7 @@ export default {
         'x-envelope-to': message.to,
       },
       body: raw,
+      redirect: 'follow',
     });
     if (!res.ok) {
       console.log('panel inbound failed', res.status, await res.text());

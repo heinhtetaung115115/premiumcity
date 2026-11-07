@@ -18,7 +18,8 @@ export function serviceInfo(key: string | null | undefined) {
   return SERVICES[(key as ServiceKey) in SERVICES ? (key as ServiceKey) : 'other'];
 }
 
-const ALLOW = /(code|verif|sign[\s-]?in|log[\s-]?in|one[\s-]?time|otp|passcode|temporary access|household|confirm (?:it'?s|your) (?:you|login|sign))/i;
+const ALLOW =
+  /(code|verif|sign[\s-]?in|log[\s-]?in|one[\s-]?time|otp|passcode|temporary access|household|new device|confirm (?:it'?s|your) (?:you|login|sign))/i;
 const BLOCK =
   /(password|reset|e-?mail (?:address )?(?:was |has been )?(?:change|update)|chang\w* (?:your |the )?e-?mail|updat\w* (?:your |the )?e-?mail|new e-?mail|account (?:delet|change|update|recovery)|recover|cancel|subscription|membership|payment|billing|receipt|invoice|order|refund|card|phone number)/i;
 
@@ -65,29 +66,68 @@ export function extractCode(subject: string, text: string): string | null {
   return null;
 }
 
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+/** Only links on the service's own domain (stops spoofed emails pushing phishing links). */
+function onServiceDomain(url: string, senders: string[]): boolean {
+  if (!senders.length) return true;
+  const h = hostOf(url);
+  return senders.some((d) => h === d || h.endsWith(`.${d}`));
+}
+
 /** First button-like link that verifies / signs in (never reset/unsubscribe links). */
-export function extractActionLink(html: string, text: string): string | null {
+export function extractActionLink(html: string, text: string, senders: string[] = []): string | null {
   const candidates: { url: string; label: string }[] = [];
   for (const m of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
     candidates.push({ url: m[1].replace(/&amp;/g, '&'), label: htmlToText(m[2]) });
   }
   for (const m of text.matchAll(/https?:\/\/[^\s<>"')\]]+/gi)) candidates.push({ url: m[0], label: '' });
-  const good = /(verif|confirm|sign[-_ ]?in|log[-_ ]?in|activate|access|code|yes|approve)/i;
-  const bad = /(unsubscribe|password|reset|privacy|terms|help|support|preferences|cancel|email[-_ ]?change|account\/?settings|mailto:)/i;
+  const good = /(this was me|it was me|it'?s me|verif|confirm|sign[-_ ]?in|log[-_ ]?in|activate|access|code|yes|approve)/i;
+  const bad =
+    /(not me|wasn'?t (?:me|you)|click here|secure your|unsubscribe|password|reset|privacy|terms|help|support|preferences|cancel|email[-_ ]?change|account\/?settings|learn more|mailto:)/i;
   for (const c of candidates) {
     if (!/^https?:\/\//i.test(c.url)) continue;
-    if (bad.test(c.url) || bad.test(c.label)) continue;
-    if (good.test(c.label) || good.test(c.url)) return c.url;
+    if (!onServiceDomain(c.url, senders)) continue;
+    if (bad.test(c.label) || bad.test(c.url)) continue;
+    if (good.test(c.label) || (!c.label && good.test(c.url))) return c.url;
   }
   return null;
 }
 
-export function classify(service: string | null, from: string, subject: string, text: string, html: string): Classification {
+/**
+ * When the mailbox owner uses Outlook/Gmail "Forward" (not Redirect), the
+ * email comes FROM the account itself and the original sender is quoted in
+ * the body ("From: Crunchyroll <…>"). Use that original sender.
+ */
+function originalSender(from: string, body: string, accountEmail: string | null): string {
+  if (!accountEmail) return from;
+  const fromAddr = (from.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)?.[0] || '').toLowerCase();
+  if (fromAddr !== accountEmail.toLowerCase()) return from;
+  const quoted = body.match(/^\s*(?:From|Från|Von|De)\s*:\s*(.*@.*)$/im);
+  return quoted ? quoted[1] : from;
+}
+
+export function classify(
+  service: string | null,
+  from: string,
+  subject: string,
+  text: string,
+  html: string,
+  accountEmail: string | null = null
+): Classification {
   const body = text || htmlToText(html);
   const svc = serviceInfo(service);
+  subject = subject.replace(/^\s*(?:fwd?|fw|tr|wg)\s*:\s*/i, '');
+  from = originalSender(from, body, accountEmail);
   const domain = senderDomain(from);
   const code = extractCode(subject, body);
-  const link = extractActionLink(html, text);
+  const link = extractActionLink(html, text, svc.senders);
 
   if (svc.senders.length && !svc.senders.some((d) => domain === d || domain.endsWith(`.${d}`))) {
     return { verdict: 'blocked', reason: `Sender ${domain || '?'} is not ${svc.name}`, code, link };

@@ -221,7 +221,7 @@ export async function ingestEmail(raw: string, envelopeTo: string | null, envelo
     account = ((data ?? []) as PanelAccount[]).find((a) => wanted.has(normalizeEmail(a.email))) ?? null;
   }
 
-  const c = classify(account?.service ?? null, from, p.subject, p.text, p.html);
+  const c = classify(account?.service ?? null, from, p.subject, p.text, p.html, account?.email ?? null);
   const verdict = account ? c.verdict : 'blocked';
   const reason = account ? c.reason : 'No matching account';
 

@@ -74,6 +74,7 @@ export function VpnStatusClient({ view }: { view: VpnStatusView }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [showBackup, setShowBackup] = useState(false);
+  const [app, setApp] = useState<'outline' | 'other'>('outline');
 
   const country = (view.country || '').toUpperCase();
   const flag = FLAGS[country] ?? '🌐';
@@ -91,7 +92,7 @@ export function VpnStatusClient({ view }: { view: VpnStatusView }) {
       if (json?.ok) {
         setMsg({
           ok: true,
-          text: 'Key အသစ် ရပါပြီ။ Outline ကို Disconnect လုပ်ပြီး ပြန် Connect လုပ်ပါ။ — New key ready. Disconnect and reconnect in Outline.',
+          text: 'Key အသစ် ရပါပြီ။ Outline: Disconnect လုပ်ပြီး ပြန် Connect လုပ်ပါ။ Hiddify/V2Box: Subscription ကို Update နှိပ်ပါ။ — New key ready.',
         });
         router.refresh();
       } else if (json?.error === 'limit') {
@@ -123,41 +124,84 @@ export function VpnStatusClient({ view }: { view: VpnStatusView }) {
 
       {/* Key */}
       <section className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900/60 p-4">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Main key · auto-updates</p>
-          <a
-            href={view.dynamicKey}
-            className="rounded-full bg-indigo-500 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-400"
-          >
-            Open in Outline
-          </a>
-        </div>
-        <CopyBox value={view.dynamicKey} />
-        <p className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-[13px] leading-relaxed text-slate-300">
-          ဤ Key ကို Outline App ထဲ <b>တစ်ကြိမ်သာ</b> ထည့်ပါ။ Server ပြောင်းသည့်အခါ အလိုအလျောက် ပြောင်းသွားပါမည်။
-          <span className="mt-1 block text-slate-500">
-            Add this key to Outline once. When we change servers it updates by itself.
-          </span>
-        </p>
-
-        {view.ssUri && (
-          <div>
+        {/* Which app does the customer use? */}
+        <div className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-950/70 p-1 text-sm">
+          {(['outline', 'other'] as const).map((a) => (
             <button
+              key={a}
               type="button"
-              onClick={() => setShowBackup((v) => !v)}
-              className="text-xs font-medium text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
+              onClick={() => setApp(a)}
+              className={`rounded-xl py-2 font-semibold transition ${
+                app === a ? 'bg-indigo-500 text-white' : 'text-slate-400 hover:text-slate-200'
+              }`}
             >
-              {showBackup ? 'Hide' : 'Show'} backup key (ss://) for old Outline apps
+              {a === 'outline' ? 'Outline' : 'Hiddify · V2Box · others'}
             </button>
-            {showBackup && (
-              <div className="mt-2 space-y-2">
-                <CopyBox value={view.ssUri} tone="muted" />
-                <p className="text-[12px] text-slate-500">
-                  Backup key changes when the server changes — copy it again from this page if it stops working.
-                </p>
+          ))}
+        </div>
+
+        {app === 'outline' ? (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Outline key · auto-updates</p>
+              <a
+                href={view.dynamicKey}
+                className="rounded-full bg-indigo-500 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-400"
+              >
+                Open in Outline
+              </a>
+            </div>
+            <CopyBox value={view.dynamicKey} />
+            <p className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-[13px] leading-relaxed text-slate-300">
+              ဤ Key ကို Outline App ထဲ <b>တစ်ကြိမ်သာ</b> ထည့်ပါ။ Server ပြောင်းသည့်အခါ အလိုအလျောက် ပြောင်းသွားပါမည်။
+              <span className="mt-1 block text-slate-500">
+                Add this key to Outline once. When we change servers it updates by itself.
+              </span>
+            </p>
+
+            {view.ssUri && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowBackup((v) => !v)}
+                  className="text-xs font-medium text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
+                >
+                  {showBackup ? 'Hide' : 'Show'} backup key (ss://) for old Outline apps
+                </button>
+                {showBackup && (
+                  <div className="mt-2 space-y-2">
+                    <CopyBox value={view.ssUri} tone="muted" />
+                    <p className="text-[12px] text-slate-500">
+                      Backup key changes when the server changes — copy it again from this page if it stops working.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
-          </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Subscription link</p>
+              <a
+                href={`hiddify://import/${view.subscriptionLink}#PremiumCity`}
+                className="rounded-full bg-indigo-500 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-400"
+              >
+                Open in Hiddify
+              </a>
+            </div>
+            <CopyBox value={view.subscriptionLink} />
+            <div className="space-y-1.5 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-[13px] leading-relaxed text-slate-300">
+              <p>
+                App ထဲတွင် <b>Subscription</b> (Add profile / Add subscription) အဖြစ် ထည့်ပါ။ Server ပြောင်းလျှင်{' '}
+                <b>Update</b> ကိုနှိပ်ပါ (သို့) ၁ နာရီအတွင်း အလိုအလျောက် ပြောင်းသွားပါမည်။
+              </p>
+              <p className="text-slate-500">
+                Add as a subscription in Hiddify, V2Box, v2rayNG or Shadowrocket. After a server change, tap Update
+                (it also updates by itself within 1 hour).
+              </p>
+            </div>
+          </>
         )}
       </section>
 

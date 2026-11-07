@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { requireAdmin } from '@/lib/session';
 import { getServiceSupabaseClient } from '@/lib/supabase';
-import { dynamicKeyFor, isExpired, listServers, statusPageUrl } from '@/lib/vpn';
+import { dynamicKeyFor, isExpired, listServers, statusPageUrl, subscriptionLinkFor } from '@/lib/vpn';
 import {
   addServerAction,
   adminReplaceKeyAction,
@@ -251,6 +251,7 @@ export default async function AdminVpnPage({ searchParams }: PageProps) {
                 <div className="mt-2 flex flex-wrap gap-2">
                   <CopyButton value={statusPageUrl(s.code)} label="Copy link" />
                   <CopyButton value={dynamicKeyFor(s.code)} label="Copy key" />
+                  <CopyButton value={subscriptionLinkFor(s.code)} label="Copy Hiddify/V2Box link" />
                   <a href={`/vpn/${s.code}`} target="_blank" className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:border-emerald-400">
                     Open page
                   </a>

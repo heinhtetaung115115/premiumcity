@@ -106,6 +106,11 @@ export function dynamicKeyFor(code: string): string {
   return `ssconf://${host}/api/vpn/conf/${code}#PremiumCity`;
 }
 
+/** Subscription link for Hiddify / V2Box / v2rayNG etc. (base64 list of ss:// keys). */
+export function subscriptionLinkFor(code: string): string {
+  return `${siteUrl()}/api/vpn/sub/${code}`;
+}
+
 export function newCode(): string {
   const alphabet = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const bytes = crypto.randomBytes(12);
@@ -548,6 +553,7 @@ export type VpnStatusView = {
   usedBytes: number;
   periodResetsAt: string | null; // null when the period ends with the plan
   dynamicKey: string;
+  subscriptionLink: string;
   ssUri: string | null;
   replacementsLeft: number;
 };
@@ -588,6 +594,7 @@ export async function getStatusView(code: string): Promise<VpnStatusView | null>
     usedBytes: periodUsedBytes(sub, key),
     periodResetsAt: pEnd.getTime() < expires.getTime() - DAY_MS ? pEnd.toISOString() : null,
     dynamicKey: dynamicKeyFor(sub.code),
+    subscriptionLink: subscriptionLinkFor(sub.code),
     ssUri: key?.ss_uri ?? null,
     replacementsLeft: active ? await replacementsLeft(sub.id) : 0,
   };
@@ -604,6 +611,40 @@ export async function getDynamicConfig(
   const cfg = parseSsUri(key?.ss_uri);
   if (!cfg) return { error: 'Your key is being updated. Please try again in a few minutes.' };
   return { config: cfg };
+}
+
+/**
+ * Data for the subscription link. Uses stored usage only (no Outline call):
+ * Hiddify re-checks this often while the app is open, so it must be cheap.
+ */
+export async function getSubscriptionFeed(code: string): Promise<{
+  found: boolean;
+  active: boolean;
+  ssUris: string[];
+  usedBytes: number;
+  totalBytes: number;
+  expireUnix: number;
+  statusUrl: string;
+} | null> {
+  const sub = await getSubscriptionByCode(code);
+  if (!sub) return null;
+  const active = !isExpired(sub);
+  const key = active ? await getCurrentKey(sub.id) : null;
+  const ssUris: string[] = [];
+  if (key?.ss_uri) {
+    const country = (sub.country || '').toUpperCase();
+    const name = `PremiumCity${country ? ` ${country}` : ''}`;
+    ssUris.push(`${key.ss_uri.split('#')[0]}#${encodeURIComponent(name)}`);
+  }
+  return {
+    found: true,
+    active,
+    ssUris,
+    usedBytes: periodUsedBytes(sub, key),
+    totalBytes: Math.max(0, num(sub.data_limit_bytes)),
+    expireUnix: Math.floor(new Date(sub.expires_at).getTime() / 1000),
+    statusUrl: statusPageUrl(sub.code),
+  };
 }
 
 // ─── Admin operations ───────────────────────────────────

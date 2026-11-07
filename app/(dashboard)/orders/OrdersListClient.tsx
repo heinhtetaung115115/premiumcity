@@ -456,8 +456,11 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
                         allVpnKeys.length > 0 ||
                         Boolean(vpnSsUri || vpnDataLimitBytes || vpnUsedBytes);
 
+                      // Prefer the permanent ssconf:// key (survives server changes)
                       const primarySs =
-                        typeof primaryKey?.ssUri === 'string'
+                        typeof primaryKey?.dynamicKey === 'string'
+                          ? primaryKey.dynamicKey
+                          : typeof primaryKey?.ssUri === 'string'
                           ? primaryKey.ssUri
                           : typeof vpnSsUri === 'string'
                           ? vpnSsUri
@@ -560,6 +563,15 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
                                   </div>
                                 )}
                               </div>
+
+                              {primaryKey.statusUrl && (
+                                <a
+                                  href={primaryKey.statusUrl}
+                                  className="mt-3 flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400"
+                                >
+                                  Key page · လိုင်းမကောင်းပါ Key အသစ်လဲမယ် →
+                                </a>
+                              )}
 
                               <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-emerald-100">
                                 {(primaryKey.country || vpnCountry) && (

@@ -311,6 +311,19 @@ export default async function AdminHomePage() {
             <p className="mt-1 text-[11px] leading-snug text-slate-500">Approve, reject &amp; links</p>
           </Card>
         </Link>
+
+        <Link href="/admin/vpn">
+          <Card className="h-full cursor-pointer border-[#26344e] bg-[#151e30] p-4 transition hover:border-emerald-400">
+            <div className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                <path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z" strokeLinejoin="round" />
+                <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-slate-100">VPN (Outline)</p>
+            <p className="mt-1 text-[11px] leading-snug text-slate-500">Servers, keys &amp; server moves</p>
+          </Card>
+        </Link>
       </section>
     </main>
   );

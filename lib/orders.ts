@@ -1,6 +1,7 @@
 import { getServiceSupabaseClient } from './supabase';
 import { sendEmail, getAdminRecipients, tplStockDepletedAdmin } from './email';
 import { notifyNewManualOrder } from './telegram';
+import { createSubscription as createVpnSubscription, attachVpnStatus } from './vpn';
 
 type PurchasePayload = {
   userId: string;
@@ -18,6 +19,12 @@ export type VpnKeyView = {
   dataLimitBytes: number | null;
   usedBytes: number | null;
   ssUri: string | null;
+  /** Plan this key belongs to (new VPN system). */
+  subscriptionId?: string | null;
+  /** Public status page (/vpn/<code>) with "request new key". */
+  statusUrl?: string | null;
+  /** Permanent ssconf:// key that follows server changes. */
+  dynamicKey?: string | null;
 };
 
 export type OrderItemView = {
@@ -77,6 +84,20 @@ function normaliseErrorMessage(msg: string): string {
     return 'Unable to create VPN access right now. Please try again later.';
   }
   return msg;
+}
+
+/**
+ * A VPN plan keeps old keys as history (replaced / moved / expired). Show only
+ * the current key(s); if none are current (plan expired), show the latest one.
+ */
+function visibleVpnRows(rows: any[]): any[] {
+  const current = rows.filter((r) => r.is_current !== false);
+  if (current.length > 0) return current;
+  if (rows.length === 0) return rows;
+  const latest = [...rows].sort(
+    (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+  )[0];
+  return latest ? [latest] : [];
 }
 
 /**
@@ -381,163 +402,29 @@ async function provisionVpnKeysForOrder(orderId: string, userId: string) {
     planById[String(plan.id)] = plan;
   }
 
-  // 5) Load vpn_servers for these countries
-  const { data: serverRows, error: serverError } = await supabase
-    .from('vpn_servers')
-    .select('id,country,api_url,is_active')
-    .in('country', countries)
-    .eq('is_active', true);
-
-  if (serverError) throw serverError;
-  const servers = (serverRows ?? []) as any[];
-
-  const serversByCountry: Record<string, any[]> = {};
-  for (const s of servers) {
-    const c = String(s.country || '').toUpperCase();
-    if (!serversByCountry[c]) {
-      serversByCountry[c] = [];
-    }
-    serversByCountry[c].push(s);
-  }
-
-  // Check each needed country has at least one active server
-  for (const c of countries) {
-    const key = String(c).toUpperCase();
-    if (!serversByCountry[key] || serversByCountry[key].length === 0) {
-      throw new Error(
-        `VPN_SERVER_NOT_FOUND: No active VPN server available for country ${c}`
-      );
-    }
-  }
-
-  // 6) For each VPN item, create VPN keys on Outline and store them in vpn_keys
+  // 5) Create one VPN plan (subscription + Outline key) per unit.
+  //    Server choice, key naming and storage live in lib/vpn.ts so website
+  //    orders, admin-created keys and key swaps all behave the same.
   for (const vpnItem of vpnItems) {
     const { item, planId, country } = vpnItem;
     const plan = planById[planId];
-
     if (!plan) {
       throw new Error('VPN_PLAN_NOT_FOUND: VPN plan not found.');
     }
 
-    const serversForCountry = serversByCountry[country];
-    if (!serversForCountry || serversForCountry.length === 0) {
-      throw new Error(
-        `VPN_SERVER_NOT_FOUND: No VPN server available for country ${country}`
-      );
-    }
-
     const quantity = Math.max(1, Number(item.quantity) || 1);
-
     for (let i = 0; i < quantity; i++) {
-      // Pick a random server in that country
-      const server =
-        serversForCountry[Math.floor(Math.random() * serversForCountry.length)];
-
-      const rawApiUrl = String(server.api_url || '');
-      if (!rawApiUrl) {
-        throw new Error(
-          'VPN_SERVER_NOT_FOUND: Missing API URL for VPN server.'
-        );
-      }
-
-      const apiUrl = rawApiUrl.replace(/\/+$/, '');
-
-      // 6a) Create Outline access key
-      let outlineKeyId: string;
-      let ssUri: string;
-
-      try {
-        const createRes = await fetch(`${apiUrl}/access-keys`, {
-          method: 'POST',
-        });
-
-        if (!createRes.ok) {
-          const text = await createRes.text().catch(() => '');
-          console.error('Outline create key error:', text);
-          throw new Error('VPN_PROVISIONING_FAILED: create key failed');
-        }
-
-        const created = await createRes.json();
-        outlineKeyId = String(created.id);
-        ssUri = String(created.accessUrl);
-      } catch (err) {
-        console.error('Error calling Outline API to create key:', err);
-        throw new Error('VPN_PROVISIONING_FAILED: Outline create key error');
-      }
-
-      // 6b) Set data limit on Outline (200/600/1200 GB etc, from plan)
-      try {
-        const limitRes = await fetch(
-          `${apiUrl}/access-keys/${encodeURIComponent(
-            outlineKeyId
-          )}/data-limit`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ limit: { bytes: plan.data_limit_bytes } }),
-          }
-        );
-
-        if (!limitRes.ok) {
-          const text = await limitRes.text().catch(() => '');
-          console.warn('Failed to set data limit on Outline key:', text);
-          // Not fatal
-        }
-      } catch (err) {
-        console.warn('Error while setting data limit on Outline key:', err);
-      }
-
-      // 6c) Compute expiry date
-      const expiresAt = new Date();
-      const durationDays = Number(plan.duration_days || 0) || 30;
-      expiresAt.setDate(expiresAt.getDate() + durationDays);
-
-      // 6d) Append expiry label to ss_uri so it shows as the key name in apps
-      try {
-        const monthLabels = [
-          'JAN',
-          'FEB',
-          'MAR',
-          'APR',
-          'MAY',
-          'JUN',
-          'JUL',
-          'AUG',
-          'SEP',
-          'OCT',
-          'NOV',
-          'DEC',
-        ] as const;
-        const m = monthLabels[expiresAt.getMonth()] ?? 'EXP';
-        const d = String(expiresAt.getDate()).padStart(2, '0');
-        const label = `${m} ${d}`; // e.g. "FEB 23"
-
-        if (ssUri && !ssUri.includes('#')) {
-          ssUri = `${ssUri}#${label}`;
-        }
-      } catch (err) {
-        console.warn('Failed to append expiry label to ss_uri:', err);
-      }
-
-      // 6e) Store in vpn_keys table
-      const { error: insertError } = await supabase.from('vpn_keys').insert({
-        user_id: userId,
-        order_id: orderId,
-        order_item_id: item.id,
-        vpn_server_id: server.id,
-        vpn_plan_id: plan.id,
-        outline_key_id: outlineKeyId,
-        ss_uri: ssUri,
-        country: country,
-        plan_name: plan.name,
-        data_limit_bytes: plan.data_limit_bytes,
-        expires_at: expiresAt.toISOString(),
+      await createVpnSubscription({
+        userId,
+        orderId,
+        orderItemId: item.id,
+        source: 'website',
+        planName: plan.name ?? null,
+        country,
+        vpnPlanId: plan.id,
+        dataLimitBytes: Number(plan.data_limit_bytes) || 0,
+        durationDays: Number(plan.duration_days || 0) || 30,
       });
-
-      if (insertError) {
-        console.error('Failed to insert vpn_keys row:', insertError);
-        throw new Error('VPN_PROVISIONING_FAILED: could not save VPN key');
-      }
     }
   }
 }
@@ -864,7 +751,7 @@ export async function getOrderById(orderId: string): Promise<OrderView> {
     const { data: vpnRows, error: vpnError } = await supabase
       .from('vpn_keys')
       .select(
-        'id,order_item_id,country,plan_name,expires_at,data_limit_bytes,used_bytes,ss_uri'
+        'id,order_item_id,country,plan_name,expires_at,data_limit_bytes,used_bytes,ss_uri,subscription_id,is_current,created_at'
       )
       .in('order_item_id', itemIds);
 
@@ -880,7 +767,7 @@ export async function getOrderById(orderId: string): Promise<OrderView> {
   }
 
   const viewItems: OrderItemView[] = items.map((item: any) => {
-    const vpnRowsForItem = vpnByItem[item.id] ?? [];
+    const vpnRowsForItem = visibleVpnRows(vpnByItem[item.id] ?? []);
     const primaryVpn = vpnRowsForItem[0] || null;
 
     const vpnKeys: VpnKeyView[] = vpnRowsForItem.map((vpnRow: any) => ({
@@ -901,6 +788,7 @@ export async function getOrderById(orderId: string): Promise<OrderView> {
           ? Number(vpnRow.used_bytes)
           : null,
       ssUri: vpnRow.ss_uri ?? null,
+      subscriptionId: vpnRow.subscription_id ?? null,
     }));
 
     return {
@@ -931,13 +819,15 @@ export async function getOrderById(orderId: string): Promise<OrderView> {
     };
   });
 
-  return {
+  const view: OrderView = {
     id: (orderRow as any).id,
     createdAt: (orderRow as any).created_at,
     status: (orderRow as any).status,
     totalAmount: Number((orderRow as any).total_amount),
     items: viewItems,
   };
+  await attachVpnStatus([view]);
+  return view;
 }
 
 /**
@@ -1008,7 +898,7 @@ export async function listOrdersForUser(
     const { data: vpnRows, error: vpnError } = await supabase
       .from('vpn_keys')
       .select(
-        'id,order_item_id,country,plan_name,expires_at,data_limit_bytes,used_bytes,ss_uri'
+        'id,order_item_id,country,plan_name,expires_at,data_limit_bytes,used_bytes,ss_uri,subscription_id,is_current,created_at'
       )
       .in('order_item_id', itemIds);
 
@@ -1025,7 +915,7 @@ export async function listOrdersForUser(
 
   const itemsByOrder: Record<string, OrderItemView[]> = {};
   for (const item of items as any[]) {
-    const vpnRowsForItem = vpnByItem[item.id] ?? [];
+    const vpnRowsForItem = visibleVpnRows(vpnByItem[item.id] ?? []);
     const primaryVpn = vpnRowsForItem[0] || null;
 
     const vpnKeys: VpnKeyView[] = vpnRowsForItem.map((vpnRow: any) => ({
@@ -1046,6 +936,7 @@ export async function listOrdersForUser(
           ? Number(vpnRow.used_bytes)
           : null,
       ssUri: vpnRow.ss_uri ?? null,
+      subscriptionId: vpnRow.subscription_id ?? null,
     }));
 
     const view: OrderItemView = {
@@ -1087,6 +978,7 @@ export async function listOrdersForUser(
     items: itemsByOrder[order.id] ?? [],
   }));
 
+  await attachVpnStatus(result);
   return result;
 }
 
@@ -1172,7 +1064,7 @@ export async function listOrdersForUserPaged(
   if (itemIds.length > 0) {
     const { data: vpnRows, error: vpnError } = await supabase
       .from('vpn_keys')
-      .select('id,order_item_id,country,plan_name,expires_at,data_limit_bytes,used_bytes,ss_uri')
+      .select('id,order_item_id,country,plan_name,expires_at,data_limit_bytes,used_bytes,ss_uri,subscription_id,is_current,created_at')
       .in('order_item_id', itemIds);
     if (vpnError) throw vpnError;
     for (const row of (vpnRows ?? []) as any[]) {
@@ -1184,7 +1076,7 @@ export async function listOrdersForUserPaged(
 
   const itemsByOrder: Record<string, OrderItemView[]> = {};
   for (const item of items as any[]) {
-    const vpnRowsForItem = vpnByItem[item.id] ?? [];
+    const vpnRowsForItem = visibleVpnRows(vpnByItem[item.id] ?? []);
     const primaryVpn = vpnRowsForItem[0] || null;
 
     const vpnKeys: VpnKeyView[] = vpnRowsForItem.map((vpnRow: any) => ({
@@ -1205,6 +1097,7 @@ export async function listOrdersForUserPaged(
           ? Number(vpnRow.used_bytes)
           : null,
       ssUri: vpnRow.ss_uri ?? null,
+      subscriptionId: vpnRow.subscription_id ?? null,
     }));
 
     const view: OrderItemView = {
@@ -1236,6 +1129,7 @@ export async function listOrdersForUserPaged(
     items: itemsByOrder[order.id] ?? [],
   }));
 
+  await attachVpnStatus(pagedOrders);
   return { orders: pagedOrders, total, page: safePage, pageSize: safeSize, totalPages };
 }
 
@@ -1664,7 +1558,7 @@ export async function listOrdersForAdmin(opts: {
       const { data: vpnRows, error: vpnError } = await supabase
         .from('vpn_keys')
         .select(
-          'id,order_item_id,country,plan_name,expires_at,data_limit_bytes,used_bytes,ss_uri'
+          'id,order_item_id,country,plan_name,expires_at,data_limit_bytes,used_bytes,ss_uri,subscription_id,is_current,created_at'
         )
         .in('order_item_id', ids);
 
@@ -1681,7 +1575,7 @@ export async function listOrdersForAdmin(opts: {
 
   const itemsByOrder: Record<string, OrderItemView[]> = {};
   for (const item of items as any[]) {
-    const vpnRowsForItem = vpnByItem[item.id] ?? [];
+    const vpnRowsForItem = visibleVpnRows(vpnByItem[item.id] ?? []);
     const primaryVpn = vpnRowsForItem[0] || null;
 
     const vpnKeys: VpnKeyView[] = vpnRowsForItem.map((vpnRow: any) => ({
@@ -1702,6 +1596,7 @@ export async function listOrdersForAdmin(opts: {
           ? Number(vpnRow.used_bytes)
           : null,
       ssUri: vpnRow.ss_uri ?? null,
+      subscriptionId: vpnRow.subscription_id ?? null,
     }));
 
     const view: OrderItemView = {

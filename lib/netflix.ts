@@ -55,6 +55,9 @@ const ALLOWED_HOSTS = new Set([
   'www.resellerpanel.store',
   'txtl.online',
   'www.txtl.online',
+  // Our own account panel (same JSON shape)
+  'pcity.online',
+  'www.pcity.online',
 ]);
 
 /** Convert a customer web link to its JSON API form. Returns null if invalid. */

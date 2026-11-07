@@ -8,6 +8,7 @@ import Footer from '@/components/Footer';
 import { WelcomeRewardPopup } from '@/components/WelcomeRewardPopup';
 import NextTopLoader from 'nextjs-toploader'; // ⬅ Added top progress bar
 import { Analytics } from '@vercel/analytics/react'; // ⬅ Vercel Analytics
+import { headers } from 'next/headers';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://pcitystore.com'),
@@ -44,6 +45,15 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Account panel (pcity.online): its own bare page, no store navbar/footer.
+  if (headers().get('x-pc-panel') === '1') {
+    return (
+      <html lang="en">
+        <body className="min-h-screen bg-[#07090d] text-slate-100 antialiased">{children}</body>
+      </html>
+    );
+  }
+
   const session = await getOptionalSession();
 
   // Load wallet balance + fresh name/avatar from the database

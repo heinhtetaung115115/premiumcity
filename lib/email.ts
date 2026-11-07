@@ -490,7 +490,11 @@ function orderEmailLayout(o: {
   paragraphs: string[]; // already-escaped HTML
   note?: string;
   buttonLabel: string;
+  /** Defaults to the PremiumCity Orders page. */
+  buttonUrl?: string;
 }): string {
+  const btnUrl = o.buttonUrl || ORDERS_URL;
+  const btnUrlLabel = btnUrl.replace(/^https?:\/\//, '');
   const noteHtml = o.note
     ? `<tr><td style="padding:0 28px 8px;">
          <div style="background:#f8fafc;border-left:3px solid ${o.accent};padding:10px 14px;font-size:14px;color:#334155;">
@@ -514,13 +518,13 @@ function orderEmailLayout(o: {
   </td></tr>
   ${noteHtml}
   <tr><td align="center" style="padding:12px 28px 8px;">
-    <a href="${ORDERS_URL}" target="_blank"
+    <a href="${btnUrl}" target="_blank"
        style="display:inline-block;background:${o.accent};color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 28px;border-radius:8px;">
       ${esc(o.buttonLabel)}
     </a>
   </td></tr>
   <tr><td align="center" style="padding:4px 28px 20px;font-size:13px;color:#64748b;">
-    or open <a href="${ORDERS_URL}" target="_blank" style="color:${o.accent};">${ORDERS_URL_LABEL}</a>
+    or open <a href="${btnUrl}" target="_blank" style="color:${o.accent};">${esc(btnUrlLabel)}</a>
   </td></tr>
   <tr><td style="padding:16px 28px 22px;border-top:1px solid #e2e8f0;font-size:13px;color:#64748b;line-height:1.5;">
     Please keep your login details private.<br/>
@@ -611,5 +615,31 @@ ${note ? `\nNote from our team:\n${note}\n` : ''}
 Please keep your login details private.
 Thank you for shopping with Premium City`;
 
+  return { subject, html, text };
+}
+
+/** Account panel (pcity.online): password changed by admin. */
+export function tplPanelPasswordUpdated(o: { name: string; service: string; linkUrl: string; note?: string }) {
+  const subject = `Your ${o.service} password was updated`;
+  const html = orderEmailLayout({
+    accent: '#d97706',
+    badge: 'Password updated',
+    title: `New ${o.service} password`,
+    name: o.name,
+    paragraphs: [
+      `The password for your <strong>${esc(o.service)}</strong> account has been updated.`,
+      'Open your account link to see the new password. The old password will no longer work.',
+    ],
+    note: o.note,
+    buttonLabel: 'See new password',
+    buttonUrl: o.linkUrl,
+  });
+  const text = `Hi ${o.name},
+
+The password for your ${o.service} account has been updated.
+See the new password here: ${o.linkUrl}
+${o.note ? `\nNote from our team:\n${o.note}\n` : ''}
+Please keep your login details private.
+Thank you for shopping with Premium City`;
   return { subject, html, text };
 }

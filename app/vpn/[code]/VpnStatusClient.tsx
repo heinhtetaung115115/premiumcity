@@ -225,37 +225,57 @@ export function VpnStatusClient({ view }: { view: VpnStatusView }) {
           </p>
         </div>
 
-        {!confirming ? (
-          <button
-            type="button"
-            disabled={busy || view.replacementsLeft <= 0}
-            onClick={() => setConfirming(true)}
-            className="w-full rounded-2xl bg-amber-500 py-3 text-sm font-bold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+        <button
+          type="button"
+          disabled={busy || view.replacementsLeft <= 0}
+          onClick={() => setConfirming(true)}
+          className="w-full rounded-2xl bg-amber-500 py-3 text-sm font-bold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {busy ? 'Key အသစ် ပြုလုပ်နေပါသည်…' : 'Key အသစ်လဲမယ် · Request new key'}
+        </button>
+
+        {confirming && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+            onClick={() => !busy && setConfirming(false)}
+            role="dialog"
+            aria-modal="true"
           >
-            Key အသစ်လဲမယ် · Request new key
-          </button>
-        ) : (
-          <div className="space-y-2 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3">
-            <p className="text-sm text-slate-200">
-              Key အသစ် လဲမှာ သေချာပါသလား? ({view.replacementsLeft} ကြိမ် ကျန်ပါသည်)
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setConfirming(false)}
-                className="flex-1 rounded-xl border border-slate-700 py-2.5 text-sm font-semibold text-slate-300 hover:bg-slate-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={requestNewKey}
-                className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
-              >
-                {busy ? 'Creating…' : 'Yes, new key'}
-              </button>
+            <div
+              className="w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/15 text-2xl">
+                ⚠️
+              </div>
+              <h2 className="text-center text-lg font-bold text-slate-50">Key အသစ် လဲလှယ်ရန်</h2>
+              <p className="mt-3 text-center text-[15px] leading-relaxed text-slate-200">
+                Server overload ဖြစ်ခြင်းမှ ကာကွယ်ရန် တစ်လအတွင်း <b>သုံးကြိမ်သာ</b> လဲလှယ်ခွင့်ရှိပါသည်။
+              </p>
+              <p className="mt-2 text-center text-sm text-amber-300">
+                ယခုလ {view.replacementsLeft} ကြိမ် ကျန်ပါသည်
+              </p>
+              <p className="mt-3 rounded-xl bg-slate-950/70 p-2.5 text-center text-xs leading-relaxed text-slate-400">
+                Key မလဲမီ Outline ကို Disconnect လုပ်ပြီး ပြန် Connect လုပ်ကြည့်ပါ။
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setConfirming(false)}
+                  className="rounded-xl border border-slate-700 py-3 text-sm font-semibold text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                >
+                  မလုပ်ပါ
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={requestNewKey}
+                  className="rounded-xl bg-amber-500 py-3 text-sm font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
+                >
+                  {busy ? 'ခဏစောင့်ပါ…' : 'သဘောတူပါသည်'}
+                </button>
+              </div>
             </div>
           </div>
         )}

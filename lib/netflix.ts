@@ -255,17 +255,47 @@ export async function fetchNetflixPanel(rawLink: string): Promise<NetflixPanel> 
     return { ok: false, profile: null, messages: [], error: 'Invalid or unsupported account link.' };
   }
 
+  // Time-limited, with one retry: a slow supplier must not hang our request
+  // until Vercel kills it (which the customer saw as a blank
+  // "Could not load the account").
+  async function attempt(timeoutMs: number): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(apiUrl as string, {
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'Mozilla/5.0 (compatible; PremiumCity/1.0)',
+        },
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   try {
-    const res = await fetch(apiUrl, {
-      headers: { accept: 'application/json' },
-      cache: 'no-store',
-    });
+    let res: Response;
+    try {
+      res = await attempt(8000);
+    } catch {
+      res = await attempt(8000); // one retry on timeout / network error
+    }
 
     if (!res.ok) {
+      console.error('[netflix] supplier HTTP', res.status, new URL(apiUrl).hostname);
       return { ok: false, profile: null, messages: [], error: `Supplier returned HTTP ${res.status}.` };
     }
 
-    const json: any = await res.json();
+    const text = await res.text();
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      console.error('[netflix] supplier sent non-JSON:', text.slice(0, 120));
+      return { ok: false, profile: null, messages: [], error: 'Supplier sent an unexpected page (maybe blocked). Try again shortly.' };
+    }
     if (!json?.success || !json?.data) {
       return { ok: false, profile: null, messages: [], error: 'Supplier link is no longer active.' };
     }
@@ -291,7 +321,13 @@ export async function fetchNetflixPanel(rawLink: string): Promise<NetflixPanel> 
       messages: rawMsgs.map(mapMessage),
     };
   } catch (err: any) {
-    console.error('[netflix] fetch failed:', err);
-    return { ok: false, profile: null, messages: [], error: 'Could not reach the supplier right now.' };
+    const timedOut = err?.name === 'AbortError';
+    console.error('[netflix] fetch failed:', timedOut ? 'timeout' : err);
+    return {
+      ok: false,
+      profile: null,
+      messages: [],
+      error: timedOut ? 'Supplier is not answering (timeout). Try again shortly.' : 'Could not reach the supplier right now.',
+    };
   }
 }

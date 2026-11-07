@@ -16,11 +16,23 @@ import { fetchNetflixPanel } from '@/lib/netflix';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Supplier call is limited to ~16s (8s + one retry); leave headroom.
+export const maxDuration = 30;
 
 export async function GET(req: Request) {
+  // Always answer with JSON so the customer sees a real reason, never a blank error.
+  try {
+    return await handle(req);
+  } catch (e: any) {
+    console.error('[netflix/panel] crashed:', e);
+    return NextResponse.json({ error: 'Server error while loading the account. Please try again.' }, { status: 500 });
+  }
+}
+
+async function handle(req: Request) {
   const session = await getServerSession(authConfig);
   const userId = session?.user?.id;
-  if (!userId) return new NextResponse('Unauthorized', { status: 401 });
+  if (!userId) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
 
   const url = new URL(req.url);
   const orderItemId = url.searchParams.get('orderItemId') ?? '';
@@ -34,13 +46,18 @@ export async function GET(req: Request) {
   const supabase = getServiceSupabaseClient();
 
   // 1) The delivered inventory row for this item.
-  const { data: inv } = await supabase
+  // An item can have more than one delivery row (re-delivered / replaced);
+  // use the Netflix one instead of failing on "more than one row".
+  const { data: invRows } = await supabase
     .from('inventory_items')
     .select('payload,order_item_id')
     .eq('order_item_id', orderItemId)
-    .maybeSingle();
+    .limit(10);
 
-  const payload: any = (inv as any)?.payload;
+  const netflixRows = ((invRows ?? []) as any[]).filter(
+    (r) => r?.payload?.type === 'netflix_panel' && r?.payload?.link
+  );
+  const payload: any = netflixRows[netflixRows.length - 1]?.payload;
   if (!payload || payload.type !== 'netflix_panel' || !payload.link) {
     return NextResponse.json({ error: 'No Netflix panel for this item.' }, { status: 404 });
   }

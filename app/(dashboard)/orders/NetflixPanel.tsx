@@ -109,7 +109,7 @@ export function NetflixPanel({ orderItemId }: { orderItemId: string }) {
         );
         if (!res.ok) {
           const d = await res.json().catch(() => ({}));
-          setError(d?.error || 'Could not load the account.');
+          setError(d?.error || `Could not load the account (error ${res.status}). Please try again.`);
           setProfile(null);
           return null;
         }

@@ -36,6 +36,97 @@ function formatDateOnly(value: string) {
   });
 }
 
+/** Compact VPN summary on the Orders page: expiry, data, and a button to the key page. */
+function VpnOrderCard({
+  vpnKey,
+  fallbackCountry,
+  fallbackPlan,
+  index,
+}: {
+  vpnKey: any;
+  fallbackCountry: string | null;
+  fallbackPlan: string | null;
+  index: number | null;
+}) {
+  const country = vpnKey.country || fallbackCountry;
+  const plan = vpnKey.planName || fallbackPlan || 'VPN';
+  const expiresAt: string | null = vpnKey.expiresAt || null;
+  const limit = typeof vpnKey.dataLimitBytes === 'number' ? vpnKey.dataLimitBytes : Number(vpnKey.dataLimitBytes) || 0;
+  const used = typeof vpnKey.usedBytes === 'number' ? vpnKey.usedBytes : Number(vpnKey.usedBytes) || 0;
+  const msLeft = expiresAt ? new Date(expiresAt).getTime() - Date.now() : 0;
+  const active = !!expiresAt && msLeft > 0;
+  const daysLeft = Math.max(0, Math.ceil(msLeft / 86_400_000));
+  const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+  const gb = (b: number) => `${(b / 1e9).toFixed(b >= 1e10 ? 0 : 1)} GB`;
+  const bar = pct >= 90 ? 'bg-rose-400' : pct >= 70 ? 'bg-amber-400' : 'bg-emerald-400';
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900 to-slate-950">
+      <div className="flex items-center justify-between gap-2 px-3.5 pt-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-500/15 text-lg">
+            {getFlagEmoji(country)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-100">
+              {plan}
+              {index ? <span className="text-slate-500"> · Key {index}</span> : null}
+            </p>
+            <p className="text-[11px] text-slate-500">{country || 'VPN'}</p>
+          </div>
+        </div>
+        <span
+          className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+            active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'
+          }`}
+        >
+          {active ? 'Active' : 'Expired'}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 px-3.5 pt-3">
+        <div className="rounded-xl bg-slate-950/80 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">Expires</p>
+          <p className="mt-0.5 text-sm font-semibold text-slate-100">{expiresAt ? formatDateOnly(expiresAt) : '—'}</p>
+          <p className={`text-[11px] ${active && daysLeft <= 3 ? 'text-amber-300' : 'text-slate-500'}`}>
+            {active ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : 'Ended'}
+          </p>
+        </div>
+        <div className="rounded-xl bg-slate-950/80 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">Data</p>
+          <p className="mt-0.5 text-sm font-semibold text-slate-100">
+            {gb(used)}
+            <span className="font-normal text-slate-500"> / {limit > 0 ? gb(limit) : '∞'}</span>
+          </p>
+          {limit > 0 ? (
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-800">
+              <div className={`h-full rounded-full ${bar}`} style={{ width: `${pct}%` }} />
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-500">Unlimited</p>
+          )}
+        </div>
+      </div>
+
+      <div className="p-3.5">
+        {vpnKey.statusUrl && active ? (
+          <a
+            href={vpnKey.statusUrl}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-12px_rgba(99,102,241,0.8)] transition hover:bg-indigo-400 active:scale-[0.99]"
+          >
+            Key ကြည့်မယ်
+            <span aria-hidden>→</span>
+          </a>
+        ) : (
+          <p className="rounded-xl bg-slate-900 py-2 text-center text-xs text-slate-500">
+            {active ? 'Key page not available — contact us' : 'သက်တမ်းကုန်ဆုံးပါပြီ · Plan expired'}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function getFlagEmoji(country: string | null | undefined) {
   if (!country) return '🌐';
   const cRaw = country.trim();
@@ -536,162 +627,18 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
                               </div>
                             )}
 
-                          {/* VPN OUTLINE BLOCK – per-key usage */}
-                          {isVpn && primaryKey && (
-                            <div className="mt-3 rounded-xl border border-emerald-600/50 bg-emerald-950/40 p-3">
-                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="space-y-1">
-                                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
-                                    Your Outline key
-                                    {allVpnKeys.length > 1 &&
-                                      ` (${allVpnKeys.length} keys)`}
-                                  </p>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-lg">
-                                      {getFlagEmoji(
-                                        primaryKey.country || vpnCountry
-                                      )}
-                                    </span>
-                                    <span className="break-all font-mono text-[11px] text-emerald-100 sm:text-xs">
-                                      {shortKeyDisplay}
-                                    </span>
-                                  </div>
-                                </div>
-                                {primarySs && (
-                                  <div className="flex-shrink-0">
-                                    <CopyButton value={primarySs} />
-                                  </div>
-                                )}
-                              </div>
-
-                              {primaryKey.statusUrl && (
-                                <a
-                                  href={primaryKey.statusUrl}
-                                  className="mt-3 flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400"
-                                >
-                                  Key page · လိုင်းမကောင်းပါ Key အသစ်လဲမယ် →
-                                </a>
-                              )}
-
-                              <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-emerald-100">
-                                {(primaryKey.country || vpnCountry) && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-900/70 px-2 py-0.5">
-                                    <span>
-                                      {getFlagEmoji(
-                                        primaryKey.country || vpnCountry
-                                      )}
-                                    </span>
-                                    <span>
-                                      {primaryKey.country || vpnCountry}
-                                    </span>
-                                  </span>
-                                )}
-                                {(primaryKey.planName || vpnPlanName) && (
-                                  <span className="rounded-full bg-emerald-900/70 px-2 py-0.5">
-                                    {primaryKey.planName || vpnPlanName}
-                                  </span>
-                                )}
-                                {(primaryKey.expiresAt || vpnExpiresAt) && (
-                                  <span className="rounded-full bg-emerald-900/70 px-2 py-0.5">
-                                    Expires{' '}
-                                    {formatDateOnly(
-                                      primaryKey.expiresAt ||
-                                        vpnExpiresAt
-                                    )}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Per-key usage list */}
-                              <div className="mt-4 space-y-3">
-                                {allVpnKeys.map((k, i) => {
-                                  const limitBytes =
-                                    typeof k.dataLimitBytes === 'number'
-                                      ? k.dataLimitBytes
-                                      : typeof k.data_limit_bytes ===
-                                        'number'
-                                      ? k.data_limit_bytes
-                                      : null;
-
-                                  const usedBytes =
-                                    typeof k.usedBytes === 'number'
-                                      ? k.usedBytes
-                                      : typeof k.used_bytes === 'number'
-                                      ? k.used_bytes
-                                      : 0;
-
-                                  let limitGb: number | null = null;
-                                  let usedGb = 0;
-                                  let percentUsed = 0;
-
-                                  if (typeof limitBytes === 'number') {
-                                    limitGb = limitBytes / 1_000_000_000;
-                                  }
-
-                                  if (typeof usedBytes === 'number') {
-                                    usedGb = usedBytes / 1_000_000_000;
-                                  }
-
-                                  if (limitGb && limitGb > 0) {
-                                    percentUsed = Math.min(
-                                      100,
-                                      Math.max(
-                                        0,
-                                        (usedGb / limitGb) * 100
-                                      )
-                                    );
-                                  }
-
-                                  const label =
-                                    typeof k.ssUri === 'string'
-                                      ? k.ssUri.length > 60
-                                        ? k.ssUri.slice(0, 60) + '…'
-                                        : k.ssUri
-                                      : '';
-
-                                  return (
-                                    <div
-                                      key={k.id || i}
-                                      className="space-y-2 rounded-xl bg-slate-950/80 p-3"
-                                    >
-                                      <div className="flex items-start justify-between gap-2">
-                                        <div className="min-w-0">
-                                          <p className="text-xs font-semibold text-emerald-200">
-                                            KEY #{i + 1}
-                                          </p>
-                                          {label && (
-                                            <p className="mt-0.5 break-all font-mono text-[11px] text-emerald-100">
-                                              {label}
-                                            </p>
-                                          )}
-                                        </div>
-                                        {k.ssUri && (
-                                          <CopyButton value={k.ssUri} />
-                                        )}
-                                      </div>
-                                      {limitGb !== null && (
-                                        <div className="space-y-1.5">
-                                          <div className="flex justify-between text-[11px] text-emerald-200">
-                                            <span>Usage</span>
-                                            <span>
-                                              {usedGb.toFixed(2)} /{' '}
-                                              {Math.round(limitGb)} GB
-                                            </span>
-                                          </div>
-                                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-emerald-900/40">
-                                            <div
-                                              className="h-full rounded-full bg-emerald-400"
-                                              style={{
-                                                width: `${percentUsed}%`,
-                                              }}
-                                            />
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                          {/* VPN — summary only; key lives on the key page */}
+                          {isVpn && allVpnKeys.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              {allVpnKeys.map((k: any, i: number) => (
+                                <VpnOrderCard
+                                  key={k.id || i}
+                                  vpnKey={k}
+                                  fallbackCountry={vpnCountry}
+                                  fallbackPlan={vpnPlanName}
+                                  index={allVpnKeys.length > 1 ? i + 1 : null}
+                                />
+                              ))}
                             </div>
                           )}
 

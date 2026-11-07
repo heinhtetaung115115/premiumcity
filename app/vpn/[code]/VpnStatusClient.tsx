@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   CalendarDays,
   Check,
+  CheckCircle2,
   Copy,
   ExternalLink,
   RefreshCw,
@@ -107,11 +108,79 @@ function DataRing({ pct, color }: { pct: number; color: string }) {
   );
 }
 
+/** Loading screen while the key is being replaced. */
+const FIX_STEPS = [
+  { mm: 'Key ကို စစ်ဆေးနေပါသည်…', en: 'Checking your key' },
+  { mm: 'Key အသစ် ပြုလုပ်နေပါသည်…', en: 'Creating a new key' },
+  { mm: 'Key အသစ်ဖြင့် အစားထိုးနေပါသည်…', en: 'Replacing your key' },
+];
+
+function FixingAnimation() {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setStep((s) => Math.min(s + 1, FIX_STEPS.length - 1)), 900);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="py-4 text-center">
+      <style>{`
+        @keyframes pc-orbit { to { transform: rotate(360deg); } }
+        @keyframes pc-breathe { 0%,100% { transform: scale(0.92); opacity: .65 } 50% { transform: scale(1.05); opacity: 1 } }
+        @keyframes pc-rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+        .pc-orbit { animation: pc-orbit 1.4s linear infinite; }
+        .pc-breathe { animation: pc-breathe 1.6s ease-in-out infinite; }
+        .pc-rise { animation: pc-rise .35s ease-out both; }
+      `}</style>
+      <div className="relative mx-auto h-24 w-24">
+        <div className="pc-breathe absolute inset-3 rounded-full bg-indigo-500/25 blur-md" />
+        <svg viewBox="0 0 96 96" className="pc-orbit absolute inset-0">
+          <circle cx="48" cy="48" r="42" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="5" />
+          <circle
+            cx="48"
+            cy="48"
+            r="42"
+            fill="none"
+            stroke="url(#pc-grad)"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeDasharray="90 174"
+          />
+          <defs>
+            <linearGradient id="pc-grad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stopColor="#818cf8" />
+              <stop offset="1" stopColor="#34d399" />
+            </linearGradient>
+          </defs>
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <ShieldCheck className="h-9 w-9 text-indigo-200" />
+        </div>
+      </div>
+
+      <p key={step} className="pc-rise mt-5 text-base font-semibold text-white">
+        {FIX_STEPS[step].mm}
+      </p>
+      <p className="mt-1 text-xs text-slate-500">We are fixing your key · {FIX_STEPS[step].en}</p>
+
+      <div className="mx-auto mt-5 flex max-w-[180px] gap-1.5">
+        {FIX_STEPS.map((_, i) => (
+          <span
+            key={i}
+            className={`h-1 flex-1 rounded-full transition-colors duration-500 ${i <= step ? 'bg-indigo-400' : 'bg-white/10'}`}
+          />
+        ))}
+      </div>
+      <p className="mt-4 text-[11px] text-slate-600">ခဏစောင့်ပါ · Please don&apos;t close this page</p>
+    </div>
+  );
+}
+
 export function VpnStatusClient({ view }: { view: VpnStatusView }) {
   const router = useRouter();
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Replace-key popup flow: confirm → working (animation) → done | error
+  const [phase, setPhase] = useState<'idle' | 'confirm' | 'working' | 'done' | 'error'>('idle');
+  const [errorText, setErrorText] = useState('');
+  const busy = phase === 'working';
   const [showBackup, setShowBackup] = useState(false);
   const [app, setApp] = useState<'outline' | 'other'>('outline');
 
@@ -128,27 +197,27 @@ export function VpnStatusClient({ view }: { view: VpnStatusView }) {
   const lowDays = view.daysRemaining <= 3;
 
   async function requestNewKey() {
-    setBusy(true);
-    setMsg(null);
+    setPhase('working');
+    setErrorText('');
+    const minWait = new Promise((r) => setTimeout(r, 2600)); // let the animation play
     try {
       const res = await fetch(`/api/vpn/${view.code}/replace`, { method: 'POST' });
       const json = await res.json().catch(() => ({}));
+      await minWait;
       if (json?.ok) {
-        setMsg({
-          ok: true,
-          text: 'Key အသစ် ရပါပြီ။ Outline: Disconnect လုပ်ပြီး ပြန် Connect လုပ်ပါ။ Hiddify/V2Box: Subscription ကို Update နှိပ်ပါ။',
-        });
-        router.refresh();
+        setPhase('done');
+        router.refresh(); // updates "x/3 left" + backup key behind the popup
       } else if (json?.error === 'limit') {
-        setMsg({ ok: false, text: 'ဒီလအတွက် Key အသစ်လဲခွင့် ၃ ကြိမ် ကုန်သွားပါပြီ။ PremiumCity သို့ ဆက်သွယ်ပါ။' });
+        setErrorText('ဒီလအတွက် Key အသစ်လဲခွင့် ၃ ကြိမ် ကုန်သွားပါပြီ။ PremiumCity သို့ ဆက်သွယ်ပါ။');
+        setPhase('error');
       } else {
-        setMsg({ ok: false, text: json?.error || 'Something went wrong. Please try again.' });
+        setErrorText(json?.error || 'Key အသစ် မလဲနိုင်သေးပါ။ ခဏနေ ထပ်ကြိုးစားပါ (သို့) PremiumCity သို့ ဆက်သွယ်ပါ။');
+        setPhase('error');
       }
     } catch {
-      setMsg({ ok: false, text: 'Network error. Please try again.' });
-    } finally {
-      setBusy(false);
-      setConfirming(false);
+      await minWait;
+      setErrorText('Internet connection error. ခဏနေ ထပ်ကြိုးစားပါ။');
+      setPhase('error');
     }
   }
 
@@ -353,31 +422,22 @@ export function VpnStatusClient({ view }: { view: VpnStatusView }) {
         <button
           type="button"
           disabled={busy || view.replacementsLeft <= 0}
-          onClick={() => setConfirming(true)}
+          onClick={() => setPhase('confirm')}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/40 bg-amber-400/10 py-3 text-sm font-bold text-amber-200 transition hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} />
           {busy ? 'Key အသစ် ပြုလုပ်နေပါသည်…' : 'Key အသစ်လဲမယ်'}
         </button>
 
-        {msg && (
-          <p
-            className={`mt-3 rounded-2xl p-3 text-sm leading-relaxed ${
-              msg.ok ? 'bg-emerald-500/10 text-emerald-200' : 'bg-rose-500/10 text-rose-200'
-            }`}
-          >
-            {msg.text}
-          </p>
-        )}
       </section>
 
       <p className="text-center text-xs text-slate-600">PremiumCity · pcitystore.com</p>
 
-      {/* ── Confirm popup ─────────────────────────────── */}
-      {confirming && (
+      {/* ── Replace-key popup ─────────────────────────── */}
+      {phase !== 'idle' && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center"
-          onClick={() => !busy && setConfirming(false)}
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-4 backdrop-blur-sm sm:items-center"
+          onClick={() => (phase === 'confirm' || phase === 'error') && setPhase('idle')}
           role="dialog"
           aria-modal="true"
         >
@@ -385,37 +445,105 @@ export function VpnStatusClient({ view }: { view: VpnStatusView }) {
             className="w-full max-w-sm rounded-[28px] border border-white/10 bg-slate-900 p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/15">
-              <AlertTriangle className="h-6 w-6 text-amber-300" />
-            </div>
-            <h2 className="text-center text-lg font-bold text-white">Key အသစ် လဲလှယ်ရန်</h2>
-            <p className="mt-3 text-center text-[15px] leading-relaxed text-slate-200">
-              Server overload ဖြစ်ခြင်းမှ ကာကွယ်ရန် တစ်လအတွင်း <b>သုံးကြိမ်သာ</b> လဲလှယ်ခွင့်ရှိပါသည်။
-            </p>
-            <p className="mt-2 text-center text-sm font-medium text-amber-300">
-              ယခုလ {view.replacementsLeft} ကြိမ် ကျန်ပါသည်
-            </p>
-            <p className="mt-3 rounded-xl bg-black/30 p-2.5 text-center text-xs leading-relaxed text-slate-400">
-              Key မလဲမီ Disconnect လုပ်ပြီး ပြန် Connect လုပ်ကြည့်ပါ။
-            </p>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setConfirming(false)}
-                className="rounded-2xl border border-white/10 py-3 text-sm font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-50"
-              >
-                မလုပ်ပါ
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={requestNewKey}
-                className="rounded-2xl bg-amber-400 py-3 text-sm font-bold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
-              >
-                {busy ? 'ခဏစောင့်ပါ…' : 'သဘောတူပါသည်'}
-              </button>
-            </div>
+            {phase === 'confirm' && (
+              <>
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/15">
+                  <AlertTriangle className="h-6 w-6 text-amber-300" />
+                </div>
+                <h2 className="text-center text-lg font-bold text-white">Key အသစ် လဲလှယ်ရန်</h2>
+                <p className="mt-3 text-center text-[15px] leading-relaxed text-slate-200">
+                  Server overload ဖြစ်ခြင်းမှ ကာကွယ်ရန် တစ်လအတွင်း <b>သုံးကြိမ်သာ</b> လဲလှယ်ခွင့်ရှိပါသည်။
+                </p>
+                <p className="mt-2 text-center text-sm font-medium text-amber-300">
+                  ယခုလ {view.replacementsLeft} ကြိမ် ကျန်ပါသည်
+                </p>
+                <p className="mt-3 rounded-xl bg-black/30 p-2.5 text-center text-xs leading-relaxed text-slate-400">
+                  Key မလဲမီ Disconnect လုပ်ပြီး ပြန် Connect လုပ်ကြည့်ပါ။
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPhase('idle')}
+                    className="rounded-2xl border border-white/10 py-3 text-sm font-semibold text-slate-300 hover:bg-white/5"
+                  >
+                    မလုပ်ပါ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={requestNewKey}
+                    className="rounded-2xl bg-amber-400 py-3 text-sm font-bold text-slate-950 hover:bg-amber-300"
+                  >
+                    သဘောတူပါသည်
+                  </button>
+                </div>
+              </>
+            )}
+
+            {phase === 'working' && <FixingAnimation />}
+
+            {phase === 'done' && (
+              <div className="text-center">
+                <style>{`@keyframes pc-pop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}} .pc-pop{animation:pc-pop .45s cubic-bezier(.2,.9,.3,1.2) both}`}</style>
+                <div className="pc-pop mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-400/15 ring-8 ring-emerald-400/5">
+                  <CheckCircle2 className="h-9 w-9 text-emerald-300" />
+                </div>
+                <h2 className="text-lg font-bold text-white">Server မှ Key အသစ် လဲပြီးပါပြီ</h2>
+                <p className="mt-1 text-xs text-slate-500">Your key has been replaced</p>
+
+                <div className="mt-4 space-y-2 text-left">
+                  <div className="flex gap-3 rounded-2xl bg-emerald-400/[0.07] p-3">
+                    <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-300" />
+                    <p className="text-[13.5px] leading-relaxed text-slate-200">
+                      Key ကို ဖျက်ပြီး ပြန်ထည့်ရန် <b>မလိုအပ်ပါ</b>။
+                    </p>
+                  </div>
+                  <div className="flex gap-3 rounded-2xl bg-white/[0.04] p-3">
+                    <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-indigo-400 text-[10px] font-bold text-slate-950">
+                      1
+                    </span>
+                    <p className="text-[13.5px] leading-relaxed text-slate-200">
+                      <b>Disconnect</b> လုပ်ပြီး <b>Connect</b> ပြန်လုပ်ကြည့်ပါ။
+                      <span className="mt-0.5 block text-xs text-slate-500">
+                        Hiddify / V2Box: Subscription ကို Update နှိပ်ပြီးမှ Connect လုပ်ပါ။
+                      </span>
+                    </p>
+                  </div>
+                  <div className="flex gap-3 rounded-2xl bg-white/[0.04] p-3">
+                    <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-slate-600 text-[10px] font-bold text-white">
+                      2
+                    </span>
+                    <p className="text-[13.5px] leading-relaxed text-slate-300">
+                      မရမှသာ Key ကို ဖျက်ပြီး ဤစာမျက်နှာမှ ပြန်ထည့်ကြည့်ပါ။
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPhase('idle')}
+                  className="mt-5 w-full rounded-2xl bg-emerald-400 py-3 text-sm font-bold text-slate-950 hover:bg-emerald-300"
+                >
+                  OK · နားလည်ပါပြီ
+                </button>
+              </div>
+            )}
+
+            {phase === 'error' && (
+              <div className="text-center">
+                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500/15">
+                  <AlertTriangle className="h-7 w-7 text-rose-300" />
+                </div>
+                <h2 className="text-lg font-bold text-white">Key မလဲနိုင်ပါ</h2>
+                <p className="mt-2 text-[14px] leading-relaxed text-slate-300">{errorText}</p>
+                <button
+                  type="button"
+                  onClick={() => setPhase('idle')}
+                  className="mt-5 w-full rounded-2xl border border-white/10 py-3 text-sm font-semibold text-slate-200 hover:bg-white/5"
+                >
+                  ပိတ်မည် · Close
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

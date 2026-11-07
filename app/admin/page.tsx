@@ -6,9 +6,6 @@ import { Card } from '@/components/ui/card';
 import { listPendingManualDeliveries, getAdminSalesStats } from '@/lib/orders';
 import { getOutOfStockVariants } from '@/lib/catalog';
 import { OutOfStockPanel } from './OutOfStockPanel';
-import { VpnStockPanel } from './vpn/VpnStockPanel';
-import { setVpnStockAction } from './vpn/actions';
-import { getVpnStock } from '@/lib/vpn';
 import { listPendingTopupsForAdmin } from '@/lib/wallet';
 import { processTopup } from './topups/actions';
 import { dismissManualDeliveryAction } from './orders/actions';
@@ -46,12 +43,11 @@ async function dismissDeliveryFormAction(formData: FormData): Promise<void> {
 export default async function AdminHomePage() {
   await requireAdmin();
 
-  const [pendingDeliveries, pendingTopups, salesStats, outOfStock, vpnStock] = await Promise.all([
+  const [pendingDeliveries, pendingTopups, salesStats, outOfStock] = await Promise.all([
     listPendingManualDeliveries(200),
     listPendingTopupsForAdmin(200),
     getAdminSalesStats(),
     getOutOfStockVariants(),
-    getVpnStock().catch(() => ({} as Awaited<ReturnType<typeof getVpnStock>>)),
   ]);
 
   const deliveriesCount = pendingDeliveries.length;
@@ -239,20 +235,6 @@ export default async function AdminHomePage() {
 
       {/* ── OUT OF STOCK: collapsible, shows count until expanded ── */}
       <OutOfStockPanel items={outOfStock} />
-
-      {/* VPN stock switches */}
-      <Card className="border-[#26344e] bg-[#151e30] p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-semibold text-slate-100">VPN stock</p>
-          <Link href="/admin/vpn" className="text-xs text-emerald-400 hover:text-emerald-300">
-            Servers →
-          </Link>
-        </div>
-        <VpnStockPanel
-          rows={Object.values(vpnStock).sort((a, b) => a.country.localeCompare(b.country))}
-          action={setVpnStockAction}
-        />
-      </Card>
 
       {/* Secondary nav */}
       <section className="grid grid-cols-2 gap-3">

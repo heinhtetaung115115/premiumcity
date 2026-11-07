@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { fulfillManualItemAction } from './actions';
 import { DeliveryForm } from './DeliveryForm';
 import { EditCredentialForm } from './EditCredentialForm';
+import { EditNetflixLinkForm } from './EditNetflixLinkForm';
 import { credentialToRows, isEditableCredential } from '@/lib/deliveryTypes';
 
 export const runtime = 'nodejs';
@@ -238,6 +239,13 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                                             minute: '2-digit',
                                           })}
                                         </p>
+                                      )}
+                                      {!!credId && cred?.type === 'netflix_panel' && (
+                                        <EditNetflixLinkForm
+                                          inventoryItemId={credId}
+                                          link={String(cred.link ?? '')}
+                                          note={String(cred.note ?? '')}
+                                        />
                                       )}
                                       {editable && (
                                         <EditCredentialForm

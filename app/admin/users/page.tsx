@@ -7,6 +7,7 @@ import { getWalletPageData } from '@/lib/wallet';
 import { Button } from '@/components/ui';
 import { credentialToRows, isEditableCredential } from '@/lib/deliveryTypes';
 import { EditCredentialForm } from '../orders/EditCredentialForm';
+import { EditNetflixLinkForm } from '../orders/EditNetflixLinkForm';
 import { AdminTopupForm } from './AdminTopupForm';
 
 type PageProps = {
@@ -542,6 +543,13 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                               Updated {cred.history.length}× · last{' '}
                                               {formatDate(cred.history[cred.history.length - 1].changedAt)}
                                             </p>
+                                          )}
+                                          {!!credId && cred?.type === 'netflix_panel' && (
+                                            <EditNetflixLinkForm
+                                              inventoryItemId={credId}
+                                              link={String(cred.link ?? '')}
+                                              note={String(cred.note ?? '')}
+                                            />
                                           )}
                                           {editable && (
                                             <EditCredentialForm

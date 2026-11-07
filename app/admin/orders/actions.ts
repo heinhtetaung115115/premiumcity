@@ -479,3 +479,49 @@ export async function updateDeliveredCredentialAction(
     return { ok: true, emailed: false, error: 'Saved, but the email could not be sent.' };
   }
 }
+
+/**
+ * Replace the supplier link (and note) on a delivered Netflix item. The
+ * customer's Netflix panel reads this row live, so the new link takes effect
+ * immediately.
+ */
+export async function updateNetflixLinkByCredentialAction(
+  formData: FormData
+): Promise<UpdateCredentialResult> {
+  await requireAdmin();
+  const inventoryItemId = String(formData.get('inventoryItemId') ?? '').trim();
+  const link = String(formData.get('link') ?? '').trim();
+  const note = String(formData.get('note') ?? '').trim();
+  if (!inventoryItemId) return { ok: false, error: 'Missing item.' };
+  if (!link) return { ok: false, error: 'Paste the supplier link.' };
+  if (!isNetflixLink(link)) return { ok: false, error: 'Not a valid supplier link (resellerpanel.store / txtl.online).' };
+
+  const supabase = getServiceSupabaseClient();
+  const { data: row, error: rowErr } = await supabase
+    .from('inventory_items')
+    .select('id,order_item_id,payload')
+    .eq('id', inventoryItemId)
+    .maybeSingle();
+  if (rowErr) return { ok: false, error: rowErr.message };
+  if (!row) return { ok: false, error: 'Delivery not found.' };
+
+  const old: any = (row as any).payload && typeof (row as any).payload === 'object' ? (row as any).payload : {};
+  if (old.type !== 'netflix_panel') return { ok: false, error: 'This is not a Netflix supplier-link delivery.' };
+  if (link === (old.link ?? '') && note === (old.note ?? '')) return { ok: false, error: 'Nothing changed.' };
+
+  const history = Array.isArray(old.history) ? old.history.slice(-4) : [];
+  history.push({ changedAt: new Date().toISOString() });
+
+  const payload: Record<string, unknown> = { ...old, type: 'netflix_panel', link, history };
+  if (note) payload.note = note;
+  else delete payload.note;
+
+  const { error } = await supabase.from('inventory_items').update({ payload }).eq('id', inventoryItemId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/admin/orders');
+  revalidatePath('/admin/users');
+  revalidatePath('/admin/renewals');
+  revalidatePath('/orders');
+  return { ok: true };
+}

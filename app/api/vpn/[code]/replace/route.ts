@@ -32,7 +32,7 @@ export async function POST(req: Request, { params }: { params: { code: string } 
 
   const res = await customerRequestNewKey(params.code);
   if (!res.ok) {
-    const status = res.error === 'limit' ? 429 : 400;
+    const status = res.error === 'limit' ? 429 : res.error === 'maintenance' ? 503 : 400;
     return NextResponse.json(res, { status });
   }
   return NextResponse.json(res);

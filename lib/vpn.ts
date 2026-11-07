@@ -150,6 +150,22 @@ export function periodUsedBytes(sub: VpnSubscription, key: VpnKeyRow | null): nu
   return num(sub.period_used_prior_bytes) + num(key?.used_bytes);
 }
 
+/**
+ * Server is "under maintenance" for customers while we know it has a problem:
+ * a move is queued/running, it's down (alert open), or several customers
+ * reported a bad line in the last 3 hours. During this time customers see an
+ * "updating our server" screen instead of burning key replacements.
+ */
+export function isServerInMaintenance(s: Partial<VpnServer> | null | undefined): boolean {
+  if (!s) return false;
+  if (s.pending_move_to) return true;
+  if (s.down_alerted_at) return true;
+  if (s.blocked_alerted_at && Date.now() - new Date(s.blocked_alerted_at).getTime() < 3 * 60 * 60 * 1000) {
+    return true;
+  }
+  return false;
+}
+
 // ─── Loaders ────────────────────────────────────────────
 
 export async function listServers(): Promise<VpnServer[]> {
@@ -491,6 +507,13 @@ export async function customerRequestNewKey(
   const sub = await getSubscriptionByCode(code);
   if (!sub || isExpired(sub)) return { ok: false, error: 'This VPN plan has expired.' };
 
+  // Known server problem: don't make a pointless key on the same server and
+  // don't use up one of the customer's 3 monthly replacements.
+  const currentKey = await getCurrentKey(sub.id);
+  if (currentKey && isServerInMaintenance(await getServer(currentKey.vpn_server_id))) {
+    return { ok: false, error: 'maintenance' };
+  }
+
   const { data: claimed, error: claimErr } = await supabase.rpc('vpn_claim_replacement', {
     p_subscription_id: sub.id,
     p_max: CUSTOMER_REPLACE_MAX,
@@ -598,6 +621,8 @@ export type VpnStatusView = {
   subscriptionLink: string;
   ssUri: string | null;
   replacementsLeft: number;
+  /** Server problem known to us: show "updating our server" instead of replacing. */
+  maintenance: boolean;
 };
 
 export async function getStatusView(code: string): Promise<VpnStatusView | null> {
@@ -639,6 +664,7 @@ export async function getStatusView(code: string): Promise<VpnStatusView | null>
     subscriptionLink: subscriptionLinkFor(sub.code),
     ssUri: key?.ss_uri ?? null,
     replacementsLeft: active ? await replacementsLeft(sub.id) : 0,
+    maintenance: isServerInMaintenance(server),
   };
 }
 
@@ -1084,11 +1110,12 @@ async function checkMaybeBlocked(serverId: string): Promise<void> {
   await supabase.from('vpn_servers').update({ blocked_alerted_at: new Date().toISOString() }).eq('id', serverId);
   await sendTelegramMessage({
     text: [
-      '🚧 <b>Server may be blocked in Myanmar</b>',
+      '🚧 <b>Customers report a bad line</b>',
       '',
       `🖥 <b>${escapeHtml(server.name || 'server')}</b>`,
       `${subs.size} different customers replaced their key in the last ${BLOCKED_WINDOW_MIN} minutes.`,
-      'The server still answers us, so it is probably blocked by local internet providers.',
+      'The server still answers us, so local internet providers may be blocking it.',
+      'Customers now see "We are updating our server" for 3 hours (no more key swaps).',
     ].join('\n'),
     buttons: moveButtons(serverId),
   }).catch(() => false);

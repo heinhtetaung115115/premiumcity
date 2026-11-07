@@ -10,6 +10,8 @@ import {
   Copy,
   ExternalLink,
   RefreshCw,
+  Server,
+  Settings,
   ShieldCheck,
   Smartphone,
 } from 'lucide-react';
@@ -175,10 +177,60 @@ function FixingAnimation() {
   );
 }
 
+/** "We are updating our server" — shown while we know a server has a problem. */
+function MaintenanceVisual({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={`text-center ${compact ? '' : 'py-2'}`}>
+      <style>{`
+        @keyframes pc-wave { 0% { transform: scale(.6); opacity: .55 } 100% { transform: scale(1.6); opacity: 0 } }
+        @keyframes pc-spin { to { transform: rotate(360deg) } }
+        @keyframes pc-slide { 0% { transform: translateX(-100%) } 100% { transform: translateX(250%) } }
+        .pc-wave { animation: pc-wave 2.2s ease-out infinite; }
+        .pc-wave2 { animation: pc-wave 2.2s ease-out .73s infinite; }
+        .pc-wave3 { animation: pc-wave 2.2s ease-out 1.46s infinite; }
+        .pc-spin { animation: pc-spin 3s linear infinite; }
+        .pc-slide { animation: pc-slide 1.6s ease-in-out infinite; }
+      `}</style>
+      <div className={`relative mx-auto ${compact ? 'h-16 w-16' : 'h-24 w-24'}`}>
+        <span className="pc-wave absolute inset-0 rounded-full border-2 border-sky-400/50" />
+        <span className="pc-wave2 absolute inset-0 rounded-full border-2 border-sky-400/50" />
+        <span className="pc-wave3 absolute inset-0 rounded-full border-2 border-sky-400/50" />
+        <div className="absolute inset-[18%] flex items-center justify-center rounded-2xl bg-sky-500/15 ring-1 ring-sky-400/30">
+          <Server className={compact ? 'h-6 w-6 text-sky-200' : 'h-8 w-8 text-sky-200'} />
+          <span className="absolute -bottom-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 ring-2 ring-slate-900">
+            <Settings className="pc-spin h-5 w-5 text-amber-300" />
+          </span>
+        </div>
+      </div>
+      {!compact && (
+        <div className="mx-auto mt-5 h-1 w-40 overflow-hidden rounded-full bg-white/10">
+          <div className="pc-slide h-full w-1/3 rounded-full bg-gradient-to-r from-sky-400 to-indigo-400" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MaintenanceText() {
+  return (
+    <>
+      <p className="mt-4 text-lg font-bold text-white">Server ကို Update လုပ်နေပါသည်</p>
+      <p className="mt-1 text-xs text-slate-500">We are updating our server</p>
+      <p className="mt-3 text-[14px] leading-relaxed text-slate-300">
+        ခဏအကြာမှ ပြန်လာခဲ့ပါ။ Update ပြီးပါက <b>အလိုအလျောက်</b> ပြန်ကောင်းသွားပါမည်။
+      </p>
+      <p className="mt-2 rounded-xl bg-black/30 p-2.5 text-xs leading-relaxed text-slate-400">
+        Key ကို ဖျက်ရန် (သို့) အသစ်လဲရန် မလိုအပ်ပါ။ Please come back in a little while — no need to delete or change
+        your key.
+      </p>
+    </>
+  );
+}
+
 export function VpnStatusClient({ view }: { view: VpnStatusView }) {
   const router = useRouter();
   // Replace-key popup flow: confirm → working (animation) → done | error
-  const [phase, setPhase] = useState<'idle' | 'confirm' | 'working' | 'done' | 'error'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'confirm' | 'working' | 'done' | 'error' | 'maintenance'>('idle');
   const [errorText, setErrorText] = useState('');
   const busy = phase === 'working';
   const [showBackup, setShowBackup] = useState(false);
@@ -207,6 +259,9 @@ export function VpnStatusClient({ view }: { view: VpnStatusView }) {
       if (json?.ok) {
         setPhase('done');
         router.refresh(); // updates "x/3 left" + backup key behind the popup
+      } else if (json?.error === 'maintenance') {
+        setPhase('maintenance');
+        router.refresh();
       } else if (json?.error === 'limit') {
         setErrorText('ဒီလအတွက် Key အသစ်လဲခွင့် ၃ ကြိမ် ကုန်သွားပါပြီ။ PremiumCity သို့ ဆက်သွယ်ပါ။');
         setPhase('error');
@@ -223,6 +278,22 @@ export function VpnStatusClient({ view }: { view: VpnStatusView }) {
 
   return (
     <div className="mx-auto max-w-md space-y-4 pb-12">
+      {/* ── Server update banner ──────────────────────── */}
+      {view.maintenance && (
+        <section className="flex items-center gap-4 rounded-3xl border border-sky-400/30 bg-sky-500/[0.08] p-4">
+          <div className="flex-shrink-0">
+            <MaintenanceVisual compact />
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-white">Server ကို Update လုပ်နေပါသည်</p>
+            <p className="mt-0.5 text-[13px] leading-relaxed text-slate-300">
+              ခဏအကြာမှ ပြန်လာခဲ့ပါ။ Key ဖျက်ရန် မလိုပါ — အလိုအလျောက် ပြန်ကောင်းပါမည်။
+            </p>
+            <p className="mt-0.5 text-[11px] text-slate-500">We are updating our server. Please come back in a while.</p>
+          </div>
+        </section>
+      )}
+
       {/* ── Plan hero ─────────────────────────────────── */}
       <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-indigo-600/30 via-slate-900 to-slate-950 p-5">
         <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-indigo-500/20 blur-3xl" />
@@ -422,7 +493,7 @@ export function VpnStatusClient({ view }: { view: VpnStatusView }) {
         <button
           type="button"
           disabled={busy || view.replacementsLeft <= 0}
-          onClick={() => setPhase('confirm')}
+          onClick={() => setPhase(view.maintenance ? 'maintenance' : 'confirm')}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/40 bg-amber-400/10 py-3 text-sm font-bold text-amber-200 transition hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} />
@@ -437,7 +508,7 @@ export function VpnStatusClient({ view }: { view: VpnStatusView }) {
       {phase !== 'idle' && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-4 backdrop-blur-sm sm:items-center"
-          onClick={() => (phase === 'confirm' || phase === 'error') && setPhase('idle')}
+          onClick={() => (phase === 'confirm' || phase === 'error' || phase === 'maintenance') && setPhase('idle')}
           role="dialog"
           aria-modal="true"
         >
@@ -480,6 +551,20 @@ export function VpnStatusClient({ view }: { view: VpnStatusView }) {
             )}
 
             {phase === 'working' && <FixingAnimation />}
+
+            {phase === 'maintenance' && (
+              <div className="pt-2 text-center">
+                <MaintenanceVisual />
+                <MaintenanceText />
+                <button
+                  type="button"
+                  onClick={() => setPhase('idle')}
+                  className="mt-5 w-full rounded-2xl bg-sky-400 py-3 text-sm font-bold text-slate-950 hover:bg-sky-300"
+                >
+                  OK · နားလည်ပါပြီ
+                </button>
+              </div>
+            )}
 
             {phase === 'done' && (
               <div className="text-center">

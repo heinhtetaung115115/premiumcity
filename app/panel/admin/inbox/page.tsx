@@ -1,6 +1,18 @@
 import { panelBase, requirePanelAdmin } from '@/lib/panel/auth';
 import { listEmails } from '@/lib/panel/data';
 import { Shell } from '../Shell';
+import { htmlToText } from '@/lib/panel/rules';
+
+/** Every button/link in the email with its text, so admin can see which one customers get. */
+function linksOf(html: string | null): { label: string; url: string }[] {
+  const out: { label: string; url: string }[] = [];
+  for (const m of (html || '').matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const label = htmlToText(m[2]).replace(/\s+/g, ' ').trim();
+    if (!/^https?:/i.test(m[1])) continue;
+    out.push({ label: label || (/<img/i.test(m[2]) ? '(image)' : '(no text)'), url: m[1].replace(/&amp;/g, '&') });
+  }
+  return out.slice(0, 15);
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -55,6 +67,22 @@ export default async function InboxPage() {
                 <p className="break-all">
                   <b className="text-slate-300">Link:</b> {m.action_link}
                 </p>
+              )}
+              {linksOf(m.html_body).length > 0 && (
+                <div className="mt-2 rounded-xl border border-white/5 p-2">
+                  <p className="mb-1 font-semibold text-slate-300">Links in this email</p>
+                  {linksOf(m.html_body).map((l, i) => {
+                    const chosen = !!m.action_link && l.url === m.action_link;
+                    return (
+                      <p key={i} className="flex gap-2 py-0.5">
+                        <span className={chosen ? 'text-emerald-300' : 'text-slate-600'}>{chosen ? '✅' : '⛔'}</span>
+                        <span className={chosen ? 'font-semibold text-emerald-200' : 'text-slate-400'}>{l.label}</span>
+                        <span className="truncate text-slate-600">{l.url.slice(0, 60)}…</span>
+                      </p>
+                    );
+                  })}
+                  <p className="mt-1 text-[10px] text-slate-500">✅ = the button customers get · ⛔ = never shown</p>
+                </div>
               )}
               <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-black/30 p-3 text-[11px] text-slate-300">
                 {(m.text_body || '').slice(0, 4000)}

@@ -285,6 +285,15 @@ export async function fetchNetflixPanel(rawLink: string): Promise<NetflixPanel> 
 
     if (!res.ok) {
       console.error('[netflix] supplier HTTP', res.status, new URL(apiUrl).hostname);
+      if (res.status === 404 || res.status === 410) {
+        // The supplier's own page shows "This link is invalid or has expired".
+        return {
+          ok: false,
+          profile: null,
+          messages: [],
+          error: 'This account link has expired or is being replaced. Please contact PremiumCity — we will update it.',
+        };
+      }
       return { ok: false, profile: null, messages: [], error: `Supplier returned HTTP ${res.status}.` };
     }
 

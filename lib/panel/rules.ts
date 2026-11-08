@@ -87,7 +87,13 @@ export function extractActionLink(html: string, text: string, senders: string[] 
   for (const m of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
     candidates.push({ url: m[1].replace(/&amp;/g, '&'), label: htmlToText(m[2]) });
   }
-  for (const m of text.matchAll(/https?:\/\/[^\s<>"')\]]+/gi)) candidates.push({ url: m[0], label: '' });
+  // Plain-text emails (and Outlook forwards) write buttons as
+  //   "THIS WAS ME <https://…>"  or  "THIS WAS ME [https://…]"  or  "THIS WAS ME: https://…"
+  // so the words right before the link on the same line are its label.
+  for (const m of text.matchAll(/([^\n<>\[\]]{0,80}?)\s*[<\[(]?\s*(https?:\/\/[^\s<>"')\]]+)/gi)) {
+    const label = (m[1] || '').replace(/[:\-–|]+\s*$/, '').trim();
+    candidates.push({ url: m[2], label: /https?:/i.test(label) ? '' : label });
+  }
   const good = /(this was me|it was me|it'?s me|verif|confirm|sign[-_ ]?in|log[-_ ]?in|activate|access|code|yes|approve)/i;
   const bad =
     /(not me|wasn'?t (?:me|you)|click here|secure your|unsubscribe|password|reset|privacy|terms|help|support|preferences|cancel|email[-_ ]?change|account\/?settings|learn more|mailto:)/i;

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { panelBase, requirePanelAdmin } from '@/lib/panel/auth';
 import { countLiveLinksByAccount, listAccounts } from '@/lib/panel/data';
 import { SERVICES, serviceInfo } from '@/lib/panel/rules';
-import { createAccountAction } from './actions';
+import { createAccountAction, deleteAccountAction } from './actions';
 import { Shell, btnCls, cardCls, inputCls, labelCls } from './Shell';
 
 export const runtime = 'nodejs';
@@ -13,7 +13,7 @@ function fmt(iso: string | null) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Yangon' });
 }
 
-export default async function PanelAdminHome({ searchParams }: { searchParams?: { q?: string } }) {
+export default async function PanelAdminHome({ searchParams }: { searchParams?: { q?: string; ok?: string } }) {
   requirePanelAdmin();
   const base = panelBase();
   const q = searchParams?.q ?? '';
@@ -35,6 +35,9 @@ export default async function PanelAdminHome({ searchParams }: { searchParams?: 
         </p>
       )}
 
+      {searchParams?.ok === 'deleted' && (
+        <p className="mb-4 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-200">Account deleted.</p>
+      )}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-white">Accounts</h1>
         <form className="flex gap-2">
@@ -49,10 +52,10 @@ export default async function PanelAdminHome({ searchParams }: { searchParams?: 
           const svc = serviceInfo(a.service);
           const exp = a.account_expires_at ? Math.ceil((new Date(a.account_expires_at).getTime() - Date.now()) / 86_400_000) : null;
           return (
+            <div key={a.id} className="flex items-stretch gap-2">
             <Link
-              key={a.id}
               href={`${base}/admin/a/${a.id}`}
-              className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-indigo-400/50"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-indigo-400/50"
             >
               <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-sm font-black text-white" style={{ background: svc.color === '#ffffff' ? '#334155' : svc.color }}>
                 {svc.name.slice(0, 1)}
@@ -74,6 +77,29 @@ export default async function PanelAdminHome({ searchParams }: { searchParams?: 
                 </p>
               </div>
             </Link>
+            <details className="relative">
+              <summary
+                className="flex h-full cursor-pointer list-none items-center rounded-2xl border border-white/10 px-3 text-slate-500 hover:border-rose-400/50 hover:text-rose-300"
+                title="Delete account"
+              >
+                🗑
+              </summary>
+              <form
+                action={deleteAccountAction}
+                className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-rose-500/30 bg-[#140c10] p-3 shadow-xl"
+              >
+                <input type="hidden" name="id" value={a.id} />
+                <p className="mb-2 text-xs text-rose-200">
+                  Delete <b>{a.email}</b> and all its customer links ({live[a.id] ?? 0} active)? Customers lose access. Tip: open the
+                  account and use “Move customers” first if it was blocked.
+                </p>
+                <label className="mb-2 flex items-center gap-2 text-xs text-rose-100">
+                  <input type="checkbox" name="confirm" required /> I understand
+                </label>
+                <button className="w-full rounded-lg bg-rose-500 py-1.5 text-xs font-bold text-white">Delete account</button>
+              </form>
+            </details>
+            </div>
           );
         })}
       </div>

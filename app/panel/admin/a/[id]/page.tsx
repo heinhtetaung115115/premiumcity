@@ -1,13 +1,14 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { panelBase, requirePanelAdmin } from '@/lib/panel/auth';
-import { getAccount, linkIsLive, listEmails, listLinks } from '@/lib/panel/data';
+import { countLiveLinksByAccount, getAccount, linkIsLive, listAccounts, listEmails, listLinks } from '@/lib/panel/data';
 import { customerLinkUrl } from '@/lib/panel/config';
 import { SERVICES, serviceInfo } from '@/lib/panel/rules';
 import {
   changePasswordAction,
   createLinkAction,
   deleteAccountAction,
+  moveCustomersAction,
   updateAccountAction,
 } from '../../actions';
 import { Shell, btnCls, cardCls, inputCls, labelCls } from '../../Shell';
@@ -43,7 +44,13 @@ export default async function AccountPage({
   const base = panelBase();
   const acc = await getAccount(params.id);
   if (!acc) notFound();
-  const [links, mails] = await Promise.all([listLinks(acc.id), listEmails({ accountId: acc.id, limit: 30 })]);
+  const [links, mails, allAccounts, liveByAcc] = await Promise.all([
+    listLinks(acc.id),
+    listEmails({ accountId: acc.id, limit: 30 }),
+    listAccounts(),
+    countLiveLinksByAccount(),
+  ]);
+  const moveTargets = allAccounts.filter((a) => a.id !== acc.id && a.status === 'active' && a.service === acc.service);
   const svc = serviceInfo(acc.service);
   const sp = searchParams ?? {};
   const newLink = sp.new ? links.find((l) => l.token === sp.new) : null;
@@ -61,6 +68,10 @@ export default async function AccountPage({
       ? 'Customer / profile saved.'
       : sp.ok === 'deleted'
       ? 'Link deleted.'
+      : sp.ok === 'moved'
+      ? `Moved ${sp.n ?? 0} customer(s) here. Their links now show this account's email and password.`
+      : sp.e === 'move'
+      ? 'Pick another account to move customers to.'
       : sp.ok === 'date'
       ? 'End date changed.'
       : sp.e === 'same'
@@ -213,6 +224,45 @@ export default async function AccountPage({
           </>
         );
       })()}
+
+      {/* Account blocked? move customers */}
+      {links.some((l) => linkIsLive(l)) && (
+        <details className={`${cardCls} mt-6`}>
+          <summary className="cursor-pointer text-sm font-semibold text-amber-300">
+            ⚠️ Account blocked or broken? Move customers to another account
+          </summary>
+          {moveTargets.length === 0 ? (
+            <p className="mt-3 text-xs text-slate-400">
+              Add another {svc.name} account first (Accounts → Add account), then come back here.
+            </p>
+          ) : (
+            <form action={moveCustomersAction} className="mt-3 space-y-2">
+              <input type="hidden" name="fromId" value={acc.id} />
+              <p className="text-xs text-slate-400">
+                All {links.filter((l) => linkIsLive(l)).length} active customers keep the <b>same link</b>, profile name and expiry —
+                their page just shows the new account’s email and password. Create their profiles on the new account in
+                Crunchyroll too.
+              </p>
+              <select name="toId" required defaultValue="" className={inputCls}>
+                <option value="" disabled>
+                  Move to…
+                </option>
+                {moveTargets.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.email} — {liveByAcc[a.id] ?? 0}/{a.max_profiles ?? 5} profiles used
+                  </option>
+                ))}
+              </select>
+              <label className="flex items-center gap-2 text-xs text-slate-300">
+                <input type="checkbox" name="archiveOld" defaultChecked /> Archive this old account after moving
+              </label>
+              <button className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-400">
+                Move customers
+              </button>
+            </form>
+          )}
+        </details>
+      )}
 
       {/* Emails */}
       <section className="mt-6">

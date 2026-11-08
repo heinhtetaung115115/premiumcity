@@ -200,6 +200,16 @@ export async function updateLink(id: string, patch: Partial<PanelLink>): Promise
   if (error) throw error;
 }
 
+/** Move every still-active customer link to another account (same link URL, profile and expiry). */
+export async function moveActiveLinks(fromId: string, toId: string): Promise<number> {
+  const links = (await listLinks(fromId)).filter((l) => linkIsLive(l));
+  for (const l of links) {
+    const { error } = await db().from('panel_links').update({ account_id: toId }).eq('id', l.id);
+    if (error) throw error;
+  }
+  return links.length;
+}
+
 export async function deleteLink(id: string): Promise<void> {
   const { error } = await db().from('panel_links').delete().eq('id', id);
   if (error) throw error;

@@ -18,6 +18,7 @@ import {
   deleteAccount,
   deleteLink,
   getAccount,
+  moveActiveLinks,
   recheckEmail,
   updateAccount,
   updateLink,
@@ -183,4 +184,14 @@ export async function deleteAccountAction(formData: FormData) {
   if (formData.get('confirm') !== 'on') redirect(`${panelBase()}/admin`);
   await deleteAccount(String(formData.get('id') ?? ''));
   redirect(`${panelBase()}/admin?ok=deleted`);
+}
+
+export async function moveCustomersAction(formData: FormData) {
+  guard();
+  const fromId = String(formData.get('fromId') ?? '');
+  const toId = String(formData.get('toId') ?? '');
+  if (!toId || toId === fromId) redirect(`${panelBase()}/admin/a/${fromId}?e=move`);
+  const moved = await moveActiveLinks(fromId, toId);
+  if (formData.get('archiveOld') === 'on') await updateAccount(fromId, { status: 'archived' } as any);
+  redirect(`${panelBase()}/admin/a/${toId}?ok=moved&n=${moved}`);
 }

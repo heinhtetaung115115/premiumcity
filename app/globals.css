@@ -42,6 +42,36 @@ button {
   animation: gradient-border 8s linear infinite;
 }
 
+/* ── Winter theme ── */
+@keyframes pcSnowFall {
+  0% { transform: translate3d(0, -30px, 0); }
+  100% { transform: translate3d(var(--dx, 0px), 110vh, 0); }
+}
+@keyframes pcTwinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@keyframes pcWave {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-14deg); }
+}
+.pc-flake {
+  position: absolute;
+  top: 0;
+  border-radius: 50%;
+  background: #fff;
+  animation-name: pcSnowFall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+.pc-bulb { animation: pcTwinkle 1.6s ease-in-out infinite; }
+.pc-arm { transform-origin: 12px 40px; animation: pcWave 2.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .pc-flake, .pc-bulb, .pc-arm { animation: none; }
+  .pc-flake { display: none; }
+}
+
 @keyframes spin-slow {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }

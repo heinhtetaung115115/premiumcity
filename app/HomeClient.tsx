@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { NewYearBanner, SnowCap, Snowman, TileSnow, WINTER_THEME_ENABLED } from '@/components/WinterTheme';
 
 type Category = {
   id: string;
@@ -184,7 +185,10 @@ export function HomeClient({ categories, products, walletBalance, userName, avat
       </header>
 
       {walletBalance != null && (
-        <div className="mb-6 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5">
+        <div className={`relative mb-6 ${WINTER_THEME_ENABLED ? 'mt-14' : ''}`}>
+        <Snowman className="absolute -top-[70px] right-3.5 z-[1]" />
+        <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 ${WINTER_THEME_ENABLED ? 'pt-7' : ''}`}>
+          <SnowCap />
           <p className="text-[13px] text-emerald-50/90">Wallet balance</p>
           <p className="mb-4 text-3xl font-semibold text-white">
             {walletBalance.toLocaleString()} <span className="text-base">KS</span>
@@ -210,7 +214,10 @@ export function HomeClient({ categories, products, walletBalance, userName, avat
             </Link>
           </div>
         </div>
+        </div>
       )}
+
+      <NewYearBanner />
 
       {categories.length > 0 && (
         <div className="mb-6">
@@ -237,13 +244,14 @@ export function HomeClient({ categories, products, walletBalance, userName, avat
                     className="flex w-[68px] flex-shrink-0 flex-col items-center gap-1.5"
                   >
                     <div
-                      className={`flex h-[68px] w-[68px] items-center justify-center rounded-2xl border transition ${
+                      className={`relative flex h-[68px] w-[68px] items-center justify-center rounded-2xl border transition ${
                         active
                           ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400'
                           : 'border-slate-800/80 bg-slate-900/50 text-emerald-400 hover:border-emerald-500/40'
                       }`}
                     >
                       {categoryIcon(cat.name)}
+                      <TileSnow />
                     </div>
                     <span className="line-clamp-1 w-full text-center text-[11px] text-slate-300">
                       {cat.name}

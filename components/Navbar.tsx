@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ProfileMenu } from '@/components/ProfileMenu';
+import { WinterLights, LogoHat } from '@/components/WinterTheme';
 
 type NavbarProps = {
   walletBalance: number | null;
@@ -40,13 +41,16 @@ export default function Navbar({
 
         {/* LEFT: Logo / brand */}
         <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/premiumcity-logo.png"
-              alt="PremiumCity"
-              className="h-full w-full object-contain p-0.5"
-            />
+          <span className="relative flex h-9 w-9 flex-shrink-0">
+            <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/premiumcity-logo.png"
+                alt="PremiumCity"
+                className="h-full w-full object-contain p-0.5"
+              />
+            </span>
+            <LogoHat />
           </span>
           <div className="flex flex-col leading-tight">
             <span className="text-sm font-semibold text-slate-50">PremiumCity</span>
@@ -170,6 +174,7 @@ export default function Navbar({
           )}
         </div>
       </nav>
+      <WinterLights />
     </header>
   );
 }

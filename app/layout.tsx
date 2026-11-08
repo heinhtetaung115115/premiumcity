@@ -5,6 +5,7 @@ import { AuthSessionProvider } from '@/components/session-provider';
 import Navbar from '@/components/Navbar';  // <-- FIXED CASE
 import { getWalletOverview } from '@/lib/wallet';
 import Footer from '@/components/Footer';
+import { Snowfall, SnowDrift } from '@/components/WinterTheme';
 import { WelcomeRewardPopup } from '@/components/WelcomeRewardPopup';
 import NextTopLoader from 'nextjs-toploader'; // ⬅ Added top progress bar
 import { Analytics } from '@vercel/analytics/react'; // ⬅ Vercel Analytics
@@ -125,8 +126,10 @@ export default async function RootLayout({
           {/* Main content */}
           <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
 
-          {/* Footer */}
+          {/* Winter theme: snow piled above the footer + falling snow */}
+          <SnowDrift />
           <Footer />
+          <Snowfall />
         </AuthSessionProvider>
 
         {/* 📊 Vercel Analytics */}

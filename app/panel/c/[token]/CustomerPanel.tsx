@@ -91,7 +91,7 @@ export function CustomerPanel(props: {
   createdAt: string;
   passwordUpdatedAt: string | null;
   customerName: string | null;
-  /** 'anime' for Crunchyroll: sakura, manga lines and the Kitsu mascot. */
+  /** 'anime' for Crunchyroll: sakura, manga lines and the ninja mascot. */
   theme?: 'anime' | null;
 }) {
   const anime = props.theme === 'anime';
@@ -272,7 +272,7 @@ export function CustomerPanel(props: {
                 <Timer className="h-6 w-6 text-indigo-300" />
               </div>
             )}
-            <p className="mt-3 text-sm font-semibold text-white">{anime ? 'Kitsu က Email ကို ရှာနေပါတယ်…' : 'Code ကို စောင့်နေပါသည်…'}</p>
+            <p className="mt-3 text-sm font-semibold text-white">{anime ? 'Ninja က Email ကို ရှာနေပါတယ်…' : 'Code ကို စောင့်နေပါသည်…'}</p>
             <p className="text-xs text-slate-500">Waiting for the email · up to 90 seconds</p>
           </div>
         )}

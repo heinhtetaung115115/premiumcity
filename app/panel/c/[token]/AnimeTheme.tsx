@@ -1,8 +1,7 @@
 'use client';
 
 // Anime theme for the Crunchyroll customer page.
-// "Kitsu" is an ORIGINAL mascot (chibi fox spirit with headphones) — not any
-// existing character. Pure SVG + CSS, no images, respects reduced motion.
+// The mascot is an ORIGINAL chibi ninja boy — not any existing character. Pure SVG + CSS, no images, respects reduced motion.
 
 export type MascotMood = 'idle' | 'search' | 'happy';
 
@@ -22,9 +21,9 @@ export function AnimeStyles() {
       @keyframes pc-pop { 0% { transform: scale(.6); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
       .pc-bob { animation: pc-bob 2.6s ease-in-out infinite; }
       .pc-blink { transform-box: fill-box; transform-origin: center; animation: pc-blink 4.2s infinite; }
-      .pc-wave { transform-box: fill-box; transform-origin: 20% 90%; animation: pc-wave 1.1s ease-in-out infinite; }
+      .pc-wave { transform-box: fill-box; transform-origin: 0% 100%; animation: pc-wave 1.1s ease-in-out infinite; }
       .pc-look { animation: pc-look 1.2s ease-in-out infinite; }
-      .pc-tail { transform-box: fill-box; transform-origin: 10% 90%; animation: pc-tail 1.8s ease-in-out infinite; }
+      .pc-tail { transform-box: fill-box; transform-origin: 0% 50%; animation: pc-tail 1.8s ease-in-out infinite; }
       .pc-pop { animation: pc-pop .35s cubic-bezier(.2,.9,.3,1.3) both; }
       @media (prefers-reduced-motion: reduce) {
         .pc-bob,.pc-blink,.pc-wave,.pc-look,.pc-tail,.pc-petal { animation: none !important; }
@@ -33,80 +32,99 @@ export function AnimeStyles() {
   );
 }
 
-/** Original chibi fox-spirit mascot. */
+/** Original chibi ninja boy mascot (own design: cloth headband with a gold shuriken, red scarf). */
 export function Mascot({ mood = 'idle', size = 96 }: { mood?: MascotMood; size?: number }) {
-  const ink = '#1d1b2e';
+  const ink = '#151826';
+  const skin = '#ffd7b5';
+  const suit = '#22263a';
   return (
-    <svg viewBox="0 0 120 120" width={size} height={size} className="pc-bob drop-shadow-[0_8px_18px_rgba(244,117,33,0.35)]" aria-hidden>
-      {/* tail */}
+    <svg viewBox="0 0 120 120" width={size} height={size} className="pc-bob drop-shadow-[0_8px_18px_rgba(230,57,70,0.35)]" aria-hidden>
+      {/* scarf tails flutter behind */}
       <g className="pc-tail">
-        <path d="M86 92 C112 92 116 64 104 54 C106 70 98 80 84 82 Z" fill="#f47521" />
-        <path d="M104 54 C108 60 108 66 106 70 C102 64 101 59 104 54 Z" fill="#fff4e8" />
+        <path d="M74 80 C92 78 104 70 114 76 C104 80 98 86 84 88 Z" fill="#e63946" />
+        <path d="M76 86 C90 88 100 96 110 94 C100 100 92 98 80 94 Z" fill="#c1121f" />
       </g>
-      {/* ears */}
-      <path d="M30 44 L22 12 L50 32 Z" fill="#f47521" />
-      <path d="M90 44 L98 12 L70 32 Z" fill="#f47521" />
-      <path d="M31 38 L27 20 L43 32 Z" fill="#ffb3c7" />
-      <path d="M89 38 L93 20 L77 32 Z" fill="#ffb3c7" />
-      {/* body */}
-      <ellipse cx="60" cy="70" rx="42" ry="38" fill="#f47521" />
-      <ellipse cx="60" cy="84" rx="26" ry="20" fill="#fff4e8" />
-      {/* face patch */}
-      <path d="M30 70 C34 52 50 46 60 54 C70 46 86 52 90 70 C82 84 38 84 30 70 Z" fill="#fff4e8" />
-      {/* headphones */}
-      <path d="M22 62 C22 22 98 22 98 62" fill="none" stroke={ink} strokeWidth="5" strokeLinecap="round" />
-      <rect x="14" y="56" width="14" height="22" rx="6" fill={ink} />
-      <rect x="92" y="56" width="14" height="22" rx="6" fill={ink} />
-      <rect x="17" y="60" width="5" height="14" rx="2.5" fill="#ff8a3d" />
-      <rect x="98" y="60" width="5" height="14" rx="2.5" fill="#ff8a3d" />
+      {/* body + belt */}
+      <path d="M38 118 C36 96 44 84 60 84 C76 84 84 96 82 118 Z" fill={suit} />
+      <rect x="40" y="100" width="40" height="5" rx="2" fill="#e63946" />
+
+      {/* arms by mood */}
+      {mood === 'idle' && (
+        <>
+          <path d="M40 92 Q30 98 32 108" stroke={suit} strokeWidth="9" strokeLinecap="round" fill="none" />
+          <circle cx="32" cy="108" r="5" fill={skin} />
+          <g className="pc-wave">
+            <path d="M80 90 Q94 84 96 72" stroke={suit} strokeWidth="9" strokeLinecap="round" fill="none" />
+            <circle cx="96" cy="70" r="5.5" fill={skin} />
+          </g>
+        </>
+      )}
+      {mood === 'search' && (
+        <>
+          <path d="M42 92 Q50 98 56 96" stroke={suit} strokeWidth="9" strokeLinecap="round" fill="none" />
+          <path d="M78 92 Q70 98 64 96" stroke={suit} strokeWidth="9" strokeLinecap="round" fill="none" />
+          <circle cx="55.5" cy="94" r="5.5" fill={skin} />
+          <circle cx="64.5" cy="94" r="5.5" fill={skin} />
+          <path d="M60 89 L60 99" stroke="#e8b892" strokeWidth="1.4" />
+          <g className="pc-blink">
+            <path d="M50 84 l-3 -4 M60 82 l0 -5 M70 84 l3 -4" stroke="#ffd166" strokeWidth="2.2" strokeLinecap="round" />
+          </g>
+        </>
+      )}
+      {mood === 'happy' && (
+        <>
+          <path d="M40 92 Q30 98 32 108" stroke={suit} strokeWidth="9" strokeLinecap="round" fill="none" />
+          <circle cx="32" cy="108" r="5" fill={skin} />
+          <path d="M80 92 Q92 92 94 84" stroke={suit} strokeWidth="9" strokeLinecap="round" fill="none" />
+          <rect x="86" y="76" width="14" height="12" rx="4.5" fill={skin} />
+          <rect x="85" y="65" width="6" height="14" rx="3" fill={skin} />
+          <path d="M91 80 h8 M91 84 h8" stroke="#e8b892" strokeWidth="1.3" strokeLinecap="round" />
+          <g className="pc-pop">
+            <path d="M14 26 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 Z" fill="#ffd166" />
+            <path d="M104 18 l2 4 4 2 -4 2 -2 4 -2 -4 -4 -2 4 -2 Z" fill="#ffd166" />
+          </g>
+        </>
+      )}
+
+      {/* head */}
+      <circle cx="60" cy="52" r="30" fill={skin} />
+      {/* spiky hair */}
+      <path d="M30 46 L26 30 L38 34 L36 18 L50 28 L56 12 L64 26 L74 14 L76 30 L90 22 L86 36 L96 38 L90 46 Z" fill={ink} />
+      {/* red cloth headband + embroidered gold shuriken + knot tail */}
+      <path d="M29 40 Q60 30 91 40 L91 49 Q60 39 29 49 Z" fill="#c1121f" />
+      <path d="M60 36.5 L61.8 40 L65.5 40.6 L61.8 41.2 L60 44.6 L58.2 41.2 L54.5 40.6 L58.2 40 Z" fill="#ffd166" />
+      <circle cx="60" cy="40.6" r="1" fill="#2b2f4a" />
+      <path d="M91 42 C100 40 106 46 108 52 C102 50 98 48 92 47 Z" fill="#c1121f" />
+
       {/* eyes */}
       {mood === 'happy' ? (
         <>
-          <path d="M38 68 Q45 60 52 68" fill="none" stroke={ink} strokeWidth="4" strokeLinecap="round" />
-          <path d="M68 68 Q75 60 82 68" fill="none" stroke={ink} strokeWidth="4" strokeLinecap="round" />
+          <path d="M38 56 Q45 48 52 56" fill="none" stroke={ink} strokeWidth="3.6" strokeLinecap="round" />
+          <path d="M68 56 Q75 48 82 56" fill="none" stroke={ink} strokeWidth="3.6" strokeLinecap="round" />
         </>
       ) : (
         <g className="pc-blink">
           <g className={mood === 'search' ? 'pc-look' : ''}>
-            <ellipse cx="45" cy="67" rx="7.5" ry="10" fill={ink} />
-            <ellipse cx="75" cy="67" rx="7.5" ry="10" fill={ink} />
-            <ellipse cx="45" cy="70" rx="5" ry="5" fill="#ff8a3d" opacity=".55" />
-            <ellipse cx="75" cy="70" rx="5" ry="5" fill="#ff8a3d" opacity=".55" />
-            <circle cx="42.5" cy="63" r="2.8" fill="#fff" />
-            <circle cx="72.5" cy="63" r="2.8" fill="#fff" />
-            <circle cx="47.5" cy="71" r="1.3" fill="#fff" />
-            <circle cx="77.5" cy="71" r="1.3" fill="#fff" />
+            <ellipse cx="45" cy="55" rx="6.5" ry="8" fill={ink} />
+            <ellipse cx="75" cy="55" rx="6.5" ry="8" fill={ink} />
+            <ellipse cx="45" cy="58" rx="4.2" ry="4" fill="#3a86ff" opacity=".9" />
+            <ellipse cx="75" cy="58" rx="4.2" ry="4" fill="#3a86ff" opacity=".9" />
+            <circle cx="42.8" cy="52" r="2.4" fill="#fff" />
+            <circle cx="72.8" cy="52" r="2.4" fill="#fff" />
+            <circle cx="47" cy="59" r="1.1" fill="#fff" />
+            <circle cx="77" cy="59" r="1.1" fill="#fff" />
           </g>
         </g>
       )}
+
+      {/* ninja mask over nose + mouth */}
+      <path d="M31 66 Q60 61 89 66 Q90 80 60 83 Q30 80 31 66 Z" fill={ink} />
+      <path d="M40 70 Q60 66 80 70" stroke="#2f3550" strokeWidth="2" fill="none" />
       {/* blush */}
-      <ellipse cx="34" cy="79" rx="6" ry="3.5" fill="#ff7aa2" opacity=".55" />
-      <ellipse cx="86" cy="79" rx="6" ry="3.5" fill="#ff7aa2" opacity=".55" />
-      {/* nose + mouth */}
-      <path d="M58 75 L62 75 L60 77.5 Z" fill={ink} />
-      {mood === 'search' ? (
-        <ellipse cx="60" cy="83" rx="2.6" ry="3" fill={ink} />
-      ) : (
-        <path d="M53 80 Q56.5 84 60 80 Q63.5 84 67 80" fill="none" stroke={ink} strokeWidth="2.2" strokeLinecap="round" />
-      )}
-      {/* waving paw */}
-      {mood !== 'search' && (
-        <g className="pc-wave">
-          <ellipse cx="98" cy="86" rx="8" ry="10" fill="#f47521" />
-          <ellipse cx="99" cy="81" rx="4.5" ry="4" fill="#fff4e8" />
-        </g>
-      )}
-      {/* magnifier when searching */}
-      {mood === 'search' && (
-        <g>
-          <circle cx="96" cy="88" r="9" fill="rgba(255,255,255,.25)" stroke={ink} strokeWidth="3.5" />
-          <path d="M102 95 L110 104" stroke={ink} strokeWidth="5" strokeLinecap="round" />
-        </g>
-      )}
-      {/* sparkle when happy */}
-      {mood === 'happy' && (
-        <path d="M16 30 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 Z" fill="#ffd166" className="pc-pop" />
-      )}
+      <ellipse cx="36" cy="63" rx="4.5" ry="2.5" fill="#ff8fa3" opacity=".55" />
+      <ellipse cx="84" cy="63" rx="4.5" ry="2.5" fill="#ff8fa3" opacity=".55" />
+      {/* scarf around neck */}
+      <path d="M38 80 Q60 90 82 80 L82 88 Q60 97 38 88 Z" fill="#e63946" />
     </svg>
   );
 }

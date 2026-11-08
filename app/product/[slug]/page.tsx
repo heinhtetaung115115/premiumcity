@@ -182,7 +182,7 @@ export default async function ProductPage({
         {product.description && (
           <section className="glass rounded-[24px] px-5 py-4">
             <h2 className="mb-1.5 text-[15px] font-semibold tracking-[-0.01em] text-white">Details</h2>
-            <p className="whitespace-pre-line text-[14px] leading-relaxed text-slate-300">{product.description}</p>
+            <p className="whitespace-pre-line text-[14px] leading-relaxed text-slate-300">{String(product.description).trim()}</p>
           </section>
         )}
 
@@ -190,7 +190,7 @@ export default async function ProductPage({
         {product.deliveryNote && (
           <section className="glass rounded-[24px] px-5 py-4">
             <h2 className="mb-1.5 text-[15px] font-semibold tracking-[-0.01em] text-white">Delivery info</h2>
-            <p className="whitespace-pre-line text-[14px] leading-relaxed text-slate-300">{product.deliveryNote}</p>
+            <p className="whitespace-pre-line text-[14px] leading-relaxed text-slate-300">{String(product.deliveryNote).trim()}</p>
           </section>
         )}
 

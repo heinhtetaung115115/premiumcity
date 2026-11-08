@@ -25,25 +25,48 @@ function makeFlakes(count: number): Flake[] {
     return seed / 233280;
   };
   return Array.from({ length: count }, () => {
-    const size = 2 + Math.round(rnd() * 5);
+    const size = 2 + Math.round(rnd() * 3);
     return {
       left: +(rnd() * 100).toFixed(1),
       size,
-      op: +(0.45 + rnd() * 0.5).toFixed(2),
-      dx: Math.round(rnd() * 60 - 30),
-      dur: +(9 + rnd() * 10).toFixed(1),
-      delay: +(-rnd() * 18).toFixed(1),
+      op: +(0.35 + rnd() * 0.4).toFixed(2),
+      dx: Math.round(rnd() * 24 - 12),
+      dur: +(18 + rnd() * 12).toFixed(1),
+      delay: +(-rnd() * 30).toFixed(1),
     };
   });
 }
 
-const FLAKES = makeFlakes(45);
+const FLAKES = makeFlakes(24);
 
 export function Snowfall() {
   const pathname = usePathname() || '/';
+  const [scrolling, setScrolling] = useState(false);
+
+  // Snow stays still on screen while the page moves, which can feel dizzy.
+  // Fade it out during scrolling and bring it back once scrolling stops.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onScroll = () => {
+      setScrolling(true);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => setScrolling(false), 450);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
   if (!WINTER_THEME_ENABLED || isQuietPath(pathname)) return null;
   return (
-    <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-[45] overflow-hidden">
+    <div
+      aria-hidden="true"
+      className={`pointer-events-none fixed inset-0 z-[45] overflow-hidden transition-opacity ${
+        scrolling ? 'opacity-[0.12] duration-200' : 'opacity-100 duration-700'
+      }`}
+    >
       {FLAKES.map((f, i) => (
         <span
           key={i}
@@ -56,7 +79,7 @@ export function Snowfall() {
               opacity: f.op,
               animationDuration: `${f.dur}s`,
               animationDelay: `${f.delay}s`,
-              filter: f.size <= 3 ? 'blur(0.6px)' : undefined,
+              filter: f.size <= 2 ? 'blur(0.5px)' : undefined,
               '--dx': `${f.dx}px`,
             } as React.CSSProperties
           }

@@ -8,6 +8,7 @@ import { fulfillManualItemAction } from './actions';
 import { DeliveryForm } from './DeliveryForm';
 import { EditCredentialForm } from './EditCredentialForm';
 import { EditNetflixLinkForm } from './EditNetflixLinkForm';
+import { EditPanelLinkForm } from './EditPanelLinkForm';
 import { credentialToRows, isEditableCredential } from '@/lib/deliveryTypes';
 import { AssignPanelForm } from './AssignPanelForm';
 import {
@@ -269,6 +270,9 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                                             minute: '2-digit',
                                           })}
                                         </p>
+                                      )}
+                                      {!!credId && cred?.type === 'account_panel' && cred?.token && (
+                                        <EditPanelLinkForm inventoryItemId={credId} token={String(cred.token)} />
                                       )}
                                       {!!credId && cred?.type === 'netflix_panel' && (
                                         <EditNetflixLinkForm

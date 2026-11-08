@@ -127,7 +127,11 @@ export async function extendLinkAction(formData: FormData) {
   const currentUntil = String(formData.get('currentUntil') ?? '');
   const days = Math.max(1, Math.min(730, Number(formData.get('days') ?? 30) || 30));
   const base = Math.max(Date.now(), new Date(currentUntil).getTime() || 0);
-  await updateLink(id, { warranty_until: new Date(base + days * DAY).toISOString(), status: 'active' } as any);
+  await updateLink(id, {
+    warranty_until: new Date(base + days * DAY).toISOString(),
+    status: 'active',
+    expiry_handled_at: null,
+  } as any);
   redirect(`${panelBase()}/admin/a/${accountId}?ok=extended`);
 }
 
@@ -164,7 +168,7 @@ export async function setLinkUntilAction(formData: FormData) {
   const accountId = String(formData.get('accountId') ?? '');
   const until = dateInputToIso(formData.get('until'));
   if (!until) redirect(`${panelBase()}/admin/a/${accountId}`);
-  const patch: Record<string, unknown> = { warranty_until: until };
+  const patch: Record<string, unknown> = { warranty_until: until, expiry_handled_at: null };
   // Setting a future date on a revoked link brings it back.
   if (new Date(until as string).getTime() > Date.now()) patch.status = 'active';
   await updateLink(id, patch as any);
@@ -194,4 +198,11 @@ export async function moveCustomersAction(formData: FormData) {
   const moved = await moveActiveLinks(fromId, toId);
   if (formData.get('archiveOld') === 'on') await updateAccount(fromId, { status: 'archived' } as any);
   redirect(`${panelBase()}/admin/a/${toId}?ok=moved&n=${moved}`);
+}
+
+export async function markExpiryDoneAction(formData: FormData) {
+  guard();
+  const { markExpiryHandled } = await import('@/lib/panel/expiry');
+  await markExpiryHandled(String(formData.get('linkId') ?? ''));
+  redirect(`${panelBase()}/admin?ok=jobdone`);
 }

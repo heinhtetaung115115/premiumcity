@@ -12,6 +12,7 @@ import {
 } from '@/lib/telegram';
 import { queueMoveToBackup, processPendingMoves } from '@/lib/vpn';
 import { accountByPrefix, deliverPanelSlot } from '@/lib/panel/store';
+import { dueExpiryJobs, markExpiryHandled } from '@/lib/panel/expiry';
 import {
   sendEmail,
   tplTopupApproved,
@@ -225,6 +226,22 @@ async function handleCallback(cb: any) {
   if (data.startsWith('reject_topup:')) {
     const topupId = data.replace('reject_topup:', '');
     await handleRejectTopup(topupId, cb.id, chatId, messageId);
+    return;
+  }
+
+  // ── Account panel: expiry "Job done" ──
+  if (data.startsWith('pjd:')) {
+    const target = data.slice(4);
+    const n = await markExpiryHandled(target);
+    await answerCallbackQuery(cb.id, `✅ ${n} marked done`);
+    const left = await dueExpiryJobs().catch(() => []);
+    await editMessageText(
+      chatId,
+      messageId,
+      left.length
+        ? `✅ Marked ${n} done. ${left.length} still waiting — next reminder within the hour.`
+        : '✅ All expiry jobs done. Nice work!'
+    );
     return;
   }
 

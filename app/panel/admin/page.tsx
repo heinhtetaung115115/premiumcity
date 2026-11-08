@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { panelBase, requirePanelAdmin } from '@/lib/panel/auth';
 import { countLiveLinksByAccount, listAccounts } from '@/lib/panel/data';
 import { SERVICES, serviceInfo } from '@/lib/panel/rules';
-import { createAccountAction, deleteAccountAction } from './actions';
+import { createAccountAction, deleteAccountAction, markExpiryDoneAction } from './actions';
+import { getServiceSupabaseClient } from '@/lib/supabase';
+import { dueExpiryJobs } from '@/lib/panel/expiry';
 import { Shell, btnCls, cardCls, inputCls, labelCls } from './Shell';
 
 export const runtime = 'nodejs';
@@ -27,6 +29,66 @@ export default async function PanelAdminHome({ searchParams }: { searchParams?: 
   }
   const live = setupError ? {} : await countLiveLinksByAccount();
 
+  // ── Dashboard numbers ──
+  const DAY = 86_400_000;
+  let dash: {
+    accounts: number;
+    used: number;
+    total: number;
+    activeCustomers: number;
+    soon: { id: string; profile: string; customer: string; account: string; days: number }[];
+    jobs: Awaited<ReturnType<typeof dueExpiryJobs>>;
+    mailsToday: number;
+    shownToday: number;
+  } | null = null;
+  if (!setupError && !q) {
+    try {
+      const active = accounts.filter((a) => a.status === 'active');
+      const used = active.reduce((n, a) => n + Math.min(live[a.id] ?? 0, a.max_profiles ?? 5), 0);
+      const total = active.reduce((n, a) => n + (a.max_profiles ?? 5), 0);
+      const db = getServiceSupabaseClient();
+      const { data: links } = await db
+        .from('panel_links')
+        .select('id,account_id,customer_name,profile_name,warranty_until,status')
+        .eq('status', 'active')
+        .limit(3000);
+      const accEmail: Record<string, string> = Object.fromEntries(accounts.map((a) => [a.id, a.email]));
+      const now = Date.now();
+      const liveLinks = ((links ?? []) as any[]).filter((l) => new Date(l.warranty_until).getTime() > now);
+      const soon = liveLinks
+        .map((l) => ({
+          id: l.id,
+          profile: l.profile_name || 'Profile',
+          customer: l.customer_name || 'Customer',
+          account: accEmail[l.account_id] || '?',
+          days: Math.ceil((new Date(l.warranty_until).getTime() - now) / DAY),
+        }))
+        .filter((x) => x.days <= 3)
+        .sort((a, b) => a.days - b.days);
+      const { data: mails } = await db.from('panel_emails').select('verdict,received_at').order('received_at', { ascending: false }).limit(500);
+      const dayStart = new Date(new Date(now + 6.5 * 3600_000).toISOString().slice(0, 10) + 'T00:00:00+06:30').getTime();
+      const today = ((mails ?? []) as any[]).filter((m) => new Date(m.received_at).getTime() >= dayStart);
+      let jobs: Awaited<ReturnType<typeof dueExpiryJobs>> = [];
+      try {
+        jobs = await dueExpiryJobs();
+      } catch {
+        jobs = [];
+      }
+      dash = {
+        accounts: active.length,
+        used,
+        total,
+        activeCustomers: liveLinks.length,
+        soon,
+        jobs,
+        mailsToday: today.length,
+        shownToday: today.filter((m) => m.verdict === 'allowed').length,
+      };
+    } catch (e) {
+      console.error('[panel dashboard]', e);
+    }
+  }
+
   return (
     <Shell base={base} active="accounts">
       {setupError && (
@@ -38,6 +100,84 @@ export default async function PanelAdminHome({ searchParams }: { searchParams?: 
       {searchParams?.ok === 'deleted' && (
         <p className="mb-4 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-200">Account deleted.</p>
       )}
+      {searchParams?.ok === 'jobdone' && (
+        <p className="mb-4 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-200">Marked as done.</p>
+      )}
+
+      {dash && (
+        <section className="mb-8 space-y-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { label: 'Accounts', value: String(dash.accounts), sub: 'active' },
+              {
+                label: 'Profiles used',
+                value: `${dash.used}/${dash.total}`,
+                sub: `${Math.max(0, dash.total - dash.used)} free`,
+                bar: dash.total ? dash.used / dash.total : 0,
+              },
+              { label: 'Customers', value: String(dash.activeCustomers), sub: 'with access' },
+              { label: 'Emails today', value: String(dash.mailsToday), sub: `${dash.shownToday} shown to customers` },
+            ].map((c) => (
+              <div key={c.label} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-wider text-slate-500">{c.label}</p>
+                <p className="mt-1 text-2xl font-bold text-white">{c.value}</p>
+                <p className="text-[11px] text-slate-500">{c.sub}</p>
+                {'bar' in c && c.bar !== undefined && (
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className={`h-full rounded-full ${c.bar >= 0.9 ? 'bg-amber-400' : 'bg-indigo-400'}`}
+                      style={{ width: `${Math.round(c.bar * 100)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-2xl border border-rose-500/25 bg-rose-500/[0.04] p-4">
+              <p className="mb-2 text-sm font-semibold text-rose-200">⏰ Expired today — needs action ({dash.jobs.length})</p>
+              {dash.jobs.length === 0 && <p className="text-xs text-slate-500">Nothing to do.</p>}
+              <div className="space-y-1.5">
+                {dash.jobs.slice(0, 12).map((j) => (
+                  <div key={j.id} className="flex items-center gap-2 rounded-xl bg-black/20 px-3 py-2 text-xs">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-slate-100">
+                        <b>{j.profile_name || 'Profile'}</b> · {j.customer_name || 'customer'}
+                      </p>
+                      <p className="truncate text-[11px] text-slate-500">{j.accountEmail}</p>
+                    </div>
+                    <form action={markExpiryDoneAction}>
+                      <input type="hidden" name="linkId" value={j.id} />
+                      <button className="rounded-lg border border-emerald-400/40 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-400/10">
+                        Job done
+                      </button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.03] p-4">
+              <p className="mb-2 text-sm font-semibold text-amber-200">⌛ Expiring in 3 days ({dash.soon.length})</p>
+              {dash.soon.length === 0 && <p className="text-xs text-slate-500">No one.</p>}
+              <div className="space-y-1.5">
+                {dash.soon.slice(0, 12).map((x) => (
+                  <div key={x.id} className="flex items-center justify-between gap-2 rounded-xl bg-black/20 px-3 py-2 text-xs">
+                    <div className="min-w-0">
+                      <p className="truncate text-slate-100">
+                        <b>{x.profile}</b> · {x.customer}
+                      </p>
+                      <p className="truncate text-[11px] text-slate-500">{x.account}</p>
+                    </div>
+                    <span className="flex-shrink-0 font-semibold text-amber-300">{x.days}d</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-white">Accounts</h1>
         <form className="flex gap-2">

@@ -543,3 +543,37 @@ export async function deliverPanelSlotAction(
   revalidatePath('/orders');
   return { ok: res.ok, error: res.error, linkUrl: res.linkUrl };
 }
+
+/**
+ * Point a delivered account-panel item (Crunchyroll…) at a different panel
+ * link — e.g. after making a new link for the customer on pcity.online.
+ * Accepts the full link (https://pcity.online/c/XXXX) or just the code.
+ */
+export async function updatePanelLinkByCredentialAction(formData: FormData): Promise<UpdateCredentialResult> {
+  await requireAdmin();
+  const inventoryItemId = String(formData.get('inventoryItemId') ?? '').trim();
+  const raw = String(formData.get('link') ?? '').trim();
+  const token = (raw.match(/\/c\/([A-Za-z0-9]{6,32})/) || [])[1] || (/^[A-Za-z0-9]{6,32}$/.test(raw) ? raw : '');
+  if (!inventoryItemId) return { ok: false, error: 'Missing item.' };
+  if (!token) return { ok: false, error: 'Paste the pcity.online/c/… link.' };
+
+  const supabase = getServiceSupabaseClient();
+  const { data: link } = await supabase.from('panel_links').select('id,account_id').eq('token', token).maybeSingle();
+  if (!link) return { ok: false, error: 'That link was not found in the account panel.' };
+  const { data: acc } = await supabase.from('panel_accounts').select('service').eq('id', (link as any).account_id).maybeSingle();
+
+  const { data: row } = await supabase.from('inventory_items').select('payload').eq('id', inventoryItemId).maybeSingle();
+  const old: any = (row as any)?.payload ?? {};
+  if (old.type !== 'account_panel') return { ok: false, error: 'This is not an account-panel delivery.' };
+  if (old.token === token) return { ok: false, error: 'That is already the link.' };
+
+  const { error } = await supabase
+    .from('inventory_items')
+    .update({ payload: { ...old, token, service: (acc as any)?.service ?? old.service, previousToken: old.token } })
+    .eq('id', inventoryItemId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/admin/orders');
+  revalidatePath('/admin/users');
+  revalidatePath('/orders');
+  return { ok: true };
+}

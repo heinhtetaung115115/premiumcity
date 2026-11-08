@@ -1,5 +1,5 @@
-// Hourly: remind admin about account-panel customers expiring today until
-// each one is marked "Job done".
+// Hourly from 10:00 AM (Myanmar): remind admin about account-panel customers
+// expiring today until each one is marked "Job done".
 import { NextResponse } from 'next/server';
 import { dueExpiryJobs, sendExpiryReminder } from '@/lib/panel/expiry';
 
@@ -10,6 +10,9 @@ export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET || '';
   const provided = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   if (secret && provided !== secret) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  // Reminders start at 10:00 AM Myanmar time, then repeat hourly until done.
+  const hourYangon = new Date(Date.now() + 6.5 * 3600_000).getUTCHours();
+  if (hourYangon < 10) return NextResponse.json({ ok: true, skipped: 'before 10:00 Yangon' });
   try {
     const jobs = await dueExpiryJobs();
     if (jobs.length) await sendExpiryReminder(jobs);

@@ -26,7 +26,7 @@
     },
     {
       "path": "/api/cron/panel-expiry",
-      "schedule": "5 * * * *"
+      "schedule": "35 * * * *"
     }
   ],
   "regions": [

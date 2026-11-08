@@ -14,7 +14,7 @@ type PurchaseFormProps = {
 };
 
 function formatKS(amount: number) {
-  return `${amount.toLocaleString()} Ks`;
+  return `${amount.toLocaleString()} KS`;
 }
 
 const COUNTRY_LABELS: Record<string, string> = {
@@ -347,7 +347,7 @@ function PurchaseFormInner({
                 Choose country
               </label>
               <select
-                className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-[15px] text-slate-100 focus:border-emerald-400 focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none"
                 value={selectedCountry}
                 onChange={(e) => {
                   setSelectedCountry(e.target.value);
@@ -372,7 +372,7 @@ function PurchaseFormInner({
                 Choose data plan
               </label>
               <select
-                className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-[15px] text-slate-100 focus:border-emerald-400 focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none"
                 value={selectedPlan}
                 onChange={(e) => setSelectedPlan(e.target.value)}
               >
@@ -421,17 +421,17 @@ function PurchaseFormInner({
                 return (
                   <label
                     key={variant.id}
-                    className={`press flex min-h-[56px] cursor-pointer items-center justify-between rounded-2xl px-3.5 py-2.5 text-[15px] ring-1 ring-inset transition
+                    className={`flex cursor-pointer items-center justify-between rounded-xl border px-3 py-2 text-sm transition
                       ${
                         isVariantOutOfStock
-                          ? 'bg-white/[0.02] opacity-55 ring-white/[0.06]'
-                          : 'bg-white/[0.04] ring-white/[0.08] hover:bg-white/[0.07] has-[:checked]:bg-emerald-400/[0.12] has-[:checked]:ring-emerald-400/70'
+                          ? 'border-slate-800 bg-slate-900/60 opacity-60'
+                          : 'border-slate-800 bg-slate-900 hover:border-emerald-400 hover:bg-slate-900/80'
                       }
                     `}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <input
-                        className="h-[18px] w-[18px] accent-emerald-500"
+                        className="h-4 w-4 accent-emerald-500"
                         type="radio"
                         name="variantId"
                         value={variant.id}
@@ -449,7 +449,7 @@ function PurchaseFormInner({
                       </span>
                     </div>
                     <div className="flex flex-col items-end gap-0.5">
-                      <span className="text-[15px] font-semibold tabular-nums text-emerald-300">
+                      <span className="text-sm font-medium text-emerald-300">
                         {formatKS(variant.price)}
                       </span>
                       {isVariantOutOfStock && (
@@ -482,7 +482,7 @@ function PurchaseFormInner({
             max={maxQuantity}
             defaultValue={1}
             name="quantity"
-            className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-[15px] text-slate-100 placeholder:text-slate-500 focus:border-emerald-400 focus:outline-none"
+            className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-400 focus:outline-none"
           />
           <p className="text-[11px] text-slate-500">
             {isOutlineVpn
@@ -516,7 +516,7 @@ function PurchaseFormInner({
                 id={`field_${field.id}`}
                 name={`field_${field.id}`}
                 required={field.required}
-                className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-[15px] text-slate-100 placeholder:text-slate-500 focus:border-emerald-400 focus:outline-none"
+                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-400 focus:outline-none"
               />
             </div>
           ))}
@@ -548,7 +548,7 @@ function PurchaseFormInner({
           pending ||
           (isOutlineVpn && !!selectedCountry && !countryInStock(selectedCountry))
         }
-        className="btn-primary press inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl px-4 text-[16px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <span>💳</span>
         <span>{pending ? 'Processing…' : 'Purchase with wallet'}</span>

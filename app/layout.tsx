@@ -5,7 +5,6 @@ import { AuthSessionProvider } from '@/components/session-provider';
 import Navbar from '@/components/Navbar';  // <-- FIXED CASE
 import { getWalletOverview } from '@/lib/wallet';
 import Footer from '@/components/Footer';
-import TabBar from '@/components/TabBar';
 import { WelcomeRewardPopup } from '@/components/WelcomeRewardPopup';
 import NextTopLoader from 'nextjs-toploader'; // ⬅ Added top progress bar
 import { Analytics } from '@vercel/analytics/react'; // ⬅ Vercel Analytics
@@ -98,7 +97,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
-      <body className="relative min-h-screen bg-slate-950 pb-24 text-slate-100 md:pb-0">
+      <body className="min-h-screen bg-slate-950 text-slate-100 relative">
 
         {/* 🔥 Ultra-thin animated top progress bar */}
         <NextTopLoader
@@ -124,13 +123,10 @@ export default async function RootLayout({
           />
 
           {/* Main content */}
-          <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-8">{children}</main>
+          <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
 
           {/* Footer */}
           <Footer />
-
-          {/* Phone tab bar (glass) */}
-          <TabBar />
         </AuthSessionProvider>
 
         {/* 📊 Vercel Analytics */}

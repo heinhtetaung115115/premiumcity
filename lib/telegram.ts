@@ -259,6 +259,9 @@ export async function notifyNewManualOrder(order: {
   variantName?: string | null;
   totalAmount: number;
   manualInput?: Record<string, string> | null;
+  /** e.g. account-panel slot suggestions */
+  extraLines?: string[];
+  extraButtons?: InlineButton[][];
 }): Promise<boolean> {
   const inputLines = order.manualInput
     ? Object.entries(order.manualInput)
@@ -275,11 +278,13 @@ export async function notifyNewManualOrder(order: {
     '',
     `📝 <b>Customer Input:</b>`,
     inputLines,
+    ...(order.extraLines?.length ? ['', ...order.extraLines] : []),
   ].join('\n');
 
   return sendTelegramMessage({
     text,
     buttons: [
+      ...(order.extraButtons ?? []),
       [{ text: '📦 Open Orders Panel', url: `${SITE_URL}/admin/orders` }],
     ],
   });

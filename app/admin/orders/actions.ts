@@ -525,3 +525,21 @@ export async function updateNetflixLinkByCredentialAction(
   revalidatePath('/orders');
   return { ok: true };
 }
+
+/** Deliver an account-panel profile slot (Crunchyroll…) to a manual order item. */
+export async function deliverPanelSlotAction(
+  formData: FormData
+): Promise<{ ok: boolean; error?: string; linkUrl?: string }> {
+  await requireAdmin();
+  const { deliverPanelSlot } = await import('@/lib/panel/store');
+  const res = await deliverPanelSlot({
+    orderItemId: String(formData.get('orderItemId') ?? ''),
+    accountId: String(formData.get('accountId') ?? ''),
+    profileName: String(formData.get('profileName') ?? '').trim() || null,
+    profilePin: String(formData.get('profilePin') ?? '').trim() || null,
+    days: Number(formData.get('days') ?? 0) || null,
+  });
+  revalidatePath('/admin/orders');
+  revalidatePath('/orders');
+  return { ok: res.ok, error: res.error, linkUrl: res.linkUrl };
+}

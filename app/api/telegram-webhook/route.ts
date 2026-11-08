@@ -11,6 +11,7 @@ import {
   getDashboardText,
 } from '@/lib/telegram';
 import { queueMoveToBackup, processPendingMoves } from '@/lib/vpn';
+import { accountByPrefix, deliverPanelSlot } from '@/lib/panel/store';
 import {
   sendEmail,
   tplTopupApproved,
@@ -224,6 +225,28 @@ async function handleCallback(cb: any) {
   if (data.startsWith('reject_topup:')) {
     const topupId = data.replace('reject_topup:', '');
     await handleRejectTopup(topupId, cb.id, chatId, messageId);
+    return;
+  }
+
+  // ── Account panel: deliver a profile slot to a manual order ──
+  if (data.startsWith('pcd:')) {
+    const [, orderItemId, accPrefix] = data.split(':');
+    await answerCallbackQuery(cb.id, '⏳ Delivering…');
+    const acc = await accountByPrefix(accPrefix || '');
+    if (!acc) {
+      await sendTelegramMessage({ text: '❌ Could not find that panel account. Deliver from the admin website instead.' });
+      return;
+    }
+    const res = await deliverPanelSlot({ orderItemId, accountId: acc.id });
+    if (!res.ok) {
+      await sendTelegramMessage({ text: `❌ Not delivered: ${res.error}` });
+      return;
+    }
+    await editMessageText(
+      chatId,
+      messageId,
+      `✅ <b>Delivered</b>\nProfile <b>${(res.profileName || '').replace(/[<>&]/g, '')}</b> on ${acc.email}\nCustomer was emailed; order completed.\n${res.linkUrl}`
+    );
     return;
   }
 

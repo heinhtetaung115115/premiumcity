@@ -46,6 +46,16 @@ export function credentialToRows(payload: Record<string, unknown> | null | undef
     return rows;
   }
 
+  if (type === 'account_panel') {
+    // Customers see the live AccountPanelCard; admin lists show the link.
+    const token = (payload as any).token;
+    if (token) {
+      const base = (process.env.NEXT_PUBLIC_PANEL_URL || 'https://pcity.online').replace(/\/+$/, '');
+      rows.push({ label: 'Account panel link', value: `${base}/c/${token}`, copyable: true });
+    }
+    return rows;
+  }
+
   if (type === 'note') {
     if ((payload as any).note) rows.push({ label: 'Note', value: String((payload as any).note), copyable: false });
     return rows;

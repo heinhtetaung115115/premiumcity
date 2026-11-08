@@ -2,6 +2,7 @@ import { getServiceSupabaseClient } from './supabase';
 import { sendEmail, getAdminRecipients, tplStockDepletedAdmin } from './email';
 import { notifyNewManualOrder } from './telegram';
 import { createSubscription as createVpnSubscription, attachVpnStatus, getVpnStock } from './vpn';
+import { panelServiceForProduct, profileNameFromInput, suggestAccounts, warrantyDaysFromVariant } from './panel/store';
 
 type PurchasePayload = {
   userId: string;
@@ -688,6 +689,33 @@ export async function createOrderForUser(
       const tgUserEmail: string = (userRow2 as any)?.email ?? payload.userId;
 
       for (const item of manualItems) {
+        // Account-panel products (Crunchyroll…): suggest free profile slots
+        // with one-tap "delivered" buttons.
+        let extraLines: string[] | undefined;
+        let extraButtons: { text: string; callback_data: string }[][] | undefined;
+        const panelService = panelServiceForProduct(item.productName);
+        if (panelService) {
+          try {
+            const sugg = await suggestAccounts(panelService, 3);
+            const profileName = profileNameFromInput(item.manualInput, tgUserEmail);
+            const days = warrantyDaysFromVariant(item.variantName);
+            if (sugg.length) {
+              extraLines = [
+                `🎯 <b>Free profile slots</b> (profile: <b>${profileName.replace(/[<>&]/g, '')}</b>, ${days} days)`,
+                ...sugg.map((g, i) => `${i + 1}. ${g.account.email} — ${g.used}/${g.max} used`),
+                '',
+                'Create the profile in that account, then tap its button to deliver.',
+              ];
+              extraButtons = sugg.map((g, i) => [
+                { text: `✅ Delivered on #${i + 1} (${g.account.email.split('@')[0].slice(0, 18)})`, callback_data: `pcd:${item.id}:${g.account.id.slice(0, 8)}` },
+              ]);
+            } else {
+              extraLines = ['⚠️ <b>No free profile slots</b> — add a new account in the account panel first.'];
+            }
+          } catch (e) {
+            console.error('panel suggestions failed', e);
+          }
+        }
         await notifyNewManualOrder({
           orderId: order.id,
           userEmail: tgUserEmail,
@@ -695,6 +723,8 @@ export async function createOrderForUser(
           variantName: item.variantName,
           totalAmount: order.totalAmount,
           manualInput: item.manualInput,
+          extraLines,
+          extraButtons,
         });
       }
     }

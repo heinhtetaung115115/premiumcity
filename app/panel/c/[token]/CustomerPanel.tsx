@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { AnimeBackdrop, AnimeStyles, Bubble, Mascot, SpeedLines } from './AnimeTheme';
+import { AnimeBackdrop, AnimeStyles, Bubble, Mascot, SpeedLines } from '@/components/AnimeTheme';
 import { Check, Copy, Eye, EyeOff, KeyRound, Mail, ShieldCheck, Timer, User, ExternalLink, Inbox } from 'lucide-react';
 
 type Msg = { id: string; subject: string; code: string | null; link: string | null; receivedAt: string; snippet: string; html?: string };

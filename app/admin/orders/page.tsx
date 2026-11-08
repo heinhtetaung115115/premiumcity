@@ -9,6 +9,13 @@ import { DeliveryForm } from './DeliveryForm';
 import { EditCredentialForm } from './EditCredentialForm';
 import { EditNetflixLinkForm } from './EditNetflixLinkForm';
 import { credentialToRows, isEditableCredential } from '@/lib/deliveryTypes';
+import { AssignPanelForm } from './AssignPanelForm';
+import {
+  panelServiceForProduct,
+  profileNameFromInput,
+  suggestAccounts,
+  warrantyDaysFromVariant,
+} from '@/lib/panel/store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -74,6 +81,29 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
       });
       throw err;
     }
+  }
+
+
+  // Free account-panel slots per service, for pending panel products (Crunchyroll…)
+  const panelSugg: Record<string, { id: string; email: string; used: number; max: number }[]> = {};
+  try {
+    const services = new Set<string>();
+    for (const o of orders)
+      for (const it of o.items ?? [])
+        if (it.productType === 'MANUAL' && !(it.credentials?.length > 0)) {
+          const sv = panelServiceForProduct(it.productName);
+          if (sv) services.add(sv);
+        }
+    for (const sv of Array.from(services)) {
+      panelSugg[sv] = (await suggestAccounts(sv, 10)).map((g) => ({
+        id: g.account.id,
+        email: g.account.email,
+        used: g.used,
+        max: g.max,
+      }));
+    }
+  } catch (e) {
+    console.error('[admin/orders] panel suggestions failed', e);
   }
 
   return (
@@ -268,6 +298,16 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                               <p className="mb-2 text-xs font-semibold text-slate-300">
                                 Fulfill manual product
                               </p>
+                              {panelServiceForProduct(item.productName) && (
+                                <div className="mb-3">
+                                  <AssignPanelForm
+                                    orderItemId={item.id}
+                                    suggestions={panelSugg[panelServiceForProduct(item.productName) as string] ?? []}
+                                    defaultProfile={profileNameFromInput(item.manualInput, '')}
+                                    defaultDays={warrantyDaysFromVariant(item.variantName)}
+                                  />
+                                </div>
+                              )}
                               <DeliveryForm orderItemId={item.id} action={fulfillManualItemFormAction} />
                             </div>
                           )}

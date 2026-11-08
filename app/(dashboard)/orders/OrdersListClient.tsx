@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Copy, Bell } from 'lucide-react';
 import { credentialToRows } from '@/lib/deliveryTypes';
 import { NetflixPanel } from './NetflixPanel';
+import { AccountPanelCard } from './AccountPanelCard';
 
 type OrdersListClientProps = {
   orders: any[];
@@ -648,6 +649,10 @@ export function OrdersListClient({ orders, page = 1, totalPages = 1, total = 0 }
                               const isNetflix = credentials.some(
                                 (c: any) => c && c.type === 'netflix_panel'
                               );
+                              const isAccountPanel = credentials.some(
+                                (c: any) => c && c.type === 'account_panel'
+                              );
+                              if (isAccountPanel) return <AccountPanelCard orderItemId={item.id} />;
                               return isNetflix ? (
                                 <NetflixPanel orderItemId={item.id} />
                               ) : (

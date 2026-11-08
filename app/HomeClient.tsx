@@ -41,7 +41,18 @@ type Props = {
 };
 
 function formatKS(amount: number) {
-  return `${amount.toLocaleString()} KS`;
+  return `${amount.toLocaleString()} Ks`;
+}
+
+// Category names in the DB carry emoji ("Music 🎧"); show clean labels.
+function cleanLabel(name: string) {
+  return name.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '').replace(/\s+/g, ' ').trim();
+}
+
+function shortName(full?: string | null) {
+  if (!full) return null;
+  const parts = full.trim().split(/\s+/);
+  return parts.length > 1 ? parts.slice(0, 2).join(' ') : parts[0];
 }
 
 function getLowestPrice(product: Product): number {
@@ -153,241 +164,220 @@ export function HomeClient({ categories, products, walletBalance, userName, avat
     return result;
   }, [products, selectedCategory, sortBy, searchQuery]);
 
-  const topCategories = categories;
-
   return (
-    <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-      <header className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {avatarUrl ? (
-            <img
-              src={avatarUrl}
-              alt="Profile"
-              className="h-10 w-10 rounded-xl object-cover"
-            />
-          ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600">
-              <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none">
-                <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="currentColor" />
-              </svg>
-            </div>
-          )}
-          <div>
-            <p className="text-[11px] text-slate-500">
-              {userName ? `Welcome back,` : 'Welcome to'}
-            </p>
-            <p className="text-base font-semibold text-slate-50">
-              {userName || 'PremiumCity'}
-            </p>
+    <div className="mx-auto max-w-6xl">
+      {/* Greeting */}
+      <header className="mb-4 flex items-center gap-3 px-1">
+        {avatarUrl ? (
+          <img src={avatarUrl} alt="" className="h-11 w-11 rounded-full object-cover ring-1 ring-white/15" />
+        ) : (
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 ring-1 ring-white/15">
+            <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none">
+              <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="currentColor" />
+            </svg>
           </div>
+        )}
+        <div className="min-w-0">
+          <p className="text-[13px] text-slate-400">{userName ? 'မင်္ဂလာပါ' : 'Welcome to'}</p>
+          <p className="truncate text-[22px] font-semibold leading-tight tracking-[-0.02em] text-white">
+            {shortName(userName) || 'PremiumCity'}
+          </p>
         </div>
       </header>
 
       {walletBalance != null && (
-        <div className="mb-6 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5">
-          <p className="text-[13px] text-emerald-50/90">Wallet balance</p>
-          <p className="mb-4 text-3xl font-semibold text-white">
-            {walletBalance.toLocaleString()} <span className="text-base">KS</span>
+        <section className="glass-emerald mb-6 rounded-[28px] p-5 sm:p-6">
+          <div className="relative z-[1] flex items-start justify-between">
+            <p className="text-[13px] font-medium text-emerald-50/85">Wallet balance</p>
+            <Link href="/wallet" className="text-[12px] font-medium text-emerald-50/85 underline-offset-2 hover:underline">
+              History
+            </Link>
+          </div>
+          <p className="relative z-[1] mb-5 mt-1 text-[40px] font-semibold leading-none tracking-[-0.03em] text-white tabular-nums">
+            {walletBalance.toLocaleString()}
+            <span className="ml-1.5 text-lg font-medium text-emerald-50/90">Ks</span>
           </p>
-          <div className="flex gap-2.5">
+          <div className="relative z-[1] grid grid-cols-2 gap-2.5">
             <Link
               href="/topup"
-              className="flex flex-1 flex-col items-center gap-1 rounded-xl bg-white/20 py-2.5 text-white transition hover:bg-white/25"
+              className="glass-btn press flex h-12 items-center justify-center gap-2 rounded-2xl text-[14px] font-semibold text-white"
             >
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
                 <path d="M12 5v14M5 12h14" strokeLinecap="round" />
               </svg>
-              <span className="text-xs font-medium">Top up</span>
+              Top up
             </Link>
             <Link
               href="/orders"
-              className="flex flex-1 flex-col items-center gap-1 rounded-xl bg-white/20 py-2.5 text-white transition hover:bg-white/25"
+              className="glass-btn press flex h-12 items-center justify-center gap-2 rounded-2xl text-[14px] font-semibold text-white"
             >
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path d="M12 8v4l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" />
+              <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M5 4h14l-1 16H6L5 4z" strokeLinejoin="round" />
+                <path d="M9 8a3 3 0 006 0" strokeLinecap="round" />
               </svg>
-              <span className="text-xs font-medium">Orders</span>
+              My orders
             </Link>
           </div>
-        </div>
+        </section>
       )}
 
-      {categories.length > 0 && (
-        <div className="mb-6">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-[15px] font-semibold text-slate-50">Categories</p>
-            {selectedCategory !== 'all' && (
-              <button
-                onClick={() => setSelectedCategory('all')}
-                className="text-xs text-emerald-400 hover:text-emerald-300"
-              >
-                Show all
-              </button>
-            )}
-          </div>
-          {/* Horizontal swipeable categories */}
-          <div className="-mx-4 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex gap-3">
-              {topCategories.map((cat) => {
-                const active = selectedCategory === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setSelectedCategory(active ? 'all' : cat.id)}
-                    className="flex w-[68px] flex-shrink-0 flex-col items-center gap-1.5"
-                  >
-                    <div
-                      className={`flex h-[68px] w-[68px] items-center justify-center rounded-2xl border transition ${
-                        active
-                          ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400'
-                          : 'border-slate-800/80 bg-slate-900/50 text-emerald-400 hover:border-emerald-500/40'
-                      }`}
-                    >
-                      {categoryIcon(cat.name)}
-                    </div>
-                    <span className="line-clamp-1 w-full text-center text-[11px] text-slate-300">
-                      {cat.name}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Search only */}
-      <div className="mb-5">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search products..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-slate-700/60 bg-slate-900/80 py-2.5 pl-10 pr-3 text-sm text-slate-200 placeholder:text-slate-600 backdrop-blur focus:border-emerald-500 focus:outline-none"
-          />
-          <svg
-            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
+      {/* Search */}
+      <div className="glass mb-4 flex items-center gap-2.5 rounded-2xl px-3.5 focus-within:ring-1 focus-within:ring-emerald-400/60">
+        <svg className="h-[18px] w-[18px] flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5-5m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          type="search"
+          aria-label="Search products"
+          placeholder="Netflix, VPN, Spotify…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="h-12 w-full bg-transparent text-[15px] text-slate-100 placeholder:text-slate-500 focus:outline-none"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => setSearchQuery('')}
+            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-slate-200"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </div>
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+              <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
       </div>
 
-      {(selectedCategory !== 'all' || searchQuery.trim()) && (
-        <p className="mb-4 text-[10px] text-slate-500 sm:text-xs">
-          {filteredAndSorted.length} of {products.length} products
+      {/* Categories: glass segmented chips */}
+      {categories.length > 0 && (
+        <div className="no-scrollbar -mx-3 mb-6 overflow-x-auto px-3 sm:mx-0 sm:px-0">
+          <div className="flex w-max gap-2">
+            {[{ id: 'all', name: 'All', slug: '' }, ...categories].map((cat) => {
+              const active = selectedCategory === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setSelectedCategory(active && cat.id !== 'all' ? 'all' : cat.id)}
+                  className={`press flex h-10 items-center gap-2 whitespace-nowrap rounded-full px-4 text-[13.5px] font-medium transition-colors ${
+                    active
+                      ? 'bg-white text-slate-950 shadow-[0_6px_18px_-8px_rgba(255,255,255,0.5)]'
+                      : 'glass text-slate-200 hover:text-white'
+                  }`}
+                >
+                  {cat.id !== 'all' && (
+                    <span className={`[&>svg]:h-4 [&>svg]:w-4 ${active ? 'text-emerald-600' : 'text-emerald-400'}`}>
+                      {categoryIcon(cat.name)}
+                    </span>
+                  )}
+                  {cleanLabel(cat.name)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="mb-3 flex items-baseline justify-between px-1">
+        <h2 className="text-[20px] font-semibold tracking-[-0.02em] text-white">
+          {selectedCategory === 'all'
+            ? 'Shop'
+            : cleanLabel(categories.find((c) => c.id === selectedCategory)?.name ?? 'Products')}
+        </h2>
+        {selectedCategory !== 'all' || searchQuery.trim() ? (
           <button
+            type="button"
             onClick={() => {
               setSelectedCategory('all');
               setSearchQuery('');
               setSortBy('default');
             }}
-            className="ml-2 text-emerald-400 hover:text-emerald-300"
+            className="text-[13px] font-medium text-emerald-400 hover:text-emerald-300"
           >
-            Reset
+            Clear · {filteredAndSorted.length} of {products.length}
           </button>
-        </p>
-      )}
-
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-[15px] font-semibold text-slate-50">
-          {selectedCategory === 'all'
-            ? 'All products'
-            : categories.find((c) => c.id === selectedCategory)?.name ?? 'Products'}
-        </p>
-        <span className="text-xs text-slate-500">{filteredAndSorted.length} items</span>
+        ) : (
+          <span className="text-[13px] text-slate-500">{products.length} products</span>
+        )}
       </div>
 
       {filteredAndSorted.length === 0 ? (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 px-4 py-10 text-center text-xs text-slate-500">
-          No products found. Try a different filter.
+        <div className="glass rounded-[24px] px-4 py-12 text-center">
+          <p className="text-[15px] font-medium text-slate-200">
+            {searchQuery.trim() ? `No results for “${searchQuery.trim()}”` : 'Nothing here yet'}
+          </p>
+          <p className="mt-1 text-[13px] text-slate-500">ရှာမတွေ့ပါက Support မှာ မေးမြန်းနိုင်ပါတယ်</p>
         </div>
       ) : (
-        <section className="grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-3 xl:grid-cols-4">
+        <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
           {filteredAndSorted.map((product) => {
-            const sorted = [...product.variants]
-              .filter((v) => v.isActive)
-              .sort((a, b) => a.price - b.price);
+            const sorted = [...product.variants].filter((v) => v.isActive).sort((a, b) => a.price - b.price);
             const cheapest = sorted.length > 0 ? sorted[0] : null;
             const isInstant = product.productType === 'INSTANT';
             const isOutOfStock = product.isInStock === false;
 
             return (
-              <Link key={product.id} href={`/product/${product.slug}`} className="group relative block">
-                <div
-                  className={`relative flex h-full flex-col overflow-hidden rounded-2xl border transition-all duration-300 ${
-                    isOutOfStock
-                      ? 'border-slate-800/60 bg-slate-900/30'
-                      : 'border-slate-800/80 bg-slate-900/50 group-hover:border-emerald-500/40 group-hover:bg-slate-900/70'
-                  }`}
-                >
-                  {/* Product image (square) with icon fallback */}
-                  <div className="relative aspect-square w-full overflow-hidden bg-slate-800/40">
-                    {product.imageUrl ? (
-                      <img
-                        src={product.imageUrl}
-                        alt={product.name}
-                        loading="lazy"
-                        className={`h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 ${
-                          isOutOfStock ? 'opacity-50 grayscale' : ''
-                        }`}
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-emerald-500/[0.08] text-emerald-400">
-                        <div className="scale-[1.8]">{categoryIcon(product.categoryName)}</div>
-                      </div>
-                    )}
-                    {/* Instant/Manual badge on the image */}
-                    <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-0.5 rounded-md bg-black/55 px-1.5 py-[3px] text-[8px] font-semibold text-emerald-300 backdrop-blur-sm sm:text-[9px]">
-                      {isInstant ? <InstantIcon /> : <ManualIcon />}
-                      <span className="hidden sm:inline">{isInstant ? 'Instant' : 'Manual'}</span>
-                    </span>
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex flex-1 flex-col p-2.5 sm:p-3">
-                    <span className="mb-1 self-start rounded-md bg-slate-800/70 px-1.5 py-[2px] text-[8px] font-medium uppercase tracking-wider text-slate-400 sm:text-[9px]">
-                      {product.categoryName}
-                    </span>
-
-                    <h2 className="text-[11px] font-semibold leading-snug text-slate-100 line-clamp-2 sm:text-sm">
-                      {product.name}
-                    </h2>
-
-                    <div className="flex-1" />
-
-                    <div className="mt-2 flex items-end justify-between gap-1">
-                      <div>
-                        {isOutOfStock ? (
-                          <span className="text-[10px] font-medium text-red-400/80 sm:text-xs">Out of stock</span>
-                        ) : cheapest ? (
-                          <>
-                            <p className="text-[9px] text-slate-500 sm:text-[10px]">from</p>
-                            <p className="text-sm font-bold tracking-tight text-emerald-400 sm:text-base">
-                              {formatKS(cheapest.price)}
-                            </p>
-                          </>
-                        ) : (
-                          <span className="text-[10px] font-medium text-emerald-400 sm:text-xs">Available</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Buy now button */}
-                    <div
-                      className={`mt-2.5 flex w-full items-center justify-center rounded-lg py-1.5 text-[11px] font-semibold transition sm:text-xs ${
-                        isOutOfStock
-                          ? 'bg-slate-800 text-slate-500'
-                          : 'bg-emerald-500 text-slate-950 group-hover:bg-emerald-400'
+              <Link
+                key={product.id}
+                href={`/product/${product.slug}`}
+                className={`glass press group flex flex-col rounded-[24px] p-1.5 transition-colors ${
+                  isOutOfStock ? 'opacity-70' : 'hover:border-white/20'
+                }`}
+              >
+                <div className="relative aspect-square w-full overflow-hidden rounded-[18px] bg-slate-800/40">
+                  {product.imageUrl ? (
+                    <img
+                      src={product.imageUrl}
+                      alt=""
+                      loading="lazy"
+                      className={`h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04] ${
+                        isOutOfStock ? 'grayscale' : ''
                       }`}
-                    >
-                      {isOutOfStock ? 'Sold out' : 'Buy now'}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-emerald-500/[0.08] text-emerald-400">
+                      <div className="scale-[1.8]">{categoryIcon(product.categoryName)}</div>
                     </div>
+                  )}
+                  <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-[3px] text-[10px] font-semibold text-white ring-1 ring-inset ring-white/15 backdrop-blur-md">
+                    {isInstant ? <InstantIcon /> : <ManualIcon />}
+                    {isInstant ? 'Instant' : 'Manual'}
+                  </span>
+                  {isOutOfStock && (
+                    <span className="absolute inset-x-2 bottom-2 rounded-full bg-black/60 py-1 text-center text-[11px] font-semibold text-white backdrop-blur-md">
+                      Sold out
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-1 flex-col px-2 pb-2 pt-2.5">
+                  <p className="text-[11px] font-medium text-slate-500">{cleanLabel(product.categoryName)}</p>
+                  <h3 className="mt-0.5 line-clamp-2 text-[14px] font-semibold leading-snug tracking-[-0.01em] text-slate-50 sm:text-[15px]">
+                    {product.name}
+                  </h3>
+                  <div className="flex-1" />
+                  <div className="mt-2.5 flex items-center justify-between gap-2">
+                    {isOutOfStock ? (
+                      <span className="text-[13px] font-medium text-slate-500">Restocking soon</span>
+                    ) : cheapest ? (
+                      <p className="text-[15px] font-semibold tracking-[-0.01em] text-emerald-400 tabular-nums sm:text-base">
+                        <span className="mr-1 text-[11px] font-normal text-slate-500">from</span>
+                        {formatKS(cheapest.price)}
+                      </p>
+                    ) : (
+                      <span className="text-[13px] font-medium text-emerald-400">Available</span>
+                    )}
+                    {!isOutOfStock && (
+                      <span
+                        aria-hidden="true"
+                        className="btn-primary flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full"
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}>
+                          <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                    )}
                   </div>
                 </div>
               </Link>
@@ -395,6 +385,6 @@ export function HomeClient({ categories, products, walletBalance, userName, avat
           })}
         </section>
       )}
-    </main>
+    </div>
   );
 }

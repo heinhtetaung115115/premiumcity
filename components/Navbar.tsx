@@ -12,8 +12,14 @@ type NavbarProps = {
   avatarUrl?: string | null;
 };
 
+const LINKS = [
+  { href: '/', label: 'Home', match: (p: string) => p === '/' },
+  { href: '/topup', label: 'Top up', match: (p: string) => p.startsWith('/topup') },
+  { href: '/orders', label: 'Orders', match: (p: string) => p.startsWith('/orders') },
+  { href: '/contact', label: 'Support', match: (p: string) => p.startsWith('/contact') },
+];
+
 export default function Navbar({
-  walletBalance,
   isAuthenticated,
   isAdmin,
   userName,
@@ -21,12 +27,6 @@ export default function Navbar({
 }: NavbarProps) {
   const pathname = usePathname();
 
-  const walletLabel =
-    walletBalance != null
-      ? `${walletBalance.toLocaleString('en-US')} MMK`
-      : 'Wallet';
-
-  // Initials for the profile avatar
   const initials = (userName || 'Account')
     .split(' ')
     .map((w) => w.charAt(0))
@@ -35,136 +35,73 @@ export default function Navbar({
     .toUpperCase();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/80 backdrop-blur">
-      <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-6">
-
-        {/* LEFT: Logo / brand */}
-        <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
+    <header className="sticky top-0 z-40 px-3 pt-2 sm:px-6 sm:pt-3">
+      <nav className="glass-bar mx-auto flex max-w-6xl items-center justify-between rounded-[22px] py-2 pl-2 pr-2 sm:pl-2.5">
+        {/* Brand */}
+        <Link href="/" className="press flex items-center gap-2.5">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.08)]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/premiumcity-logo.png"
-              alt="PremiumCity"
-              className="h-full w-full object-contain p-0.5"
-            />
+            <img src="/premiumcity-logo.png" alt="" className="h-full w-full object-contain p-0.5" />
           </span>
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold text-slate-50">PremiumCity</span>
-            <span className="text-[11px] text-slate-400">Digital Storefront</span>
-          </div>
+          <span className="text-[15px] font-semibold tracking-[-0.01em] text-white">PremiumCity</span>
         </Link>
 
-        {/* DESKTOP NAV */}
-        <div className="hidden items-center gap-3 md:flex">
-          <Link
-            href="/"
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-              pathname === '/'
-                ? 'bg-emerald-500 text-slate-950'
-                : 'text-slate-300 hover:bg-slate-900 hover:text-emerald-300'
-            }`}
-          >
-            Home
-          </Link>
-          <Link
-            href="/topup"
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-              pathname.startsWith('/topup')
-                ? 'bg-emerald-500 text-slate-950'
-                : 'text-slate-300 hover:bg-slate-900 hover:text-emerald-300'
-            }`}
-          >
-            Top up
-          </Link>
-          <Link
-            href="/orders"
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-              pathname.startsWith('/orders')
-                ? 'bg-emerald-500 text-slate-950'
-                : 'text-slate-300 hover:bg-slate-900 hover:text-emerald-300'
-            }`}
-          >
-            Orders
-          </Link>
-          <Link
-            href="/contact"
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-              pathname.startsWith('/contact')
-                ? 'bg-emerald-500 text-slate-950'
-                : 'text-slate-300 hover:bg-slate-900 hover:text-emerald-300'
-            }`}
-          >
-            Contact
-          </Link>
+        {/* Desktop: segmented links */}
+        <div className="hidden items-center gap-2 md:flex">
+          <div className="flex items-center rounded-full bg-white/[0.05] p-1 ring-1 ring-inset ring-white/[0.06]">
+            {LINKS.map((l) => {
+              const active = l.match(pathname);
+              return (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition ${
+                    active
+                      ? 'bg-white/[0.14] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  {l.label}
+                </Link>
+              );
+            })}
+          </div>
 
           {isAdmin && (
             <Link
               href="/admin"
-              className="rounded-full border border-amber-500/80 bg-slate-900 px-3 py-1.5 text-xs font-medium text-amber-300 hover:border-amber-400"
+              className="rounded-full px-3 py-1.5 text-[13px] font-medium text-amber-300 ring-1 ring-inset ring-amber-400/40 hover:bg-amber-400/10"
             >
               Admin
             </Link>
           )}
 
-          {/* Profile / auth */}
           {isAuthenticated ? (
-            <ProfileMenu
-              userName={userName}
-              avatarUrl={avatarUrl}
-              initials={initials}
-              variant="desktop"
-            />
+            <ProfileMenu userName={userName} avatarUrl={avatarUrl} initials={initials} variant="desktop" />
           ) : (
-            <Link
-              href="/login"
-              className="rounded-full border border-emerald-500 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/10"
-            >
+            <Link href="/login" className="btn-primary press rounded-full px-4 py-1.5 text-[13px] font-semibold">
               Sign in
             </Link>
           )}
         </div>
 
-        {/* MOBILE RIGHT SIDE: Talk to support + profile */}
-        <div className="flex items-center gap-2 md:hidden">
-          {/* Admin (admins only) */}
+        {/* Mobile: admin + profile only (main nav lives in the bottom tab bar) */}
+        <div className="flex items-center gap-1.5 md:hidden">
           {isAdmin && (
             <Link
               href="/admin"
               aria-label="Admin"
-              className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-amber-500/80 bg-slate-900 px-2.5 text-[11px] font-medium text-amber-300 hover:border-amber-400"
+              className="press inline-flex h-9 w-9 items-center justify-center rounded-full text-amber-300 ring-1 ring-inset ring-amber-400/40"
             >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <path d="M12 2l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V6l7-4z" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <span>Admin</span>
             </Link>
           )}
-
-          {/* Talk to support */}
-          <Link
-            href="/contact"
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-medium text-slate-200 hover:border-emerald-400 hover:text-emerald-300"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span>Talk to support</span>
-          </Link>
-
-          {/* Profile icon button */}
           {isAuthenticated ? (
-            <ProfileMenu
-              userName={userName}
-              avatarUrl={avatarUrl}
-              initials={initials}
-              variant="mobile"
-            />
+            <ProfileMenu userName={userName} avatarUrl={avatarUrl} initials={initials} variant="mobile" />
           ) : (
-            <Link
-              href="/login"
-              className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-500 px-3 text-[11px] font-medium text-emerald-300 hover:bg-emerald-500/10"
-              aria-label="Sign in"
-            >
+            <Link href="/login" className="btn-primary press inline-flex h-9 items-center rounded-full px-4 text-[13px] font-semibold">
               Sign in
             </Link>
           )}

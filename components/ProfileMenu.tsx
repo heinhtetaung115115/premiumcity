@@ -74,9 +74,9 @@ export function ProfileMenu({ userName, avatarUrl, initials, variant }: Props) {
     variant === 'desktop' ? (
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-medium text-slate-200 hover:border-emerald-400 hover:text-emerald-300"
+        className="press flex items-center gap-2 rounded-full bg-white/[0.06] py-1 pl-1 pr-2.5 text-[13px] font-medium text-slate-100 ring-1 ring-inset ring-white/10 hover:bg-white/[0.1]"
       >
-        <span className="h-6 w-6 overflow-hidden rounded-full">{avatar}</span>
+        <span className="h-7 w-7 overflow-hidden rounded-full">{avatar}</span>
         <span className="max-w-[90px] truncate">{userName || 'Account'}</span>
         <svg className="h-3 w-3 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
@@ -85,10 +85,10 @@ export function ProfileMenu({ userName, avatarUrl, initials, variant }: Props) {
     ) : (
       <button
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border border-slate-700 bg-slate-900 text-slate-100 hover:border-emerald-400"
+        className="press inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full ring-1 ring-inset ring-white/15"
         aria-label="Account menu"
       >
-        <span className="h-7 w-7 overflow-hidden rounded-lg">{avatar}</span>
+        <span className="h-9 w-9 overflow-hidden rounded-full">{avatar}</span>
       </button>
     );
 
@@ -97,9 +97,9 @@ export function ProfileMenu({ userName, avatarUrl, initials, variant }: Props) {
       {trigger}
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+        <div className="glass-bar absolute right-0 z-50 mt-2.5 w-56 origin-top-right overflow-hidden rounded-[20px] p-1">
           {/* Header */}
-          <div className="flex items-center gap-2.5 border-b border-slate-800 px-4 py-3">
+          <div className="flex items-center gap-2.5 border-b border-white/[0.08] px-3 py-3">
             <span className="h-8 w-8 overflow-hidden rounded-full">{avatar}</span>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-slate-100">{userName || 'Account'}</p>
@@ -113,7 +113,7 @@ export function ProfileMenu({ userName, avatarUrl, initials, variant }: Props) {
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-emerald-300"
+                className="flex items-center gap-3 rounded-[14px] px-3 py-2.5 text-sm text-slate-200 transition hover:bg-white/[0.08] hover:text-white"
               >
                 <svg className="h-[18px] w-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
                   {item.icon}
@@ -124,13 +124,13 @@ export function ProfileMenu({ userName, avatarUrl, initials, variant }: Props) {
           </div>
 
           {/* Logout */}
-          <div className="border-t border-slate-800 py-1">
+          <div className="border-t border-white/[0.08] py-1">
             <button
               onClick={() => {
                 setOpen(false);
                 signOut({ callbackUrl: '/' });
               }}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-rose-300 transition hover:bg-rose-500/10"
+              className="flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-sm text-rose-300 transition hover:bg-rose-500/10"
             >
               <svg className="h-[18px] w-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
                 <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round" />

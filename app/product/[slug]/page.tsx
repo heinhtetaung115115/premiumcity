@@ -10,7 +10,7 @@ type ProductPageProps = {
 };
 
 function formatKS(amount: number) {
-  return `${amount.toLocaleString()} KS`;
+  return `${amount.toLocaleString()} Ks`;
 }
 
 function decodeError(raw: string | undefined | null): string | null {
@@ -61,7 +61,7 @@ export default async function ProductPage({
     : [];
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6 sm:px-6 sm:py-8">
+    <main className="mx-auto max-w-2xl sm:py-2">
       {/* 🔔 Wallet insufficient funds modal */}
       <InsufficientFundsModal showOnMount={showInsufficientModal} />
 
@@ -69,17 +69,20 @@ export default async function ProductPage({
       <div className="mb-4">
         <Link
           href={categorySlug ? `/category/${categorySlug}` : '/'}
-          className="inline-flex items-center gap-1 text-sm text-emerald-300 hover:text-emerald-200"
+          className="glass press inline-flex h-9 items-center gap-1 rounded-full pl-2 pr-3.5 text-[13px] font-medium text-slate-200 hover:text-white"
         >
-          ← Back
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
+            <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Back
         </Link>
       </div>
 
       <div className="space-y-4">
         {/* ── HERO CARD (Design 1: photo top) ── */}
-        <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+        <section className="glass overflow-hidden rounded-[28px] p-1.5">
           {/* Product photo */}
-          <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-800/40">
+          <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[22px] bg-slate-800/40">
             {(product as any).imageUrl ? (
               <img
                 src={(product as any).imageUrl}
@@ -96,12 +99,17 @@ export default async function ProductPage({
             )}
             {/* Delivery + stock badge overlaid */}
             <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5">
-              <span className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium text-emerald-300 backdrop-blur-sm">
-                {isInstant ? '⚡ Instant' : '📦 Manual'}
+              <span className="inline-flex items-center gap-1 rounded-full bg-black/45 px-2.5 py-1 text-[11px] font-semibold text-white ring-1 ring-inset ring-white/15 backdrop-blur-md">
+                {isInstant ? (
+                  <svg className="h-3 w-3 text-emerald-300" viewBox="0 0 16 16"><path d="M8.5 1L3 9.5h4.5L7 15l6-8.5H8.5L9 1z" fill="currentColor" /></svg>
+                ) : (
+                  <svg className="h-3 w-3 text-emerald-300" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" /><path d="M5 7h6M5 9.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+                )}
+                {isInstant ? 'Instant delivery' : 'Manual delivery'}
               </span>
               {(isInstant || isOutlineVpn) && (
                 <span
-                  className={`inline-flex items-center rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium backdrop-blur-sm ${
+                  className={`inline-flex items-center rounded-full bg-black/45 px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ring-white/15 backdrop-blur-md ${
                     product.isInStock ? 'text-emerald-300' : 'text-red-300'
                   }`}
                 >
@@ -112,13 +120,13 @@ export default async function ProductPage({
           </div>
 
           {/* Info below photo */}
-          <div className="p-5">
+          <div className="px-4 pb-4 pt-4 sm:px-5">
             {product.category?.name && (
-              <p className="text-[10px] uppercase tracking-wide text-slate-500">
-                {product.category.name}
+              <p className="text-[13px] font-medium text-slate-500">
+                {product.category.name.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '').trim()}
               </p>
             )}
-            <h1 className="mt-1 text-2xl font-semibold text-slate-50">{product.name}</h1>
+            <h1 className="mt-0.5 text-[28px] font-semibold leading-tight tracking-[-0.025em] text-white">{product.name}</h1>
 
             {/* Sold count — "Hot seller" animated flame */}
             <style
@@ -140,10 +148,10 @@ export default async function ProductPage({
               }}
             />
             <div className="mt-2.5">
-              <span className="inline-flex items-center gap-2 rounded-full border border-orange-500/30 bg-gradient-to-br from-orange-500/[0.15] to-orange-600/[0.05] px-3.5 py-1.5">
-                <span className="pc-flame text-base leading-none" aria-hidden="true">
-                  🔥
-                </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/[0.12] px-3 py-1.5 ring-1 ring-inset ring-orange-400/25">
+                <svg className="pc-flame h-4 w-4 text-orange-400" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="currentColor" d="M12 2c1 3.5 5 5.8 5 11a5 5 0 01-10 0c0-2.4 1.2-4 2.4-5.2.2 1.6 1 2.7 2.1 3.2-.4-3.2-.1-6.3.5-9z" />
+                </svg>
                 <span className="text-[13px] text-orange-200">
                   <span className="font-bold text-orange-400">
                     {((product as any).soldCount ?? 0).toLocaleString('en-US')}
@@ -159,7 +167,7 @@ export default async function ProductPage({
                 {tags.map((t, i) => (
                   <span
                     key={i}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[11px]"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1.5 text-[12px] ring-1 ring-inset ring-white/10"
                   >
                     <span className="text-slate-500">{t.key}</span>
                     <span className="font-medium text-slate-200">{t.value}</span>
@@ -172,22 +180,22 @@ export default async function ProductPage({
 
         {/* ── Details ── */}
         {product.description && (
-          <section className="rounded-2xl border border-slate-800 bg-slate-950 px-5 py-4">
-            <h2 className="mb-1.5 text-sm font-semibold text-slate-100">Details</h2>
-            <p className="text-sm leading-relaxed text-slate-300">{product.description}</p>
+          <section className="glass rounded-[24px] px-5 py-4">
+            <h2 className="mb-1.5 text-[15px] font-semibold tracking-[-0.01em] text-white">Details</h2>
+            <p className="whitespace-pre-line text-[14px] leading-relaxed text-slate-300">{product.description}</p>
           </section>
         )}
 
         {/* ── Delivery info ── */}
         {product.deliveryNote && (
-          <section className="rounded-2xl border border-slate-800 bg-slate-950 px-5 py-4">
-            <h2 className="mb-1.5 text-sm font-semibold text-slate-100">Delivery info</h2>
-            <p className="text-sm text-slate-300">{product.deliveryNote}</p>
+          <section className="glass rounded-[24px] px-5 py-4">
+            <h2 className="mb-1.5 text-[15px] font-semibold tracking-[-0.01em] text-white">Delivery info</h2>
+            <p className="whitespace-pre-line text-[14px] leading-relaxed text-slate-300">{product.deliveryNote}</p>
           </section>
         )}
 
         {/* ── Purchase card (plan select + buy) ── */}
-        <section className="rounded-2xl border border-slate-800 bg-slate-950 px-5 py-5 shadow-lg shadow-black/40">
+        <section className="glass rounded-[28px] px-4 py-5 sm:px-5">
           <PurchaseForm
             product={product}
             isManual={isManual}

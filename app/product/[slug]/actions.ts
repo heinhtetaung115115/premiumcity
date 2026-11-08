@@ -117,26 +117,30 @@ export async function purchaseProductAction(formData: FormData) {
         Object.keys(manualInput).length > 0 ? manualInput : undefined
     });
 
-    // 5) Debit wallet + log transaction
-    const newBalance = walletBalance - totalPrice;
+    // 5) Charge the wallet exactly once.
+    // The database's create_order already charges the wallet and writes its
+    // own "Order purchase" ledger row in production. Only charge here if the
+    // balance did NOT change (older database function), so an order is never
+    // charged or recorded twice.
+    const { data: after } = await supabase.from('wallets').select('balance').eq('id', walletId).maybeSingle();
+    const balanceAfter = Number((after as any)?.balance ?? walletBalance);
+    const alreadyCharged = balanceAfter <= walletBalance - totalPrice + 0.001;
 
-    const { error: walletUpdateError } = await supabase
-      .from('wallets')
-      .update({ balance: newBalance })
-      .eq('id', walletId);
+    if (!alreadyCharged) {
+      const { error: walletUpdateError } = await supabase
+        .from('wallets')
+        .update({ balance: balanceAfter - totalPrice })
+        .eq('id', walletId);
+      if (walletUpdateError) throw walletUpdateError;
 
-    if (walletUpdateError) throw walletUpdateError;
-
-    const { error: txError } = await supabase
-      .from('wallet_transactions')
-      .insert({
+      const { error: txError } = await supabase.from('wallet_transactions').insert({
         wallet_id: walletId,
         amount: totalPrice,
         direction: 'DEBIT',
-        description: `Order payment (${order.id})`
+        description: `Order payment (${order.id})`,
       });
-
-    if (txError) throw txError;
+      if (txError) throw txError;
+    }
 
     redirect('/orders');
   } catch (err: any) {

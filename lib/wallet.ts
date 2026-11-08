@@ -457,6 +457,27 @@ export async function getWalletPageData(userId: string): Promise<WalletPageData>
     }
   }
 
+  // Older purchases were recorded twice: the database's "Order purchase" row
+  // and the website's "Order payment (<id>)" row for the same charge. Hide the
+  // website's copy when a matching row (same amount, within 2 minutes) exists.
+  {
+    const isWebCopy = (d: string | null) => /^Order payment \(/.test(String(d || ''));
+    const others = spending.filter((s) => !isWebCopy(s.description));
+    const used = new Set<string>();
+    for (let i = spending.length - 1; i >= 0; i--) {
+      const s = spending[i];
+      if (!isWebCopy(s.description)) continue;
+      const t = new Date(s.createdAt).getTime();
+      const twin = others.find(
+        (o) => !used.has(o.id) && o.amount === s.amount && Math.abs(new Date(o.createdAt).getTime() - t) < 120_000
+      );
+      if (twin) {
+        used.add(twin.id);
+        spending.splice(i, 1);
+      }
+    }
+  }
+
   const totalToppedUp = topups
     .filter((t) => t.status === 'APPROVED' || t.status === 'CREDITED')
     .reduce((sum, t) => sum + t.amount, 0);

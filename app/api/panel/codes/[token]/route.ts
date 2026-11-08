@@ -14,6 +14,15 @@ function ipOf(req: Request) {
   );
 }
 
+/** Customer-facing preview: no links, no quoted "From/Sent/To/Subject" forward header. */
+function cleanSnippet(t: string): string {
+  let x = t.replace(/\[?https?:\/\/\S+\]?/g, ' ').replace(/<\s*>/g, ' ');
+  const subj = x.search(/^\s*Subject\s*:.*$/im);
+  if (subj >= 0) x = x.slice(subj).replace(/^\s*Subject\s*:.*$/im, '');
+  x = x.replace(/_{5,}/g, ' ').replace(/\S+@\S+/g, '').replace(/\s+/g, ' ').trim();
+  return x.slice(0, 280);
+}
+
 export async function GET(req: Request, { params }: { params: { token: string } }) {
   const rl = await checkRateLimit({ key: ipOf(req), route: 'panel-codes', windowInSeconds: 600, maxRequests: 120 });
   if (!rl.allowed) return NextResponse.json({ error: 'Too many checks. Please wait a few minutes.' }, { status: 429 });
@@ -31,7 +40,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
         code: m.code,
         link: m.action_link,
         receivedAt: m.received_at,
-        snippet: (m.text_body || '').replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim().slice(0, 280),
+        snippet: cleanSnippet(m.text_body || ''),
       })),
     },
     { headers: { 'Cache-Control': 'no-store' } }

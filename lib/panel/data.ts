@@ -262,3 +262,28 @@ export async function recentAllowedEmails(accountId: string): Promise<PanelEmail
   const since = Date.now() - CODE_WINDOW_MINUTES * 60 * 1000;
   return ((data ?? []) as PanelEmail[]).filter((m) => new Date(m.received_at).getTime() > since);
 }
+
+/** Re-run the rules on a stored email (after a rule fix, or when an account was added later). */
+export async function recheckEmail(id: string): Promise<void> {
+  const { data } = await db().from('panel_emails').select(MAIL_COLS).eq('id', id).maybeSingle();
+  const m = data as PanelEmail | null;
+  if (!m) return;
+  let account: PanelAccount | null = m.account_id ? await getAccount(m.account_id) : null;
+  if (!account) {
+    const wanted = new Set(String(m.to_addresses || '').split(',').map((x) => normalizeEmail(x.trim())).filter(Boolean));
+    const { data: accs } = await db().from('panel_accounts').select(ACC_COLS).eq('status', 'active').limit(2000);
+    account = ((accs ?? []) as PanelAccount[]).find((a) => wanted.has(normalizeEmail(a.email))) ?? null;
+  }
+  const c = classify(account?.service ?? null, m.from_address || '', m.subject || '', m.text_body || '', m.html_body || '', account?.email ?? null);
+  const verdict = account ? c.verdict : 'blocked';
+  await db()
+    .from('panel_emails')
+    .update({
+      account_id: account?.id ?? null,
+      verdict,
+      reason: account ? c.reason : 'No matching account',
+      code: c.code,
+      action_link: verdict === 'allowed' ? c.link : null,
+    })
+    .eq('id', id);
+}

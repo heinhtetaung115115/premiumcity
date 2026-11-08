@@ -11,7 +11,7 @@ import {
   PANEL_COOKIE,
   sessionCookieOptions,
 } from '@/lib/panel/auth';
-import { changePassword, createAccount, createLink, getAccount, updateAccount, updateLink } from '@/lib/panel/data';
+import { changePassword, createAccount, createLink, getAccount, recheckEmail, updateAccount, updateLink } from '@/lib/panel/data';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 const DAY = 86_400_000;
@@ -126,4 +126,10 @@ export async function revokeLinkAction(formData: FormData) {
   const accountId = String(formData.get('accountId') ?? '');
   await updateLink(id, { status: 'revoked' } as any);
   redirect(`${panelBase()}/admin/a/${accountId}?ok=revoked`);
+}
+
+export async function recheckEmailAction(formData: FormData) {
+  guard();
+  await recheckEmail(String(formData.get('emailId') ?? ''));
+  redirect(`${panelBase()}/admin/inbox?ok=rechecked`);
 }

@@ -1,6 +1,7 @@
 import { panelBase, requirePanelAdmin } from '@/lib/panel/auth';
 import { listEmails } from '@/lib/panel/data';
 import { Shell } from '../Shell';
+import { recheckEmailAction } from '../actions';
 import { htmlToText } from '@/lib/panel/rules';
 
 /** Every button/link in the email with its text, so admin can see which one customers get. */
@@ -60,9 +61,17 @@ export default async function InboxPage() {
               <p className="break-all">
                 <b className="text-slate-300">To:</b> {m.to_addresses}
               </p>
-              <p>
-                <b className="text-slate-300">Why:</b> {m.reason}
-              </p>
+              <div className="flex items-center gap-3">
+                <p>
+                  <b className="text-slate-300">Why:</b> {m.reason}
+                </p>
+                <form action={recheckEmailAction}>
+                  <input type="hidden" name="emailId" value={m.id} />
+                  <button className="rounded-lg border border-indigo-400/40 px-2 py-0.5 text-[11px] font-semibold text-indigo-200 hover:bg-indigo-500/10">
+                    Re-check
+                  </button>
+                </form>
+              </div>
               {m.action_link && (
                 <p className="break-all">
                   <b className="text-slate-300">Link:</b> {m.action_link}

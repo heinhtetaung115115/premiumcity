@@ -91,11 +91,28 @@ export function extractActionLink(html: string, text: string, senders: string[] 
   const good = /(this was me|it was me|it'?s me|verif|confirm|sign[-_ ]?in|log[-_ ]?in|activate|access|code|yes|approve)/i;
   const bad =
     /(not me|wasn'?t (?:me|you)|click here|secure your|unsubscribe|password|reset|privacy|terms|help|support|preferences|cancel|email[-_ ]?change|account\/?settings|learn more|mailto:)/i;
+  // Judge by the BUTTON TEXT. Tracking links (links.mail.crunchyroll.com/ls/click?upn=…)
+  // are long random strings that can contain "help"/"reset" by chance, so the
+  // URL itself is only checked (host + path, no query) when there's no text.
+  const pathOf = (u: string) => {
+    try {
+      const x = new URL(u);
+      return `${x.hostname}${x.pathname}`;
+    } catch {
+      return u;
+    }
+  };
+  // 1) Buttons with a clear "this was me / verify / sign in" label win.
   for (const c of candidates) {
-    if (!/^https?:\/\//i.test(c.url)) continue;
-    if (!onServiceDomain(c.url, senders)) continue;
-    if (bad.test(c.label) || bad.test(c.url)) continue;
-    if (good.test(c.label) || (!c.label && good.test(c.url))) return c.url;
+    if (!/^https?:\/\//i.test(c.url) || !onServiceDomain(c.url, senders)) continue;
+    if (c.label && !bad.test(c.label) && good.test(c.label)) return c.url;
+  }
+  // 2) Otherwise a bare link whose path looks like verification.
+  for (const c of candidates) {
+    if (!/^https?:\/\//i.test(c.url) || !onServiceDomain(c.url, senders)) continue;
+    if (c.label) continue;
+    const p = pathOf(c.url);
+    if (!bad.test(p) && good.test(p)) return c.url;
   }
   return null;
 }

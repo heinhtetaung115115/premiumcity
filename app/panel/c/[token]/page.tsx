@@ -41,6 +41,7 @@ export default async function CustomerLinkPage({ params }: { params: { token: st
       createdAt={link.created_at}
       passwordUpdatedAt={account.password_updated_at}
       customerName={link.customer_name}
+      theme={account.service === 'crunchyroll' ? 'anime' : null}
     />
   );
 }

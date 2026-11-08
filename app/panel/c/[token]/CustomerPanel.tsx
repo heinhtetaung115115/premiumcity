@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { AnimeBackdrop, AnimeStyles, Bubble, Mascot, SpeedLines } from './AnimeTheme';
 import { Check, Copy, Eye, EyeOff, KeyRound, Mail, ShieldCheck, Timer, User, ExternalLink, Inbox } from 'lucide-react';
 
 type Msg = { id: string; subject: string; code: string | null; link: string | null; receivedAt: string; snippet: string; html?: string };
@@ -90,7 +91,10 @@ export function CustomerPanel(props: {
   createdAt: string;
   passwordUpdatedAt: string | null;
   customerName: string | null;
+  /** 'anime' for Crunchyroll: sakura, manga lines and the Kitsu mascot. */
+  theme?: 'anime' | null;
 }) {
+  const anime = props.theme === 'anime';
   const [phase, setPhase] = useState<'idle' | 'waiting' | 'shown' | 'error'>('idle');
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [err, setErr] = useState('');
@@ -146,13 +150,26 @@ export function CustomerPanel(props: {
   }
 
   return (
-    <main className="mx-auto max-w-md space-y-4 px-4 pb-14 pt-8">
+    <main className="relative mx-auto max-w-md space-y-4 px-4 pb-14 pt-8">
+      {anime && (
+        <>
+          <AnimeStyles />
+          <AnimeBackdrop />
+        </>
+      )}
       {/* Header */}
-      <header className="relative overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.02] p-5">
+      <header style={{ zIndex: 1 }}
+        className={`relative overflow-hidden rounded-[28px] border p-5 ${
+          anime
+            ? 'border-[#f47521]/40 bg-gradient-to-br from-[#f47521]/25 via-[#2a1630]/60 to-[#0d0b16] shadow-[0_10px_40px_-15px_rgba(244,117,33,0.6)]'
+            : 'border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.02]'
+        }`}
+      >
         <div
           className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full blur-3xl"
           style={{ background: `${props.serviceColor}33` }}
         />
+        {anime && <SpeedLines />}
         <div className="relative flex items-center gap-3">
           <span
             className="flex h-12 w-12 items-center justify-center rounded-2xl text-lg font-black text-white"
@@ -174,13 +191,23 @@ export function CustomerPanel(props: {
             <p className={`text-4xl font-bold tabular-nums ${daysLeft <= 3 ? 'text-amber-300' : 'text-white'}`}>{daysLeft}</p>
             <p className="text-xs text-slate-400">days left · ရက် ကျန်ပါသည်</p>
           </div>
+          {anime && (
+            <div className="-mb-3 -mt-6">
+              <Mascot mood={phase === 'shown' ? 'happy' : phase === 'waiting' ? 'search' : 'idle'} size={92} />
+            </div>
+          )}
           <div className="text-right">
             <p className="text-[11px] uppercase tracking-wider text-slate-500">Expires</p>
             <p className="text-sm font-semibold text-white">{fmtDate(props.warrantyUntil)}</p>
           </div>
         </div>
         <div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-          <div className={`h-full rounded-full ${daysLeft <= 3 ? 'bg-amber-400' : 'bg-indigo-400'}`} style={{ width: `${pct}%` }} />
+          <div
+            className={`h-full rounded-full ${
+              daysLeft <= 3 ? 'bg-amber-400' : anime ? 'bg-gradient-to-r from-[#f47521] to-pink-400' : 'bg-indigo-400'
+            }`}
+            style={{ width: `${pct}%` }}
+          />
         </div>
       </header>
 
@@ -196,7 +223,7 @@ export function CustomerPanel(props: {
       )}
 
       {/* Login details */}
-      <section className="space-y-2.5 rounded-3xl border border-white/10 bg-white/[0.02] p-4">
+      <section className={`space-y-2.5 rounded-3xl border p-4 ${anime ? 'border-[#f47521]/25 bg-[#120f1c]/80 backdrop-blur' : 'border-white/10 bg-white/[0.02]'}`}>
         <p className="px-1 text-sm font-semibold text-white">Login details</p>
         <Field icon={<Mail className="h-4 w-4" />} label="Email" value={props.email} />
         <Field icon={<KeyRound className="h-4 w-4" />} label="Password" value={props.password} secret />
@@ -208,7 +235,15 @@ export function CustomerPanel(props: {
       </section>
 
       {/* Codes */}
-      <section className="space-y-3 rounded-3xl border border-white/10 bg-white/[0.02] p-4">
+      <section className={`space-y-3 rounded-3xl border p-4 ${anime ? 'border-[#f47521]/25 bg-[#120f1c]/80 backdrop-blur' : 'border-white/10 bg-white/[0.02]'}`}>
+        {anime && phase === 'idle' && (
+          <div className="flex items-end gap-2">
+            <Mascot mood="idle" size={64} />
+            <div className="mb-3">
+              <Bubble>Get code နှိပ်ပြီး “This was me” ကို နှိပ်ပါ ✨</Bubble>
+            </div>
+          </div>
+        )}
         <p className="text-[14px] leading-relaxed text-slate-200">
           Login ဝင်တဲ့အခါ Email confirm လိုတာပဲ ဖြစ်ဖြစ်၊ OTP လိုတာပဲ ဖြစ်ဖြစ် အောက်က <b className="text-white">Get code</b> ကိုနှိပ်ပြီး
           ကျလာတဲ့ Email မှာ <b className="text-emerald-300">This was me</b> ကို နှိပ်ပေးပါ။
@@ -228,10 +263,16 @@ export function CustomerPanel(props: {
         {phase === 'waiting' && (
           <div className="rounded-2xl border border-white/10 bg-black/30 p-5 text-center">
             <style>{`@keyframes pcpulse{0%,100%{transform:scale(.9);opacity:.5}50%{transform:scale(1.1);opacity:1}}`}</style>
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-indigo-500/15" style={{ animation: 'pcpulse 1.6s ease-in-out infinite' }}>
-              <Timer className="h-6 w-6 text-indigo-300" />
-            </div>
-            <p className="mt-3 text-sm font-semibold text-white">Code ကို စောင့်နေပါသည်…</p>
+            {anime ? (
+              <div className="flex justify-center">
+                <Mascot mood="search" size={110} />
+              </div>
+            ) : (
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-indigo-500/15" style={{ animation: 'pcpulse 1.6s ease-in-out infinite' }}>
+                <Timer className="h-6 w-6 text-indigo-300" />
+              </div>
+            )}
+            <p className="mt-3 text-sm font-semibold text-white">{anime ? 'Kitsu က Email ကို ရှာနေပါတယ်…' : 'Code ကို စောင့်နေပါသည်…'}</p>
             <p className="text-xs text-slate-500">Waiting for the email · up to 90 seconds</p>
           </div>
         )}

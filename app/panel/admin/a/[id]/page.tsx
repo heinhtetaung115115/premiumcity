@@ -7,13 +7,12 @@ import { SERVICES, serviceInfo } from '@/lib/panel/rules';
 import {
   changePasswordAction,
   createLinkAction,
-  extendLinkAction,
-  revokeLinkAction,
+  deleteAccountAction,
   updateAccountAction,
-  updateLinkProfileAction,
 } from '../../actions';
 import { Shell, btnCls, cardCls, inputCls, labelCls } from '../../Shell';
 import { CopyBtn } from '../../CopyBtn';
+import { LinkRow } from './LinkRow';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -60,6 +59,10 @@ export default async function AccountPage({
       ? 'Link revoked.'
       : sp.ok === 'profile'
       ? 'Customer / profile saved.'
+      : sp.ok === 'deleted'
+      ? 'Link deleted.'
+      : sp.ok === 'date'
+      ? 'End date changed.'
       : sp.e === 'same'
       ? 'That is already the password.'
       : sp.e === 'pw'
@@ -181,81 +184,35 @@ export default async function AccountPage({
       </div>
 
       {/* Links */}
-      <section className="mt-6">
-        <h2 className="mb-2 text-sm font-semibold text-white">Customer links ({links.length})</h2>
-        {links.length === 0 && <p className="text-sm text-slate-500">No links yet.</p>}
-        <div className="space-y-2">
-          {links.map((l) => {
-            const live = linkIsLive(l);
-            const days = Math.ceil((new Date(l.warranty_until).getTime() - Date.now()) / 86_400_000);
-            return (
-              <div key={l.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-white">
-                      {l.profile_name && (
-                        <span className="mr-1.5 rounded-md bg-indigo-500/20 px-1.5 py-0.5 text-[11px] text-indigo-200">
-                          👤 {l.profile_name}
-                        </span>
-                      )}
-                      {l.customer_name || 'Customer'}
-                      {l.customer_email && <span className="font-normal text-slate-500"> · {l.customer_email}</span>}
-                    </p>
-                    <p className="text-[11px] text-slate-500">
-                      Until {fmt(l.warranty_until)} · last opened {l.last_viewed_at ? fmt(l.last_viewed_at, true) : 'never'}
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                      live ? (days <= 3 ? 'bg-amber-400/15 text-amber-300' : 'bg-emerald-400/15 text-emerald-300') : 'bg-white/5 text-slate-500'
-                    }`}
-                  >
-                    {live ? `${days}d left` : l.status === 'revoked' ? 'Revoked' : 'Expired'}
-                  </span>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <CopyBtn value={customerLinkUrl(l.token)} label="Copy link" />
-                  <a href={`${base}/c/${l.token}`} target="_blank" className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-slate-300 hover:bg-white/5">
-                    Open
-                  </a>
-                  <form action={extendLinkAction} className="flex items-center gap-1">
-                    <input type="hidden" name="linkId" value={l.id} />
-                    <input type="hidden" name="accountId" value={acc.id} />
-                    <input type="hidden" name="currentUntil" value={l.warranty_until} />
-                    <input name="days" type="number" min={1} defaultValue={30} className="w-14 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-white" />
-                    <button className="rounded-lg border border-emerald-400/30 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-400/10">
-                      + days
-                    </button>
-                  </form>
-                  <details className="w-full sm:w-auto">
-                    <summary className="cursor-pointer rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-slate-300 hover:bg-white/5">
-                      Edit profile / customer
-                    </summary>
-                    <form action={updateLinkProfileAction} className="mt-2 grid gap-2 sm:grid-cols-2">
-                      <input type="hidden" name="linkId" value={l.id} />
-                      <input type="hidden" name="accountId" value={acc.id} />
-                      <input name="profileName" defaultValue={l.profile_name ?? ''} placeholder="Profile name" className={inputCls} />
-                      <input name="profilePin" defaultValue={l.profile_pin ?? ''} placeholder="Profile PIN" className={inputCls} />
-                      <input name="customerName" defaultValue={l.customer_name ?? ''} placeholder="Customer name" className={inputCls} />
-                      <input name="customerEmail" defaultValue={l.customer_email ?? ''} placeholder="Customer email" className={inputCls} />
-                      <button className={`${btnCls} sm:col-span-2`}>Save</button>
-                    </form>
-                  </details>
-                  {l.status === 'active' && (
-                    <form action={revokeLinkAction}>
-                      <input type="hidden" name="linkId" value={l.id} />
-                      <input type="hidden" name="accountId" value={acc.id} />
-                      <button className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-slate-400 hover:border-rose-400/50 hover:text-rose-300">
-                        Revoke
-                      </button>
-                    </form>
-                  )}
-                </div>
+      {(() => {
+        const active = links.filter((l) => linkIsLive(l));
+        const ended = links.filter((l) => !linkIsLive(l));
+        return (
+          <>
+            <section className="mt-6">
+              <h2 className="mb-2 text-sm font-semibold text-white">Active customers ({active.length})</h2>
+              {active.length === 0 && <p className="text-sm text-slate-500">No active customers.</p>}
+              <div className="space-y-2">
+                {active.map((l) => (
+                  <LinkRow key={l.id} l={l} accountId={acc.id} base={base} />
+                ))}
               </div>
-            );
-          })}
-        </div>
-      </section>
+            </section>
+            {ended.length > 0 && (
+              <details className="mt-4 rounded-2xl border border-white/5 p-3">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-400">
+                  Ended — expired or revoked ({ended.length})
+                </summary>
+                <div className="mt-3 space-y-2">
+                  {ended.map((l) => (
+                    <LinkRow key={l.id} l={l} accountId={acc.id} base={base} />
+                  ))}
+                </div>
+              </details>
+            )}
+          </>
+        );
+      })()}
 
       {/* Emails */}
       <section className="mt-6">
@@ -323,6 +280,20 @@ export default async function AccountPage({
             <button className={btnCls}>Save</button>
           </div>
         </form>
+        <details className="mt-5 border-t border-white/5 pt-4">
+          <summary className="cursor-pointer text-xs font-semibold text-rose-300">🗑 Delete this account</summary>
+          <form action={deleteAccountAction} className="mt-2 rounded-xl border border-rose-500/30 bg-rose-500/[0.06] p-3">
+            <input type="hidden" name="id" value={acc.id} />
+            <p className="mb-2 text-xs text-rose-200">
+              Deletes the account and ALL its customer links ({links.length}). Customers lose access immediately. This cannot be
+              undone. To keep the history instead, set Status to Archived.
+            </p>
+            <label className="mb-2 flex items-center gap-2 text-xs text-rose-100">
+              <input type="checkbox" name="confirm" required /> I understand
+            </label>
+            <button className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-bold text-white">Delete account</button>
+          </form>
+        </details>
       </details>
     </Shell>
   );

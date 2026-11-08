@@ -11,7 +11,17 @@ import {
   PANEL_COOKIE,
   sessionCookieOptions,
 } from '@/lib/panel/auth';
-import { changePassword, createAccount, createLink, getAccount, recheckEmail, updateAccount, updateLink } from '@/lib/panel/data';
+import {
+  changePassword,
+  createAccount,
+  createLink,
+  deleteAccount,
+  deleteLink,
+  getAccount,
+  recheckEmail,
+  updateAccount,
+  updateLink,
+} from '@/lib/panel/data';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 const DAY = 86_400_000;
@@ -145,4 +155,32 @@ export async function updateLinkProfileAction(formData: FormData) {
     customer_email: String(formData.get('customerEmail') ?? '').trim() || null,
   } as any);
   redirect(`${panelBase()}/admin/a/${accountId}?ok=profile`);
+}
+
+export async function setLinkUntilAction(formData: FormData) {
+  guard();
+  const id = String(formData.get('linkId') ?? '');
+  const accountId = String(formData.get('accountId') ?? '');
+  const until = dateInputToIso(formData.get('until'));
+  if (!until) redirect(`${panelBase()}/admin/a/${accountId}`);
+  const patch: Record<string, unknown> = { warranty_until: until };
+  // Setting a future date on a revoked link brings it back.
+  if (new Date(until as string).getTime() > Date.now()) patch.status = 'active';
+  await updateLink(id, patch as any);
+  redirect(`${panelBase()}/admin/a/${accountId}?ok=date`);
+}
+
+export async function deleteLinkAction(formData: FormData) {
+  guard();
+  const id = String(formData.get('linkId') ?? '');
+  const accountId = String(formData.get('accountId') ?? '');
+  await deleteLink(id);
+  redirect(`${panelBase()}/admin/a/${accountId}?ok=deleted`);
+}
+
+export async function deleteAccountAction(formData: FormData) {
+  guard();
+  if (formData.get('confirm') !== 'on') redirect(`${panelBase()}/admin`);
+  await deleteAccount(String(formData.get('id') ?? ''));
+  redirect(`${panelBase()}/admin?ok=deleted`);
 }

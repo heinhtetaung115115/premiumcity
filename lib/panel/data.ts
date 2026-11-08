@@ -200,6 +200,17 @@ export async function updateLink(id: string, patch: Partial<PanelLink>): Promise
   if (error) throw error;
 }
 
+export async function deleteLink(id: string): Promise<void> {
+  const { error } = await db().from('panel_links').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteAccount(id: string): Promise<void> {
+  // panel_links cascade; panel_emails keep history with account_id → null
+  const { error } = await db().from('panel_accounts').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function getLinkByToken(token: string): Promise<{ link: PanelLink; account: PanelAccount } | null> {
   if (!/^[A-Za-z0-9]{6,32}$/.test(token)) return null;
   const { data } = await db().from('panel_links').select(LINK_COLS).eq('token', token).maybeSingle();

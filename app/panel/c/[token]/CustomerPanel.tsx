@@ -26,7 +26,19 @@ async function copyText(v: string) {
   }
 }
 
-function Field({ icon, label, value, secret = false }: { icon: React.ReactNode; label: string; value: string; secret?: boolean }) {
+function Field({
+  icon,
+  label,
+  value,
+  secret = false,
+  copy = true,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  secret?: boolean;
+  copy?: boolean;
+}) {
   const [shown, setShown] = useState(!secret);
   const [copied, setCopied] = useState(false);
   return (
@@ -46,6 +58,7 @@ function Field({ icon, label, value, secret = false }: { icon: React.ReactNode; 
           {shown ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
       )}
+      {copy && (
       <button
         type="button"
         onClick={async () => {
@@ -60,6 +73,7 @@ function Field({ icon, label, value, secret = false }: { icon: React.ReactNode; 
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         {copied ? 'Copied' : 'Copy'}
       </button>
+      )}
     </div>
   );
 }
@@ -186,8 +200,8 @@ export function CustomerPanel(props: {
         <p className="px-1 text-sm font-semibold text-white">Login details</p>
         <Field icon={<Mail className="h-4 w-4" />} label="Email" value={props.email} />
         <Field icon={<KeyRound className="h-4 w-4" />} label="Password" value={props.password} secret />
-        {props.profile && <Field icon={<User className="h-4 w-4" />} label="Profile" value={props.profile} />}
-        {props.pin && <Field icon={<KeyRound className="h-4 w-4" />} label="PIN" value={props.pin} secret />}
+        {props.profile && <Field icon={<User className="h-4 w-4" />} label="Profile" value={props.profile} copy={false} />}
+        {props.pin && <Field icon={<KeyRound className="h-4 w-4" />} label="PIN" value={props.pin} secret copy={false} />}
         <p className="px-1 pt-1 text-[12px] leading-relaxed text-slate-500">
           Password / Email ကို မပြောင်းပါနှင့်။ ပြောင်းပါက Warranty ပျက်ပါမည်။
         </p>
@@ -195,13 +209,10 @@ export function CustomerPanel(props: {
 
       {/* Codes */}
       <section className="space-y-3 rounded-3xl border border-white/10 bg-white/[0.02] p-4">
-        <div>
-          <p className="text-sm font-semibold text-white">Login code / Verification</p>
-          <p className="mt-0.5 text-[13px] leading-relaxed text-slate-400">
-            App ထဲမှ Code ပို့ခိုင်းပြီးမှ အောက်က ခလုတ်ကို နှိပ်ပါ။
-            <span className="block text-xs text-slate-500">Request the code in the app first, then tap below.</span>
-          </p>
-        </div>
+        <p className="text-[14px] leading-relaxed text-slate-200">
+          Login ဝင်တဲ့အခါ Email confirm လိုတာပဲ ဖြစ်ဖြစ်၊ OTP လိုတာပဲ ဖြစ်ဖြစ် အောက်က <b className="text-white">Get code</b> ကိုနှိပ်ပြီး
+          ကျလာတဲ့ Email မှာ <b className="text-emerald-300">This was me</b> ကို နှိပ်ပေးပါ။
+        </p>
 
         {phase !== 'waiting' && (
           <button

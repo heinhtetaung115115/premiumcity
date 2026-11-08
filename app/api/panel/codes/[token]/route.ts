@@ -2,6 +2,8 @@
 import { NextResponse } from 'next/server';
 import { getLinkByToken, linkIsLive, recentAllowedEmails } from '@/lib/panel/data';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { safeEmailView } from '@/lib/panel/sanitize';
+import { serviceInfo } from '@/lib/panel/rules';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -41,6 +43,8 @@ export async function GET(req: Request, { params }: { params: { token: string } 
         link: m.action_link,
         receivedAt: m.received_at,
         snippet: cleanSnippet(m.text_body || ''),
+        // Whole email, made safe: dangerous links disabled, scripts removed.
+        html: safeEmailView(m.html_body, m.text_body, serviceInfo(found.account.service).senders).slice(0, 250_000),
       })),
     },
     { headers: { 'Cache-Control': 'no-store' } }

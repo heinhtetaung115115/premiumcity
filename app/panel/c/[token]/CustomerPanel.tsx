@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Copy, Eye, EyeOff, KeyRound, Mail, ShieldCheck, Timer, User, ExternalLink, Inbox } from 'lucide-react';
 
-type Msg = { id: string; subject: string; code: string | null; link: string | null; receivedAt: string; snippet: string };
+type Msg = { id: string; subject: string; code: string | null; link: string | null; receivedAt: string; snippet: string; html?: string };
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Yangon' });
@@ -81,6 +81,7 @@ export function CustomerPanel(props: {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [err, setErr] = useState('');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [openMail, setOpenMail] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const started = useRef(0);
 
@@ -255,7 +256,37 @@ export function CustomerPanel(props: {
                   <ExternalLink className="h-4 w-4" /> Verify · This was me
                 </a>
               )}
-              {!m.code && !m.link && <p className="mt-2 text-xs leading-relaxed text-slate-300">{m.snippet}</p>}
+              {!m.code && !m.link && !m.html && <p className="mt-2 text-xs leading-relaxed text-slate-300">{m.snippet}</p>}
+              {m.html && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setOpenMail((v) => (v === m.id ? null : m.id))}
+                    className={`mt-2 w-full rounded-xl py-2.5 text-sm font-semibold transition ${
+                      !m.code && !m.link
+                        ? 'bg-emerald-400 text-slate-950 hover:bg-emerald-300'
+                        : 'border border-white/10 text-slate-200 hover:bg-white/5'
+                    }`}
+                  >
+                    {openMail === m.id ? 'Hide email' : 'Email ကိုဖွင့်ကြည့်မည် · View email'}
+                  </button>
+                  {openMail === m.id && (
+                    <div className="mt-2 overflow-hidden rounded-xl bg-white">
+                      <iframe
+                        title={m.subject}
+                        srcDoc={`<base target="_blank">${m.html}`}
+                        sandbox="allow-popups allow-popups-to-escape-sandbox"
+                        className="h-[560px] w-full border-0 bg-white"
+                      />
+                    </div>
+                  )}
+                  {openMail === m.id && (
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+                      “This was me” ကိုသာ နှိပ်ပါ။ အကောင့်လုံခြုံရေးအတွက် အချို့ Link များကို ပိတ်ထားပါသည်။
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           ))}
 

@@ -35,8 +35,8 @@ export default async function CustomerLinkPage({ params }: { params: { token: st
       serviceColor={svc.color}
       email={account.email}
       password={account.password}
-      profile={account.profile}
-      pin={account.pin}
+      profile={link.profile_name ?? account.profile}
+      pin={link.profile_pin ?? account.pin}
       warrantyUntil={link.warranty_until}
       createdAt={link.created_at}
       passwordUpdatedAt={account.password_updated_at}

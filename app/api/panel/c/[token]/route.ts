@@ -21,8 +21,8 @@ export async function GET(_req: Request, { params }: { params: { token: string }
         profile: {
           email: account.email,
           password: account.password,
-          name: account.profile,
-          pin: account.pin,
+          name: link.profile_name ?? account.profile,
+          pin: link.profile_pin ?? account.pin,
           endDate: link.warranty_until,
         },
         messages: mails.map((m) => ({

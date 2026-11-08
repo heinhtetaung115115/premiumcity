@@ -111,7 +111,6 @@ export function CustomerPanel(props: {
   const start = new Date(props.createdAt).getTime();
   const daysLeft = Math.max(0, Math.ceil((end - Date.now()) / 86_400_000));
   const pct = end > start ? Math.min(100, Math.max(0, ((Date.now() - start) / (end - start)) * 100)) : 0;
-  const pwRecent = props.passwordUpdatedAt && Date.now() - new Date(props.passwordUpdatedAt).getTime() < 7 * 86_400_000;
 
   async function poll() {
     try {
@@ -211,22 +210,14 @@ export function CustomerPanel(props: {
         </div>
       </header>
 
-      {/* Password changed notice */}
-      {pwRecent && props.passwordUpdatedAt && (
-        <div className="flex gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/[0.07] p-3.5">
-          <KeyRound className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-300" />
-          <p className="text-[13px] leading-relaxed text-amber-100">
-            Password ကို {fmtDate(props.passwordUpdatedAt)} တွင် ပြောင်းထားပါသည်။ အောက်ပါ Password အသစ်ကို အသုံးပြုပါ။
-            <span className="block text-xs text-amber-200/70">Password was updated — use the new one below.</span>
-          </p>
-        </div>
-      )}
-
       {/* Login details */}
       <section className={`space-y-2.5 rounded-3xl border p-4 ${anime ? 'border-[#f47521]/25 bg-[#120f1c]/80 backdrop-blur' : 'border-white/10 bg-white/[0.02]'}`}>
         <p className="px-1 text-sm font-semibold text-white">Login details</p>
         <Field icon={<Mail className="h-4 w-4" />} label="Email" value={props.email} />
         <Field icon={<KeyRound className="h-4 w-4" />} label="Password" value={props.password} secret />
+        {props.passwordUpdatedAt && (
+          <p className="-mt-1 px-1 text-[11px] text-slate-500">Password last updated {fmtDate(props.passwordUpdatedAt)}</p>
+        )}
         {props.profile && <Field icon={<User className="h-4 w-4" />} label="Profile" value={props.profile} copy={false} />}
         {props.pin && <Field icon={<KeyRound className="h-4 w-4" />} label="PIN" value={props.pin} secret copy={false} />}
         <p className="px-1 pt-1 text-[12px] leading-relaxed text-slate-500">

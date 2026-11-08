@@ -19,6 +19,7 @@ export type PanelAccount = {
   status: string;
   password_updated_at: string | null;
   created_at: string;
+  max_profiles: number | null;
 };
 
 export type PanelLink = {
@@ -32,6 +33,8 @@ export type PanelLink = {
   source: string;
   last_viewed_at: string | null;
   created_at: string;
+  profile_name: string | null;
+  profile_pin: string | null;
 };
 
 export type PanelEmail = {
@@ -50,9 +53,9 @@ export type PanelEmail = {
 };
 
 const ACC_COLS =
-  'id,service,email,password,profile,pin,account_expires_at,supplier,notes,status,password_updated_at,created_at';
+  'id,service,email,password,profile,pin,account_expires_at,supplier,notes,status,password_updated_at,created_at,max_profiles';
 const LINK_COLS =
-  'id,token,account_id,customer_name,customer_email,warranty_until,status,source,last_viewed_at,created_at';
+  'id,token,account_id,customer_name,customer_email,warranty_until,status,source,last_viewed_at,created_at,profile_name,profile_pin';
 const MAIL_COLS =
   'id,account_id,to_addresses,from_address,subject,text_body,html_body,verdict,reason,code,action_link,received_at';
 
@@ -98,6 +101,7 @@ export async function createAccount(a: Partial<PanelAccount>): Promise<PanelAcco
       account_expires_at: a.account_expires_at || null,
       supplier: a.supplier || null,
       notes: a.notes || null,
+      max_profiles: a.max_profiles && a.max_profiles > 0 ? a.max_profiles : 5,
       status: 'active',
     })
     .select(ACC_COLS)
@@ -169,6 +173,8 @@ export async function createLink(input: {
   customerEmail?: string | null;
   warrantyUntil: string;
   source?: string;
+  profileName?: string | null;
+  profilePin?: string | null;
 }): Promise<PanelLink> {
   const { data, error } = await db()
     .from('panel_links')
@@ -179,6 +185,8 @@ export async function createLink(input: {
       customer_email: input.customerEmail || null,
       warranty_until: input.warrantyUntil,
       source: input.source || 'manual',
+      profile_name: input.profileName || null,
+      profile_pin: input.profilePin || null,
       status: 'active',
     })
     .select(LINK_COLS)

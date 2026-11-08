@@ -52,8 +52,7 @@ export async function createAccountAction(formData: FormData) {
     service: String(formData.get('service') ?? 'crunchyroll'),
     email,
     password: String(formData.get('password') ?? ''),
-    profile: String(formData.get('profile') ?? '').trim() || null,
-    pin: String(formData.get('pin') ?? '').trim() || null,
+    max_profiles: Math.max(1, Math.min(20, Number(formData.get('maxProfiles') ?? 5) || 5)),
     account_expires_at: dateInputToIso(formData.get('accountExpires')),
     supplier: String(formData.get('supplier') ?? '').trim() || null,
     notes: String(formData.get('notes') ?? '').trim() || null,
@@ -67,8 +66,7 @@ export async function updateAccountAction(formData: FormData) {
   await updateAccount(id, {
     service: String(formData.get('service') ?? 'crunchyroll'),
     email: String(formData.get('email') ?? '').trim(),
-    profile: String(formData.get('profile') ?? '').trim() || null,
-    pin: String(formData.get('pin') ?? '').trim() || null,
+    max_profiles: Math.max(1, Math.min(20, Number(formData.get('maxProfiles') ?? 5) || 5)),
     account_expires_at: dateInputToIso(formData.get('accountExpires')),
     supplier: String(formData.get('supplier') ?? '').trim() || null,
     notes: String(formData.get('notes') ?? '').trim() || null,
@@ -105,6 +103,8 @@ export async function createLinkAction(formData: FormData) {
     customerName: String(formData.get('customerName') ?? '').trim() || null,
     customerEmail: email || null,
     warrantyUntil: until,
+    profileName: String(formData.get('profileName') ?? '').trim() || null,
+    profilePin: String(formData.get('profilePin') ?? '').trim() || null,
   });
   redirect(`${panelBase()}/admin/a/${accountId}?new=${link.token}`);
 }
@@ -132,4 +132,17 @@ export async function recheckEmailAction(formData: FormData) {
   guard();
   await recheckEmail(String(formData.get('emailId') ?? ''));
   redirect(`${panelBase()}/admin/inbox?ok=rechecked`);
+}
+
+export async function updateLinkProfileAction(formData: FormData) {
+  guard();
+  const id = String(formData.get('linkId') ?? '');
+  const accountId = String(formData.get('accountId') ?? '');
+  await updateLink(id, {
+    profile_name: String(formData.get('profileName') ?? '').trim() || null,
+    profile_pin: String(formData.get('profilePin') ?? '').trim() || null,
+    customer_name: String(formData.get('customerName') ?? '').trim() || null,
+    customer_email: String(formData.get('customerEmail') ?? '').trim() || null,
+  } as any);
+  redirect(`${panelBase()}/admin/a/${accountId}?ok=profile`);
 }

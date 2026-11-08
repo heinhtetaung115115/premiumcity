@@ -66,7 +66,9 @@ export default async function PanelAdminHome({ searchParams }: { searchParams?: 
                 </p>
               </div>
               <div className="text-right text-[11px]">
-                <p className="text-slate-300">👥 {live[a.id] ?? 0} live link{(live[a.id] ?? 0) === 1 ? '' : 's'}</p>
+                <p className={(live[a.id] ?? 0) >= (a.max_profiles ?? 5) ? 'font-semibold text-amber-300' : 'text-slate-300'}>
+                  👥 {live[a.id] ?? 0}/{a.max_profiles ?? 5} profiles
+                </p>
                 <p className={exp != null && exp <= 3 ? 'font-semibold text-amber-300' : 'text-slate-500'}>
                   {a.account_expires_at ? `Account ends ${fmt(a.account_expires_at)}` : 'No end date'}
                 </p>
@@ -102,12 +104,8 @@ export default async function PanelAdminHome({ searchParams }: { searchParams?: 
             <input name="accountExpires" type="date" className={inputCls} />
           </label>
           <label>
-            <span className={labelCls}>Profile (optional)</span>
-            <input name="profile" className={inputCls} />
-          </label>
-          <label>
-            <span className={labelCls}>PIN (optional)</span>
-            <input name="pin" className={inputCls} />
+            <span className={labelCls}>Profiles on this account</span>
+            <input name="maxProfiles" type="number" min={1} max={20} defaultValue={5} className={inputCls} />
           </label>
           <label>
             <span className={labelCls}>Supplier (optional)</span>

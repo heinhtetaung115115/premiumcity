@@ -847,7 +847,9 @@ export async function extendSubscription(
  * total = monthly GB × months in the plan, usage counted across all its keys,
  * and the live key's limit raised to what is left. Nothing resets after this.
  */
-export async function convertToWholePlan(sub: VpnSubscription): Promise<{ ok: boolean; changed: boolean; error?: string }> {
+export async function convertToWholePlan(
+  sub: VpnSubscription
+): Promise<{ ok: boolean; changed: boolean; renewedKey?: boolean; error?: string }> {
   if (isWholePlanData(sub)) return { ok: true, changed: false };
   const supabase = getServiceSupabaseClient();
 
@@ -868,13 +870,17 @@ export async function convertToWholePlan(sub: VpnSubscription): Promise<{ ok: bo
   const prior = keys.filter((k) => !k.is_current).reduce((a, k) => a + num(k.used_bytes), 0);
 
   // Raise the live key's limit first; only save once the server accepted it.
+  // If the key no longer exists on the server, save anyway and issue a fresh key.
+  let keyMissing = false;
   if (current?.outline_key_id && newLimit > 0 && !isExpired(sub)) {
     const server = await getServer(current.vpn_server_id);
     if (!server) return { ok: false, changed: false, error: 'Key server not found.' };
     try {
       await outlineSetLimit(server.api_url, String(current.outline_key_id), Math.max(0, newLimit - prior));
     } catch (e: any) {
-      return { ok: false, changed: false, error: `${server.name || 'Server'}: ${e?.message ?? e}` };
+      const msg = String(e?.message ?? e);
+      if (/\b404\b|NotFound/i.test(msg)) keyMissing = true;
+      else return { ok: false, changed: false, error: `${server.name || 'Server'}: ${msg}` };
     }
   }
 
@@ -889,24 +895,34 @@ export async function convertToWholePlan(sub: VpnSubscription): Promise<{ ok: bo
     .eq('id', sub.id);
   if (error) return { ok: false, changed: false, error: error.message };
   if (current) await supabase.from('vpn_keys').update({ data_limit_bytes: newLimit }).eq('id', current.id);
+
+  if (keyMissing) {
+    // Same server, new key with the remaining data; ssconf/Hiddify links follow it.
+    const res = await rotateKey(sub.id, { reason: 'admin', targetServerId: current?.vpn_server_id ?? null });
+    if (!res.ok) {
+      return { ok: false, changed: true, error: `Switched to total, but the key was missing and a new one failed: ${res.error}` };
+    }
+    return { ok: true, changed: true, renewedKey: true };
+  }
   return { ok: true, changed: true };
 }
 
 /** Convert every active old-style plan (admin button + daily cron). */
-export async function convertAllToWholePlan(budgetMs = 50_000): Promise<{ converted: number; failed: number; remaining: number; errors: string[] }> {
+export async function convertAllToWholePlan(budgetMs = 50_000): Promise<{ converted: number; failed: number; remaining: number; renewed: number; errors: string[] }> {
   const started = Date.now();
   const supabase = getServiceSupabaseClient();
   const { data } = await supabase.from('vpn_subscriptions').select(SUB_COLS).eq('status', 'active').limit(5000);
   const todo = ((data ?? []) as VpnSubscription[]).filter((s) => !isWholePlanData(s));
-  const out = { converted: 0, failed: 0, remaining: 0, errors: [] as string[] };
+  const out = { converted: 0, failed: 0, remaining: 0, renewed: 0, errors: [] as string[] };
   for (const sub of todo) {
     if (Date.now() - started > budgetMs) {
       out.remaining++;
       continue;
     }
     const r = await convertToWholePlan(sub);
-    if (r.ok && r.changed) out.converted++;
-    else if (!r.ok) {
+    if (r.changed) out.converted++;
+    if (r.renewedKey) out.renewed++;
+    if (!r.ok) {
       out.failed++;
       if (out.errors.length < 5) out.errors.push(`${sub.code}: ${r.error}`);
     }

@@ -215,6 +215,7 @@ export async function convertOldPlansAction(): Promise<Result> {
     const r = await convertAllToWholePlan();
     revalidatePath('/admin/vpn');
     const parts = [`Switched ${r.converted} plan${r.converted === 1 ? '' : 's'}.`];
+    if (r.renewed) parts.push(`${r.renewed} had a missing key on the server and got a fresh key (ssconf/Hiddify links update by themselves).`);
     if (r.failed) parts.push(`Failed ${r.failed}: ${r.errors.join(' | ')}`);
     if (r.remaining) parts.push(`${r.remaining} left — press again.`);
     return { ok: r.failed === 0, message: parts.join(' '), error: parts.join(' ') };

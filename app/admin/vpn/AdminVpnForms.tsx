@@ -214,18 +214,60 @@ export function CreateManualKeyForm({
   servers: { id: string; label: string; country: string }[];
 }) {
   const { busy, res, run } = useAction(action);
+  const [dataGb, setDataGb] = useState('100');
+  const [length, setLength] = useState('1');
+  const [unit, setUnit] = useState<'months' | 'days'>('months');
+
+  const n = Math.max(0, Math.floor(Number(length) || 0));
+  const days = unit === 'days' ? n : n * 30;
+  const gb = Number(dataGb) || 0;
+  const ends = days > 0 ? fmtDay(new Date(Date.now() + days * 86_400_000)) : '—';
+
   return (
     <form action={run} className="space-y-2">
       <input name="note" placeholder="Customer (e.g. Ko Aung · Viber 09xxxx)" className={input} required />
       <div className="grid gap-2 sm:grid-cols-4">
         <label className="block">
-          <span className="text-[10px] uppercase tracking-wide text-slate-500">Data per month (GB, 0 = unlimited)</span>
-          <input name="dataGb" type="number" min={0} step="1" defaultValue={100} className={input} />
+          <span className="text-[10px] uppercase tracking-wide text-slate-500">Total data (GB, 0 = unlimited)</span>
+          <input
+            name="dataGb"
+            type="number"
+            min={0}
+            step="1"
+            value={dataGb}
+            onChange={(e) => setDataGb(e.target.value)}
+            className={input}
+          />
         </label>
-        <label className="block">
-          <span className="text-[10px] uppercase tracking-wide text-slate-500">Months</span>
-          <input name="months" type="number" min={1} max={24} defaultValue={1} className={input} />
-        </label>
+        <div className="block">
+          <span className="text-[10px] uppercase tracking-wide text-slate-500">Length</span>
+          <div className="flex gap-1.5">
+            <input
+              name="length"
+              type="number"
+              min={1}
+              max={unit === 'days' ? 730 : 24}
+              value={length}
+              onChange={(e) => setLength(e.target.value)}
+              className={`${input} w-16`}
+            />
+            <div className="flex overflow-hidden rounded-lg border border-slate-700">
+              {(['days', 'months'] as const).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => setUnit(u)}
+                  className={`px-2.5 text-xs font-semibold ${
+                    unit === u ? 'bg-emerald-500 text-slate-950' : 'bg-slate-950 text-slate-300 hover:text-white'
+                  }`}
+                >
+                  {u === 'days' ? 'Days' : 'Months'}
+                </button>
+              ))}
+            </div>
+            <input type="hidden" name="unit" value={unit} />
+          </div>
+        </div>
         <label className="block sm:col-span-2">
           <span className="text-[10px] uppercase tracking-wide text-slate-500">Server</span>
           <select name="serverId" className={input} defaultValue="">
@@ -238,7 +280,15 @@ export function CreateManualKeyForm({
           </select>
         </label>
       </div>
-      <input name="planName" placeholder="Plan name (optional, e.g. Japan 100GB)" className={input} />
+      <p className="text-[11px] text-slate-400">
+        Customer gets{' '}
+        <b className="text-slate-200">{gb > 0 ? `${gb} GB in total` : 'unlimited data'}</b> for{' '}
+        <b className="text-slate-200">
+          {n} {unit === 'days' ? (n === 1 ? 'day' : 'days') : n === 1 ? 'month' : 'months'}
+        </b>{' '}
+        · ends <b className="text-slate-200">{ends}</b> · no monthly reset
+      </p>
+      <input name="planName" placeholder="Plan name (optional, e.g. Japan 600GB)" className={input} />
       <button
         disabled={busy}
         className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
@@ -265,68 +315,120 @@ export function CreateManualKeyForm({
   );
 }
 
+function fmtDay(d: Date) {
+  const y = new Date(d.getTime() + 6.5 * 3600_000); // Myanmar time
+  const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][y.getUTCMonth()];
+  return `${y.getUTCDate()} ${m} ${y.getUTCFullYear()}`;
+}
+
+function yangonDateValue(iso: string) {
+  return new Date(new Date(iso).getTime() + 6.5 * 3600_000).toISOString().slice(0, 10);
+}
+
 // ── Per-plan actions ───────────────────────────────────
 
 export function SubscriptionActions({
   subscriptionId,
   active,
+  expiresAt,
   servers,
   replaceAction,
   extendAction,
+  setExpiryAction,
   revokeAction,
 }: {
   subscriptionId: string;
   active: boolean;
+  expiresAt: string;
   servers: { id: string; label: string }[];
   replaceAction: (fd: FormData) => Promise<Result>;
   extendAction: (fd: FormData) => Promise<Result>;
+  setExpiryAction: (fd: FormData) => Promise<Result>;
   revokeAction: (fd: FormData) => Promise<Result>;
 }) {
   const rep = useAction(replaceAction);
   const ext = useAction(extendAction);
+  const setDate = useAction(setExpiryAction);
   const rev = useAction(revokeAction);
   const [sureRevoke, setSureRevoke] = useState(false);
+  const chip =
+    'rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:border-emerald-400 disabled:opacity-50';
+  const busy = ext.busy || setDate.busy;
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2">
-      {active && (
-        <form action={rep.run} className="flex items-center gap-1">
-          <input type="hidden" name="subscriptionId" value={subscriptionId} />
-          <select name="targetServerId" className="rounded border border-slate-700 bg-slate-950 px-1.5 py-1 text-[11px] text-slate-200" defaultValue="">
-            <option value="">Same server</option>
-            {servers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-          <button disabled={rep.busy} className="rounded border border-amber-500/40 px-2 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/10">
-            {rep.busy ? '…' : 'New key'}
-          </button>
-        </form>
-      )}
-      <form action={ext.run} className="flex items-center gap-1">
-        <input type="hidden" name="subscriptionId" value={subscriptionId} />
-        <input name="days" type="number" min={1} defaultValue={30} className="w-14 rounded border border-slate-700 bg-slate-950 px-1.5 py-1 text-[11px] text-slate-200" />
-        <button disabled={ext.busy} className="rounded border border-emerald-500/40 px-2 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/10">
-          {ext.busy ? '…' : '+ days'}
-        </button>
-      </form>
-      {active && (
-        <form action={rev.run}>
-          <input type="hidden" name="subscriptionId" value={subscriptionId} />
-          {!sureRevoke ? (
-            <button type="button" onClick={() => setSureRevoke(true)} className="rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-400 hover:border-rose-400 hover:text-rose-300">
-              Revoke
+    <div className="mt-2 space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {active && (
+          <form action={rep.run} className="flex items-center gap-1">
+            <input type="hidden" name="subscriptionId" value={subscriptionId} />
+            <select name="targetServerId" className="rounded border border-slate-700 bg-slate-950 px-1.5 py-1 text-[11px] text-slate-200" defaultValue="">
+              <option value="">Same server</option>
+              {servers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <button disabled={rep.busy} className="rounded border border-amber-500/40 px-2 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/10">
+              {rep.busy ? '…' : 'New key'}
             </button>
-          ) : (
-            <button disabled={rev.busy} className="rounded bg-rose-500 px-2 py-1 text-[11px] font-bold text-white">
-              {rev.busy ? '…' : 'Confirm revoke'}
-            </button>
-          )}
-        </form>
-      )}
-      <ResultLine res={rep.res || ext.res || rev.res} />
+          </form>
+        )}
+
+        <details className="group">
+          <summary className="cursor-pointer list-none rounded border border-emerald-500/40 px-2 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/10">
+            📅 {active ? 'Change expiry' : 'Renew'} ▾
+          </summary>
+          <div className="mt-2 w-[min(340px,85vw)] space-y-2 rounded-xl border border-slate-700 bg-slate-950 p-3">
+            <p className="text-[11px] text-slate-400">
+              {active ? 'Add or remove days from the current end date' : 'Add days from today (gets a fresh key)'}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {(active ? [-3, -1, 1, 3, 7, 15, 30] : [1, 3, 7, 15, 30]).map((d) => (
+                <form key={d} action={ext.run}>
+                  <input type="hidden" name="subscriptionId" value={subscriptionId} />
+                  <input type="hidden" name="days" value={d} />
+                  <button
+                    disabled={busy}
+                    className={`${chip} ${d < 0 ? 'text-rose-300 hover:border-rose-400' : ''}`}
+                  >
+                    {d > 0 ? `+${d}d` : `${d}d`}
+                  </button>
+                </form>
+              ))}
+            </div>
+            <form action={setDate.run} className="flex items-center gap-2">
+              <input type="hidden" name="subscriptionId" value={subscriptionId} />
+              <input
+                name="date"
+                type="date"
+                defaultValue={yangonDateValue(expiresAt)}
+                className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100"
+              />
+              <button disabled={busy} className="rounded-lg bg-emerald-500 px-3 py-1 text-[11px] font-bold text-slate-950 hover:bg-emerald-400">
+                Set end date
+              </button>
+            </form>
+            <p className="text-[10px] text-slate-500">Ends at 11:59 PM Myanmar time on the chosen day. Data total stays the same.</p>
+          </div>
+        </details>
+
+        {active && (
+          <form action={rev.run}>
+            <input type="hidden" name="subscriptionId" value={subscriptionId} />
+            {!sureRevoke ? (
+              <button type="button" onClick={() => setSureRevoke(true)} className="rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-400 hover:border-rose-400 hover:text-rose-300">
+                Revoke
+              </button>
+            ) : (
+              <button disabled={rev.busy} className="rounded bg-rose-500 px-2 py-1 text-[11px] font-bold text-white">
+                {rev.busy ? '…' : 'Confirm revoke'}
+              </button>
+            )}
+          </form>
+        )}
+      </div>
+      <ResultLine res={rep.res || ext.res || setDate.res || rev.res} />
     </div>
   );
 }

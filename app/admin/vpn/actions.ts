@@ -11,6 +11,7 @@ import {
   moveAllCustomers,
   revokeSubscription,
   rotateKey,
+  setSubscriptionExpiry,
   setVpnCountryStock,
   statusPageUrl,
 } from '@/lib/vpn';
@@ -94,12 +95,19 @@ export async function createManualKeyAction(formData: FormData): Promise<Result>
   const country = String(formData.get('country') ?? '').trim().toUpperCase() || null;
   const serverId = String(formData.get('serverId') ?? '').trim() || null;
   const dataGb = Number(formData.get('dataGb') ?? 0);
-  const months = Number(formData.get('months') ?? 1);
+  const length = Number(formData.get('length') ?? 1);
+  const unit = String(formData.get('unit') ?? 'months') === 'days' ? 'days' : 'months';
   const planName = String(formData.get('planName') ?? '').trim();
 
   if (!note) return { ok: false, error: 'Add a customer note (name / Viber / Telegram).' };
-  if (!Number.isFinite(months) || months < 1 || months > 24) return { ok: false, error: 'Months must be 1–24.' };
+  if (!Number.isFinite(length) || length < 1 || !Number.isInteger(length)) {
+    return { ok: false, error: `Enter a whole number of ${unit}.` };
+  }
+  const durationDays = unit === 'days' ? length : length * 30;
+  if (durationDays > 730) return { ok: false, error: 'Maximum is 730 days (24 months).' };
   if (!Number.isFinite(dataGb) || dataGb < 0) return { ok: false, error: 'Data must be 0 (unlimited) or more.' };
+
+  const lengthLabel = `${length} ${unit === 'days' ? 'day' : 'month'}${length > 1 ? 's' : ''}`;
 
   try {
     const sub = await createSubscription({
@@ -107,9 +115,10 @@ export async function createManualKeyAction(formData: FormData): Promise<Result>
       customerNote: note,
       country,
       serverId,
-      planName: planName || `${dataGb > 0 ? `${dataGb}GB` : 'Unlimited'} · ${months} month${months > 1 ? 's' : ''}`,
+      planName: planName || `${dataGb > 0 ? `${dataGb}GB` : 'Unlimited'} · ${lengthLabel}`,
       dataLimitBytes: Math.round(dataGb * GB),
-      durationDays: Math.round(months * 30),
+      durationDays,
+      wholePlanData: true, // e.g. 600GB for the whole 3 months, no monthly reset
     });
     revalidatePath('/admin/vpn');
     return { ok: true, link: statusPageUrl(sub.code), key: dynamicKeyFor(sub.code) };
@@ -127,16 +136,47 @@ export async function adminReplaceKeyAction(formData: FormData): Promise<Result>
   return res.ok ? { ok: true, message: `New key on ${res.serverName ?? 'server'}.` } : { ok: false, error: res.error };
 }
 
+function fmtYangonDate(iso: string) {
+  const d = new Date(new Date(iso).getTime() + 6.5 * 3600_000);
+  const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()];
+  return `${d.getUTCDate()} ${m} ${d.getUTCFullYear()}`;
+}
+
+/** +days / -days. Adding to an ended plan counts from today; removing counts from the current end date. */
 export async function extendAction(formData: FormData): Promise<Result> {
   await requireAdmin();
   const id = String(formData.get('subscriptionId') ?? '');
   const days = Number(formData.get('days') ?? 0);
-  if (!id || !Number.isFinite(days) || days <= 0 || days > 730) {
-    return { ok: false, error: 'Enter days (e.g. 30).' };
+  if (!id || !Number.isFinite(days) || days === 0 || Math.abs(days) > 730) {
+    return { ok: false, error: 'Enter days (e.g. 30 or -1).' };
   }
-  const res = await extendSubscription(id, days);
+  let res;
+  if (days > 0) {
+    res = await extendSubscription(id, days);
+  } else {
+    const supabase = getServiceSupabaseClient();
+    const { data } = await supabase.from('vpn_subscriptions').select('expires_at').eq('id', id).maybeSingle();
+    if (!data) return { ok: false, error: 'Plan not found.' };
+    const next = new Date(new Date((data as any).expires_at).getTime() + days * 86_400_000).toISOString();
+    res = await setSubscriptionExpiry(id, next);
+  }
   revalidatePath('/admin/vpn');
-  return res.ok ? { ok: true, message: `Extended ${days} days.` } : { ok: false, error: res.error };
+  return res.ok
+    ? { ok: true, message: `${days > 0 ? 'Added' : 'Removed'} ${Math.abs(days)} day${Math.abs(days) > 1 ? 's' : ''} · now ends ${fmtYangonDate(res.expiresAt!)}.` }
+    : { ok: false, error: res.error };
+}
+
+/** Set an exact end date (end of that day, Myanmar time). Can also shorten. */
+export async function setExpiryDateAction(formData: FormData): Promise<Result> {
+  await requireAdmin();
+  const id = String(formData.get('subscriptionId') ?? '');
+  const date = String(formData.get('date') ?? '').trim();
+  if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: 'Pick a date.' };
+  // 23:59 Yangon (UTC+06:30) = 17:29 UTC the same day
+  const iso = new Date(`${date}T17:29:00.000Z`).toISOString();
+  const res = await setSubscriptionExpiry(id, iso);
+  revalidatePath('/admin/vpn');
+  return res.ok ? { ok: true, message: `Now ends ${fmtYangonDate(res.expiresAt!)}.` } : { ok: false, error: res.error };
 }
 
 export async function revokeAction(formData: FormData): Promise<Result> {

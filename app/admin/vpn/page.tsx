@@ -1,13 +1,14 @@
 import Link from 'next/link';
 import { requireAdmin } from '@/lib/session';
 import { getServiceSupabaseClient } from '@/lib/supabase';
-import { dynamicKeyFor, getVpnStock, isExpired, listServers, statusPageUrl, subscriptionLinkFor } from '@/lib/vpn';
+import { dynamicKeyFor, getVpnStock, isExpired, isWholePlanData, listServers, statusPageUrl, subscriptionLinkFor } from '@/lib/vpn';
 import { VpnStockPanel } from './VpnStockPanel';
 import {
   addServerAction,
   adminReplaceKeyAction,
   createManualKeyAction,
   extendAction,
+  setExpiryDateAction,
   moveAllAction,
   revokeAction,
   setVpnStockAction,
@@ -70,7 +71,7 @@ export default async function AdminVpnPage({ searchParams }: PageProps) {
   // Plans list
   let subQuery = supabase
     .from('vpn_subscriptions')
-    .select('id,code,user_id,source,customer_note,plan_name,country,data_limit_bytes,period_used_prior_bytes,starts_at,expires_at,status,created_at')
+    .select('id,code,user_id,source,customer_note,plan_name,country,data_limit_bytes,period_used_prior_bytes,period_days,period_started_at,starts_at,expires_at,status,created_at')
     .order('created_at', { ascending: false })
     .limit(150);
   if (q) {
@@ -271,7 +272,7 @@ export default async function AdminVpnPage({ searchParams }: PageProps) {
                       {active ? `${daysLeft}d left` : s.status} · ends {fmtDate(s.expires_at)}
                     </p>
                     <p className="text-slate-400">
-                      {fmtGb(used)} / {limit > 0 ? fmtGb(limit) : '∞'} this month
+                      {fmtGb(used)} / {limit > 0 ? fmtGb(limit) : '∞'} {isWholePlanData(s) ? 'total' : 'this month'}
                     </p>
                   </div>
                 </div>
@@ -288,7 +289,9 @@ export default async function AdminVpnPage({ searchParams }: PageProps) {
                   active={active}
                   servers={activeServers.map((x) => ({ id: x.id, label: serverLabel(x) }))}
                   replaceAction={adminReplaceKeyAction}
+                  expiresAt={s.expires_at}
                   extendAction={extendAction}
+                  setExpiryAction={setExpiryDateAction}
                   revokeAction={revokeAction}
                 />
               </div>

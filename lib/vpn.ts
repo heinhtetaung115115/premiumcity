@@ -145,6 +145,11 @@ export function isExpired(sub: Pick<VpnSubscription, 'expires_at' | 'status'>): 
   return sub.status !== 'active' || new Date(sub.expires_at).getTime() <= Date.now();
 }
 
+/** True when the data allowance covers the whole plan (no monthly reset). */
+export function isWholePlanData(sub: Pick<VpnSubscription, 'period_started_at' | 'period_days' | 'expires_at'>): boolean {
+  return periodEnd(sub).getTime() >= new Date(sub.expires_at).getTime() - DAY_MS;
+}
+
 /** Data used in the current 30-day period. */
 export function periodUsedBytes(sub: VpnSubscription, key: VpnKeyRow | null): number {
   return num(sub.period_used_prior_bytes) + num(key?.used_bytes);
@@ -244,9 +249,11 @@ export type CreateSubscriptionInput = {
   planName?: string | null;
   country?: string | null;
   vpnPlanId?: string | null;
-  dataLimitBytes: number; // per 30-day period; <= 0 = unlimited
+  dataLimitBytes: number; // per 30-day period (or whole plan, see below); <= 0 = unlimited
   durationDays: number;
   serverId?: string | null;
+  /** true = dataLimitBytes is the total for the whole plan (no monthly reset). */
+  wholePlanData?: boolean;
 };
 
 export async function createSubscription(input: CreateSubscriptionInput): Promise<VpnSubscription> {
@@ -283,7 +290,8 @@ export async function createSubscription(input: CreateSubscriptionInput): Promis
       country,
       vpn_plan_id: input.vpnPlanId ?? null,
       data_limit_bytes: limit,
-      period_days: 30,
+      // Whole-plan data: one period that lasts until expiry, so nothing resets.
+      period_days: input.wholePlanData ? days : 30,
       starts_at: now.toISOString(),
       expires_at: expiresAt,
       period_started_at: now.toISOString(),
@@ -825,23 +833,55 @@ export async function revokeSubscription(subscriptionId: string): Promise<void> 
 export async function extendSubscription(
   subscriptionId: string,
   days: number
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; expiresAt?: string }> {
+  const sub = await getSubscriptionById(subscriptionId);
+  if (!sub) return { ok: false, error: 'Plan not found.' };
+  // Add to the current end date, or from today if it has already ended.
+  const base = Math.max(new Date(sub.expires_at).getTime(), Date.now());
+  return setSubscriptionExpiry(subscriptionId, new Date(base + Math.round(days) * DAY_MS).toISOString());
+}
+
+/**
+ * Move a plan's end date (later or earlier). Whole-plan data plans keep one
+ * period that ends with the plan, so the total data never resets. An ended
+ * plan that gets a future date is switched back on with a fresh key.
+ */
+export async function setSubscriptionExpiry(
+  subscriptionId: string,
+  newExpiryIso: string
+): Promise<{ ok: boolean; error?: string; expiresAt?: string }> {
   const supabase = getServiceSupabaseClient();
   const sub = await getSubscriptionById(subscriptionId);
   if (!sub) return { ok: false, error: 'Plan not found.' };
+  if (sub.status === 'revoked') return { ok: false, error: 'This plan was revoked — create a new key instead.' };
+
+  const newExp = new Date(newExpiryIso);
+  if (Number.isNaN(newExp.getTime())) return { ok: false, error: 'Invalid date.' };
+
   const now = Date.now();
+  const wholePlan = isWholePlanData(sub);
   const wasExpired = isExpired(sub);
-  const base = Math.max(new Date(sub.expires_at).getTime(), now);
-  const newExpiry = new Date(base + Math.round(days) * DAY_MS).toISOString();
+  const reactivate = wasExpired && newExp.getTime() > now;
 
-  await supabase.from('vpn_subscriptions').update({ expires_at: newExpiry }).eq('id', sub.id);
-  await supabase.from('vpn_keys').update({ expires_at: newExpiry }).eq('subscription_id', sub.id).eq('is_current', true);
+  const patch: Record<string, unknown> = { expires_at: newExp.toISOString() };
+  if (wholePlan) {
+    const from = reactivate ? now : new Date(sub.period_started_at).getTime();
+    patch.period_days = Math.max(1, Math.ceil((newExp.getTime() - from) / DAY_MS));
+  }
 
-  if (wasExpired && sub.status !== 'revoked') {
-    const res = await rotateKey(sub.id, { reason: 'reactivate', newPeriodStart: new Date().toISOString() });
+  const { error } = await supabase.from('vpn_subscriptions').update(patch).eq('id', sub.id);
+  if (error) return { ok: false, error: error.message };
+  await supabase
+    .from('vpn_keys')
+    .update({ expires_at: newExp.toISOString() })
+    .eq('subscription_id', sub.id)
+    .eq('is_current', true);
+
+  if (reactivate) {
+    const res = await rotateKey(sub.id, { reason: 'reactivate', newPeriodStart: new Date(now).toISOString() });
     if (!res.ok) return { ok: false, error: res.error };
   }
-  return { ok: true };
+  return { ok: true, expiresAt: newExp.toISOString() };
 }
 
 // ─── Daily maintenance (cron) ───────────────────────────

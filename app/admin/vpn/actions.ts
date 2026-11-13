@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/session';
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import { outlinePing } from '@/lib/outline';
 import {
+  convertAllToWholePlan,
   createSubscription,
   dynamicKeyFor,
   extendSubscription,
@@ -206,4 +207,18 @@ export async function setVpnStockAction(formData: FormData): Promise<Result> {
   revalidatePath('/product/outline-vpn');
   revalidatePath('/');
   return { ok: true };
+}
+
+export async function convertOldPlansAction(): Promise<Result> {
+  await requireAdmin();
+  try {
+    const r = await convertAllToWholePlan();
+    revalidatePath('/admin/vpn');
+    const parts = [`Switched ${r.converted} plan${r.converted === 1 ? '' : 's'}.`];
+    if (r.failed) parts.push(`Failed ${r.failed}: ${r.errors.join(' | ')}`);
+    if (r.remaining) parts.push(`${r.remaining} left — press again.`);
+    return { ok: r.failed === 0, message: parts.join(' '), error: parts.join(' ') };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'Failed.' };
+  }
 }

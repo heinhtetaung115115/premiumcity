@@ -325,6 +325,37 @@ function yangonDateValue(iso: string) {
   return new Date(new Date(iso).getTime() + 6.5 * 3600_000).toISOString().slice(0, 10);
 }
 
+// ── Switch old per-month plans to one total ───────────
+
+export function ConvertOldPlansButton({
+  count,
+  action,
+}: {
+  count: number;
+  action: (fd: FormData) => Promise<Result>;
+}) {
+  const { busy, res, run } = useAction(action);
+  if (count === 0 && !res) return null;
+  return (
+    <form action={run} className="mb-3 rounded-xl border border-sky-500/30 bg-sky-500/[0.06] p-3">
+      <p className="text-xs font-semibold text-sky-200">
+        {count} active plan{count === 1 ? '' : 's'} still use{count === 1 ? 's' : ''} the old &quot;GB per month&quot; reset
+      </p>
+      <p className="mt-0.5 text-[11px] text-slate-400">
+        Switch them to one total for the whole plan (e.g. 200GB × 3 months = 600GB). Data already used is kept, and the
+        live key gets the extra data right away. The daily check also does this automatically.
+      </p>
+      <button
+        disabled={busy}
+        className="mt-2 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-sky-400 disabled:opacity-60"
+      >
+        {busy ? 'Switching… (keep page open)' : 'Switch all now'}
+      </button>
+      <ResultLine res={res} />
+    </form>
+  );
+}
+
 // ── Per-plan actions ───────────────────────────────────
 
 export function SubscriptionActions({

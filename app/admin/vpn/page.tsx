@@ -9,6 +9,7 @@ import {
   createManualKeyAction,
   extendAction,
   setExpiryDateAction,
+  convertOldPlansAction,
   moveAllAction,
   revokeAction,
   setVpnStockAction,
@@ -16,6 +17,7 @@ import {
 } from './actions';
 import {
   AddServerForm,
+  ConvertOldPlansButton,
   CopyButton,
   CreateManualKeyForm,
   ServerControls,
@@ -43,6 +45,16 @@ function fmtDate(iso: string | null) {
 export default async function AdminVpnPage({ searchParams }: PageProps) {
   await requireAdmin();
   const supabase = getServiceSupabaseClient();
+
+  // Active plans still on the old "GB per month" reset (shown as a one-click switch).
+  const { data: oldRows } = await supabase
+    .from('vpn_subscriptions')
+    .select('expires_at,period_days,period_started_at')
+    .eq('status', 'active')
+    .limit(5000);
+  const oldPlanCount = ((oldRows ?? []) as any[]).filter(
+    (r) => new Date(r.expires_at).getTime() > Date.now() && !isWholePlanData(r)
+  ).length;
   const q = (searchParams?.q ?? '').trim();
   const tab = searchParams?.tab === 'expired' ? 'expired' : 'active';
 
@@ -216,6 +228,7 @@ export default async function AdminVpnPage({ searchParams }: PageProps) {
 
       {/* Plans */}
       <section className="space-y-3">
+        <ConvertOldPlansButton count={oldPlanCount} action={convertOldPlansAction} />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex gap-1 text-sm">
             <Link

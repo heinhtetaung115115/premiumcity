@@ -19,6 +19,7 @@ import {
   outlineDeleteKey,
   outlineGetTransfer,
   outlinePing,
+  outlineSetLimit,
   parseSsUri,
   type SsConfig,
 } from './outline';
@@ -252,7 +253,7 @@ export type CreateSubscriptionInput = {
   dataLimitBytes: number; // per 30-day period (or whole plan, see below); <= 0 = unlimited
   durationDays: number;
   serverId?: string | null;
-  /** true = dataLimitBytes is the total for the whole plan (no monthly reset). */
+  /** Default true: dataLimitBytes is the total for the whole plan (no monthly reset). */
   wholePlanData?: boolean;
 };
 
@@ -291,7 +292,7 @@ export async function createSubscription(input: CreateSubscriptionInput): Promis
       vpn_plan_id: input.vpnPlanId ?? null,
       data_limit_bytes: limit,
       // Whole-plan data: one period that lasts until expiry, so nothing resets.
-      period_days: input.wholePlanData ? days : 30,
+      period_days: input.wholePlanData === false ? 30 : days,
       starts_at: now.toISOString(),
       expires_at: expiresAt,
       period_started_at: now.toISOString(),
@@ -842,6 +843,78 @@ export async function extendSubscription(
 }
 
 /**
+ * Switch an old "X GB per 30 days" plan to one total for the whole plan:
+ * total = monthly GB × months in the plan, usage counted across all its keys,
+ * and the live key's limit raised to what is left. Nothing resets after this.
+ */
+export async function convertToWholePlan(sub: VpnSubscription): Promise<{ ok: boolean; changed: boolean; error?: string }> {
+  if (isWholePlanData(sub)) return { ok: true, changed: false };
+  const supabase = getServiceSupabaseClient();
+
+  const start = new Date(sub.starts_at).getTime();
+  const end = new Date(sub.expires_at).getTime();
+  const totalDays = Math.max(1, Math.ceil((end - start) / DAY_MS));
+  const months = Math.max(1, Math.round(totalDays / 30));
+  const monthly = num(sub.data_limit_bytes);
+  const newLimit = monthly > 0 ? monthly * months : 0;
+
+  const { data: keyRows } = await supabase
+    .from('vpn_keys')
+    .select('id,is_current,used_bytes,outline_key_id,vpn_server_id')
+    .eq('subscription_id', sub.id)
+    .limit(500);
+  const keys = (keyRows ?? []) as any[];
+  const current = keys.find((k) => k.is_current) ?? null;
+  const prior = keys.filter((k) => !k.is_current).reduce((a, k) => a + num(k.used_bytes), 0);
+
+  // Raise the live key's limit first; only save once the server accepted it.
+  if (current?.outline_key_id && newLimit > 0 && !isExpired(sub)) {
+    const server = await getServer(current.vpn_server_id);
+    if (!server) return { ok: false, changed: false, error: 'Key server not found.' };
+    try {
+      await outlineSetLimit(server.api_url, String(current.outline_key_id), Math.max(0, newLimit - prior));
+    } catch (e: any) {
+      return { ok: false, changed: false, error: `${server.name || 'Server'}: ${e?.message ?? e}` };
+    }
+  }
+
+  const { error } = await supabase
+    .from('vpn_subscriptions')
+    .update({
+      data_limit_bytes: newLimit,
+      period_days: totalDays,
+      period_started_at: sub.starts_at,
+      period_used_prior_bytes: prior,
+    })
+    .eq('id', sub.id);
+  if (error) return { ok: false, changed: false, error: error.message };
+  if (current) await supabase.from('vpn_keys').update({ data_limit_bytes: newLimit }).eq('id', current.id);
+  return { ok: true, changed: true };
+}
+
+/** Convert every active old-style plan (admin button + daily cron). */
+export async function convertAllToWholePlan(budgetMs = 50_000): Promise<{ converted: number; failed: number; remaining: number; errors: string[] }> {
+  const started = Date.now();
+  const supabase = getServiceSupabaseClient();
+  const { data } = await supabase.from('vpn_subscriptions').select(SUB_COLS).eq('status', 'active').limit(5000);
+  const todo = ((data ?? []) as VpnSubscription[]).filter((s) => !isWholePlanData(s));
+  const out = { converted: 0, failed: 0, remaining: 0, errors: [] as string[] };
+  for (const sub of todo) {
+    if (Date.now() - started > budgetMs) {
+      out.remaining++;
+      continue;
+    }
+    const r = await convertToWholePlan(sub);
+    if (r.ok && r.changed) out.converted++;
+    else if (!r.ok) {
+      out.failed++;
+      if (out.errors.length < 5) out.errors.push(`${sub.code}: ${r.error}`);
+    }
+  }
+  return out;
+}
+
+/**
  * Move a plan's end date (later or earlier). Whole-plan data plans keep one
  * period that ends with the plan, so the total data never resets. An ended
  * plan that gets a future date is switched back on with a fresh key.
@@ -930,7 +1003,13 @@ export async function runDailyMaintenance(budgetMs = 250_000): Promise<Record<st
         continue;
       }
 
-      // New 30-day period inside a multi-month plan: fresh key with full data.
+      // Old per-month plans become one total for the whole plan.
+      if (!isWholePlanData(sub)) {
+        const conv = await convertToWholePlan(sub);
+        if (conv.ok) continue;
+      }
+
+      // (Fallback only if conversion failed) new 30-day period: fresh key with full data.
       const pDays = sub.period_days || 30;
       let pStart = new Date(sub.period_started_at).getTime();
       if (pStart + pDays * DAY_MS <= now) {

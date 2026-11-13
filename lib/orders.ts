@@ -426,8 +426,13 @@ async function provisionVpnKeysForOrder(orderId: string, userId: string) {
         planName: plan.name ?? null,
         country,
         vpnPlanId: plan.id,
-        dataLimitBytes: Number(plan.data_limit_bytes) || 0,
+        // Plan data is per month: give the whole plan's total up front
+        // (e.g. 200GB × 3 months = 600GB), with no monthly reset.
+        dataLimitBytes:
+          (Number(plan.data_limit_bytes) || 0) *
+          Math.max(1, Math.round((Number(plan.duration_days || 0) || 30) / 30)),
         durationDays: Number(plan.duration_days || 0) || 30,
+        wholePlanData: true,
       });
     }
   }

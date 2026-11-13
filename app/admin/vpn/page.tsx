@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { requireAdmin } from '@/lib/session';
 import { getServiceSupabaseClient } from '@/lib/supabase';
-import { dynamicKeyFor, getVpnStock, isExpired, isWholePlanData, listServers, statusPageUrl, subscriptionLinkFor } from '@/lib/vpn';
+import { dynamicKeyFor, fixWholePlanNames, getVpnStock, isExpired, isWholePlanData, listServers, statusPageUrl, subscriptionLinkFor } from '@/lib/vpn';
 import { VpnStockPanel } from './VpnStockPanel';
 import {
   addServerAction,
@@ -45,6 +45,9 @@ function fmtDate(iso: string | null) {
 export default async function AdminVpnPage({ searchParams }: PageProps) {
   await requireAdmin();
   const supabase = getServiceSupabaseClient();
+
+  // Plans already on one total but still named with the monthly GB ("200GB · 6 months").
+  await fixWholePlanNames().catch(() => 0);
 
   // Active plans still on the old "GB per month" reset (shown as a one-click switch).
   const { data: oldRows } = await supabase

@@ -1,7 +1,7 @@
 import { getServiceSupabaseClient } from './supabase';
 import { sendEmail, getAdminRecipients, tplStockDepletedAdmin } from './email';
 import { notifyNewManualOrder } from './telegram';
-import { createSubscription as createVpnSubscription, attachVpnStatus, getVpnStock } from './vpn';
+import { createSubscription as createVpnSubscription, attachVpnStatus, getVpnStock, wholePlanName } from './vpn';
 import { panelServiceForProduct, profileNameFromInput, suggestAccounts, warrantyDaysFromVariant } from './panel/store';
 
 type PurchasePayload = {
@@ -417,20 +417,20 @@ async function provisionVpnKeysForOrder(orderId: string, userId: string) {
     }
 
     const quantity = Math.max(1, Number(item.quantity) || 1);
+    const planMonths = Math.max(1, Math.round((Number(plan.duration_days || 0) || 30) / 30));
+    const planTotalBytes = (Number(plan.data_limit_bytes) || 0) * planMonths;
     for (let i = 0; i < quantity; i++) {
       await createVpnSubscription({
         userId,
         orderId,
         orderItemId: item.id,
         source: 'website',
-        planName: plan.name ?? null,
+        planName: wholePlanName(plan.name ?? null, planTotalBytes, planMonths),
         country,
         vpnPlanId: plan.id,
         // Plan data is per month: give the whole plan's total up front
         // (e.g. 200GB × 3 months = 600GB), with no monthly reset.
-        dataLimitBytes:
-          (Number(plan.data_limit_bytes) || 0) *
-          Math.max(1, Math.round((Number(plan.duration_days || 0) || 30) / 30)),
+        dataLimitBytes: planTotalBytes,
         durationDays: Number(plan.duration_days || 0) || 30,
         wholePlanData: true,
       });

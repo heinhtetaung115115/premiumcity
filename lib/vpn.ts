@@ -146,6 +146,43 @@ export function isExpired(sub: Pick<VpnSubscription, 'expires_at' | 'status'>): 
   return sub.status !== 'active' || new Date(sub.expires_at).getTime() <= Date.now();
 }
 
+/**
+ * "200GB · 6 months" → "1200GB · 6 months" when the plan's data is the
+ * whole-plan total. Only changes the GB figure that equals the monthly amount.
+ */
+export function wholePlanName(name: string | null | undefined, totalBytes: number, months: number): string | null {
+  if (!name) return name ?? null;
+  const totalGb = Math.round(num(totalBytes) / 1_000_000_000);
+  if (totalGb <= 0 || months <= 1) return name;
+  return name.replace(/(\d+(?:\.\d+)?)\s*GB/i, (m, g) => {
+    const gb = Number(g);
+    if (gb === totalGb) return m;
+    return Math.abs(gb * months - totalGb) <= 1 ? `${totalGb}GB` : m;
+  });
+}
+
+/** Fix stored names of whole-plan plans that still show the monthly GB. */
+export async function fixWholePlanNames(): Promise<number> {
+  const supabase = getServiceSupabaseClient();
+  const { data } = await supabase
+    .from('vpn_subscriptions')
+    .select('id,plan_name,data_limit_bytes,period_days,period_started_at,expires_at')
+    .eq('status', 'active')
+    .limit(5000);
+  let fixed = 0;
+  for (const r of (data ?? []) as any[]) {
+    if (!r.plan_name || !isWholePlanData(r)) continue;
+    const months = Math.max(1, Math.round(num(r.period_days) / 30));
+    const next = wholePlanName(r.plan_name, num(r.data_limit_bytes), months);
+    if (next && next !== r.plan_name) {
+      await supabase.from('vpn_subscriptions').update({ plan_name: next }).eq('id', r.id);
+      await supabase.from('vpn_keys').update({ plan_name: next }).eq('subscription_id', r.id);
+      fixed++;
+    }
+  }
+  return fixed;
+}
+
 /** True when the data allowance covers the whole plan (no monthly reset). */
 export function isWholePlanData(sub: Pick<VpnSubscription, 'period_started_at' | 'period_days' | 'expires_at'>): boolean {
   return periodEnd(sub).getTime() >= new Date(sub.expires_at).getTime() - DAY_MS;
@@ -891,10 +928,15 @@ export async function convertToWholePlan(
       period_days: totalDays,
       period_started_at: sub.starts_at,
       period_used_prior_bytes: prior,
+      plan_name: wholePlanName(sub.plan_name, newLimit, months),
     })
     .eq('id', sub.id);
   if (error) return { ok: false, changed: false, error: error.message };
   if (current) await supabase.from('vpn_keys').update({ data_limit_bytes: newLimit }).eq('id', current.id);
+  await supabase
+    .from('vpn_keys')
+    .update({ plan_name: wholePlanName(sub.plan_name, newLimit, months) })
+    .eq('subscription_id', sub.id);
 
   if (keyMissing) {
     // Same server, new key with the remaining data; ssconf/Hiddify links follow it.
@@ -927,6 +969,7 @@ export async function convertAllToWholePlan(budgetMs = 50_000): Promise<{ conver
       if (out.errors.length < 5) out.errors.push(`${sub.code}: ${r.error}`);
     }
   }
+  await fixWholePlanNames().catch(() => 0);
   return out;
 }
 
@@ -979,6 +1022,8 @@ export async function runDailyMaintenance(budgetMs = 250_000): Promise<Record<st
   const started = Date.now();
   const supabase = getServiceSupabaseClient();
   const stats = { serversSynced: 0, serversDown: 0, expired: 0, periodReset: 0, errors: 0 };
+
+  await fixWholePlanNames().catch(() => 0);
 
   const servers = await listServers();
   const deadServers = new Set<string>();

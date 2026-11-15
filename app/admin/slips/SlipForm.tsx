@@ -78,6 +78,26 @@ export default function SlipForm() {
 
   return (
     <form ref={formRef} onSubmit={onSubmit} className="space-y-3">
+      {busy && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/75 px-6 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-xs rounded-2xl border border-slate-700 bg-slate-900 p-6 text-center shadow-2xl">
+            <div className="relative mx-auto mb-4 h-20 w-16 overflow-hidden rounded-lg border-2 border-emerald-400/70 bg-slate-950">
+              <div className="absolute inset-x-2 top-3 h-1 rounded bg-slate-700" />
+              <div className="absolute inset-x-2 top-6 h-1 rounded bg-slate-700" />
+              <div className="absolute inset-x-2 top-9 h-1 w-8 rounded bg-slate-700" />
+              <div className="absolute bottom-2 left-2 h-6 w-6 rounded-sm border border-slate-600 bg-[repeating-linear-gradient(45deg,#334155_0_2px,transparent_2px_4px)]" />
+              <div className="pc-scan absolute inset-x-0 h-0.5 bg-emerald-400 shadow-[0_0_12px_2px_rgba(52,211,153,0.8)]" />
+            </div>
+            <p className="text-sm font-semibold text-slate-100">Reading slip…</p>
+            <p className="mt-1 text-xs text-slate-400">Checking the QR and Transaction No.</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">Slip ကို စစ်ဆေးနေပါသည်</p>
+          </div>
+        </div>
+      )}
       <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-600 bg-slate-950/60 p-4 text-center hover:border-emerald-400">
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element

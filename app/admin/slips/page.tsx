@@ -13,18 +13,23 @@ export default async function AdminSlipsPage({ searchParams }: { searchParams?: 
   const supabase = getServiceSupabaseClient();
   const q = String(searchParams?.q ?? '').trim();
 
-  let query = supabase
-    .from('used_slips')
-    .select('id,transaction_id,tid_digits,amount,sender_name,slip_time,note,read_by,created_at')
-    .order('created_at', { ascending: false })
-    .limit(100);
-  const qDigits = q.replace(/\D/g, '');
-  if (qDigits.length >= 4) query = query.ilike('tid_digits', `%${qDigits}%`);
-  else if (q) query = query.ilike('note', `%${q}%`);
+  // Saved slips are only shown when searching.
+  const { error: tableErr } = await supabase.from('used_slips').select('id').limit(1);
+  const tableMissing = !!tableErr && /does not exist/i.test(tableErr.message);
 
-  const { data, error } = await query;
-  const rows = (data ?? []) as any[];
-  const tableMissing = !!error && /does not exist/i.test(error.message);
+  let rows: any[] = [];
+  if (q && !tableMissing) {
+    let query = supabase
+      .from('used_slips')
+      .select('id,transaction_id,tid_digits,amount,sender_name,slip_time,note,read_by,created_at')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    const qDigits = q.replace(/\D/g, '');
+    if (qDigits.length >= 4) query = query.ilike('tid_digits', `%${qDigits}%`);
+    else query = query.ilike('note', `%${q}%`);
+    const { data } = await query;
+    rows = (data ?? []) as any[];
+  }
 
   return (
     <main className="mx-auto max-w-3xl space-y-5">
@@ -60,8 +65,10 @@ export default async function AdminSlipsPage({ searchParams }: { searchParams?: 
           <button className="rounded-lg border border-slate-700 px-3 text-sm text-slate-200 hover:border-emerald-400">Search</button>
         </form>
 
-        {rows.length === 0 ? (
-          <p className="py-6 text-center text-xs text-slate-500">{q ? 'No saved slip matches that.' : 'No slips saved yet.'}</p>
+        {!q ? (
+          <p className="py-4 text-center text-xs text-slate-500">Search a Transaction No. (or part of it) or a note to check a saved slip.</p>
+        ) : rows.length === 0 ? (
+          <p className="py-6 text-center text-xs text-slate-500">Not saved — no slip matches “{q}”.</p>
         ) : (
           rows.map((r) => (
             <div key={r.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900 p-3">

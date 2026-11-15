@@ -312,6 +312,19 @@ export default async function AdminHomePage() {
           </Card>
         </Link>
 
+        <Link href="/admin/slips">
+          <Card className="h-full cursor-pointer border-[#26344e] bg-[#151e30] p-4 transition hover:border-emerald-400">
+            <div className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/15 text-sky-400">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z" strokeLinejoin="round" />
+                <path d="M9 8h6M9 12h6" strokeLinecap="round" />
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-slate-100">Used slips</p>
+            <p className="mt-1 text-[11px] leading-snug text-slate-500">Block Viber / Telegram KBZ slips</p>
+          </Card>
+        </Link>
+
         <Link href="/admin/vpn">
           <Card className="h-full cursor-pointer border-[#26344e] bg-[#151e30] p-4 transition hover:border-emerald-400">
             <div className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400">

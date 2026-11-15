@@ -69,6 +69,20 @@ export async function POST(req: Request) {
 
   // ── Duplicate check ──
   const checkDuplicate = async (tid: string): Promise<boolean> => {
+    // Slips the admin saved from Viber / Telegram customers (paid directly).
+    const tidDigits = String(tid ?? '').replace(/\D/g, '');
+    if (tidDigits.length >= 6) {
+      const { data: blocked, error: blockedErr } = await supabase
+        .from('used_slips')
+        .select('id')
+        .eq('tid_digits', tidDigits)
+        .limit(1);
+      if (!blockedErr && blocked && (blocked as any[]).length > 0) {
+        console.log(`[duplicate-check] BLOCKED: slip saved by admin (used_slips) tid=${tid}`);
+        return true;
+      }
+    }
+
     // Duplicate transaction IDs only ever come from KBZ auto-verify slips
     // (method='qr'), so scoping to that method keeps this query cheap and
     // correct regardless of how many manual (non-KBZ) topups accumulate.

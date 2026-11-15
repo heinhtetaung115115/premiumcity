@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { requireAdmin } from '@/lib/session';
 import { getServiceSupabaseClient } from '@/lib/supabase';
-import { deleteSlipAction, registerSlipAction } from './actions';
+import { deleteSlipAction } from './actions';
 import SlipForm from './SlipForm';
 
 export const runtime = 'nodejs';
@@ -46,7 +46,7 @@ export default async function AdminSlipsPage({ searchParams }: { searchParams?: 
       )}
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-        <SlipForm action={registerSlipAction} />
+        <SlipForm />
       </section>
 
       <section className="space-y-2">

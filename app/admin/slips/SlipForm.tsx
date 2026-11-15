@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import type { SlipResult } from './actions';
+import { useRouter } from 'next/navigation';
+import type { SlipResult } from '@/lib/usedSlips';
 
 /** Shrink big phone photos so the upload stays small (QR stays readable). */
 async function shrink(file: File): Promise<Blob> {
@@ -27,7 +28,8 @@ async function shrink(file: File): Promise<Blob> {
   }
 }
 
-export default function SlipForm({ action }: { action: (fd: FormData) => Promise<SlipResult> }) {
+export default function SlipForm() {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<SlipResult | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -43,11 +45,26 @@ export default function SlipForm({ action }: { action: (fd: FormData) => Promise
       const f = fileRef.current?.files?.[0];
       fd.delete('slip');
       if (f) fd.append('slip', await shrink(f), 'slip.jpg');
-      const r = await action(fd);
+      const resp = await fetch('/api/admin/slips', { method: 'POST', body: fd });
+      let r: SlipResult;
+      try {
+        r = await resp.json();
+      } catch {
+        r = {
+          ok: false,
+          error:
+            resp.status === 413
+              ? 'Photo is too large — crop the screenshot and try again.'
+              : resp.status === 504
+              ? 'Reading the slip took too long. Type the Transaction No. and save again.'
+              : `Server error (${resp.status}). Try again.`,
+        };
+      }
       setRes(r);
       if (r.ok) {
         formRef.current?.reset();
         setPreview(null);
+        router.refresh();
       }
     } catch (err: any) {
       setRes({ ok: false, error: err?.message ?? 'Failed.' });

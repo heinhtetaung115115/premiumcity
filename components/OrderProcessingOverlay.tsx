@@ -33,7 +33,7 @@ export default function OrderProcessingOverlay({ productName }: { productName?: 
         aria-live="polite"
         className="w-full max-w-sm overflow-hidden rounded-3xl border border-slate-800 bg-[radial-gradient(120%_80%_at_50%_0%,#13233f_0%,#0f172a_55%,#0b1324_100%)] px-5 pb-6 pt-4 text-center shadow-2xl"
       >
-        <CityBot pose="deliver" size={200} className="mx-auto" label="City Bot is bringing your order" />
+        <CityBot pose="cart" size={190} className="mx-auto" label="City Bot is placing your order" />
         {productName && <p className="mt-1 truncate text-[13px] text-slate-400">{productName}</p>}
         <p key={step.mm} className="mt-1 text-[17px] font-semibold text-slate-50">
           {step.mm}

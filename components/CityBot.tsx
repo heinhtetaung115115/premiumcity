@@ -5,10 +5,10 @@ import { useId } from 'react';
 /**
  * City Bot — PremiumCity's mascot.
  * Poses: hello (waves), scan (checks a slip), done (cheers), oops (error),
- *        deliver (flies in carrying an order box).
+ *        deliver (flies in carrying an order box), cart (pushes a shopping cart).
  * Animations live in app/globals.css (classes starting with "cb-").
  */
-export type CityBotPose = 'hello' | 'scan' | 'done' | 'oops' | 'deliver';
+export type CityBotPose = 'hello' | 'scan' | 'done' | 'oops' | 'deliver' | 'cart';
 
 const C = {
   body: ['#a7f3d0', '#34d399', '#047857'],
@@ -29,7 +29,9 @@ export default function CityBot({
   const s = useId().replace(/[^a-zA-Z0-9]/g, '');
   const u = (n: string) => `url(#${n}${s})`;
 
-  const floatCls = pose === 'done' ? 'cb-jump' : pose === 'oops' ? 'cb-float-slow' : pose === 'deliver' ? 'cb-fly' : 'cb-float';
+  const floatCls =
+    pose === 'done' ? 'cb-jump' : pose === 'oops' ? 'cb-float-slow' : pose === 'deliver' ? 'cb-fly' : pose === 'cart' ? 'cb-push' : 'cb-float';
+  const wide = pose === 'cart';
   const headCls = pose === 'oops' ? 'cb-droop' : pose === 'scan' ? 'cb-tilt-small' : 'cb-tilt';
 
   const arm = (side: 'L' | 'R', cls: string, angle: number) => {
@@ -54,6 +56,8 @@ export default function CityBot({
       <>{arm('L', 'cb-cheer', 100)}{arm('R', 'cb-cheer', -100)}</>
     ) : pose === 'deliver' ? (
       <>{arm('L', '', 55)}{arm('R', '', -55)}</>
+    ) : pose === 'cart' ? (
+      <>{arm('L', '', -60)}{arm('R', '', -70)}</>
     ) : (
       <>{arm('L', '', -10)}{arm('R', '', 10)}</>
     );
@@ -66,7 +70,7 @@ export default function CityBot({
   );
 
   const eyes =
-    pose === 'hello' || pose === 'deliver' ? (
+    pose === 'hello' || pose === 'deliver' || pose === 'cart' ? (
       <g className="cb-look">{blinkEye(85)}{blinkEye(115)}</g>
     ) : pose === 'scan' ? (
       <><rect x={76} y={84} width={18} height={6} rx={3} fill="#a5f3fc" />{blinkEye(115)}</>
@@ -83,7 +87,7 @@ export default function CityBot({
     );
 
   const mouth =
-    pose === 'hello' || pose === 'deliver' ? <path d="M92 103 Q100 109 108 103" stroke="#a5f3fc" strokeWidth={3.5} fill="none" strokeLinecap="round" />
+    pose === 'hello' || pose === 'deliver' || pose === 'cart' ? <path d="M92 103 Q100 109 108 103" stroke="#a5f3fc" strokeWidth={3.5} fill="none" strokeLinecap="round" />
     : pose === 'scan' ? <path d="M94 105 L106 105" stroke="#a5f3fc" strokeWidth={3.5} strokeLinecap="round" />
     : pose === 'done' ? <path d="M90 100 Q100 112 110 100 Z" fill="#a5f3fc" />
     : <path d="M92 107 Q100 101 108 107" stroke="#a5f3fc" strokeWidth={3.5} fill="none" strokeLinecap="round" />;
@@ -91,9 +95,9 @@ export default function CityBot({
   return (
     <svg
       className={className}
-      width={size}
+      width={wide ? (size * 300) / 200 : size}
       height={(size * 240) / 200}
-      viewBox="0 0 200 240"
+      viewBox={wide ? '-40 0 300 240' : '0 0 200 240'}
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
@@ -210,6 +214,34 @@ export default function CityBot({
           </g>
         )}
       </g>
+
+      {pose === 'cart' && (
+        <>
+          <g className="cb-cart">
+            <path d="M150 150 L238 150 L228 196 L160 196 Z" fill="#0f172a" stroke="#cbd5e1" strokeWidth={4} strokeLinejoin="round" />
+            <line x1={136} y1={146} x2={152} y2={150} stroke="#cbd5e1" strokeWidth={5} strokeLinecap="round" />
+            <g className="cb-items">
+              <rect x={166} y={128} width={20} height={20} rx={5} fill="#e50914" />
+              <rect x={190} y={122} width={20} height={20} rx={5} fill="#f47521" />
+              <rect x={212} y={130} width={18} height={18} rx={5} fill="#5865f2" />
+            </g>
+            <path d="M158 162 L232 162 M162 178 L230 178" stroke="#334155" strokeWidth={2} />
+            <g className="cb-wheel" style={{ transformOrigin: '170px 206px' }}>
+              <circle cx={170} cy={206} r={9} fill="#1e293b" stroke="#cbd5e1" strokeWidth={3} />
+              <path d="M170 199 L170 213 M163 206 L177 206" stroke="#cbd5e1" strokeWidth={2} />
+            </g>
+            <g className="cb-wheel" style={{ transformOrigin: '220px 206px' }}>
+              <circle cx={220} cy={206} r={9} fill="#1e293b" stroke="#cbd5e1" strokeWidth={3} />
+              <path d="M220 199 L220 213 M213 206 L227 206" stroke="#cbd5e1" strokeWidth={2} />
+            </g>
+          </g>
+          <g className="cb-trail">
+            <rect x={-30} y={110} width={30} height={4} rx={2} fill="#67e8f9" opacity={0.6} />
+            <rect x={-22} y={150} width={24} height={4} rx={2} fill="#a7f3d0" opacity={0.5} />
+            <rect x={-34} y={190} width={28} height={4} rx={2} fill="#67e8f9" opacity={0.5} />
+          </g>
+        </>
+      )}
 
       {pose === 'done' && (
         <>

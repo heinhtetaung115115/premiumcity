@@ -1,75 +1,82 @@
 // app/api/topups/verify-slip/route.ts
+//
+// KBZ Pay auto top-up. The customer uploads only the slip; the amount comes
+// from the slip. The top-up row is created here, after the checks, with the
+// amount read from the slip (see lib/slip-verify.ts for the check order).
+//
+// Body: { imageBase64, mediaType?, fallbackAmount? }
+//   fallbackAmount is only accepted after the server answered `need_amount`
+//   (slip AI down): the top-up then waits for admin review.
 import { NextResponse } from 'next/server';
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import { getServerSession } from 'next-auth';
 import { authConfig } from '@/lib/auth';
-import { verifyKbzSlip, SlipAiUnavailableError, describeAiFailure } from '@/lib/slip-verify';
+import { verifyKbzSlip, describeAiFailure, type VerificationResult } from '@/lib/slip-verify';
 import { approveTopup, rejectTopup, TopupAlreadyProcessedError } from '@/lib/wallet';
-import { notifyNewTopup, notifySlipAiDown } from '@/lib/telegram';
+import { notifyNewTopup, notifySlipAiDown, sendTelegramMessage } from '@/lib/telegram';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { MAX_TOPUP_AMOUNT, MIN_TOPUP_AMOUNT } from '@/utils/validators';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
+type Out = {
+  status: 'approved' | 'manual_review' | 'rejected' | 'qr_not_found' | 'unreadable' | 'need_amount';
+  reason_mm: string;
+  reason_en: string;
+  amount?: number;
+  balance?: number;
+};
+
+const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] as string));
 
 export async function POST(req: Request) {
   const session = await getServerSession(authConfig);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const userId = String(session.user.id);
+  const userEmail = (session.user as any).email || '';
 
-  // Each attempt calls the Claude vision API (real cost) and is a potential
-  // probe against the fraud checks, so throttle per user.
-  const rl = await checkRateLimit({
-    key: String(session.user.id),
-    route: 'verify-slip',
-    windowInSeconds: 10 * 60,
-    maxRequests: 12,
-  });
+  // Each attempt can call the paid vision API and probes the checks: throttle.
+  const rl = await checkRateLimit({ key: userId, route: 'verify-slip', windowInSeconds: 10 * 60, maxRequests: 12 });
   if (!rl.allowed) {
     return NextResponse.json(
-      { error: 'Too many verification attempts. Please wait a few minutes and try again.' },
-      {
-        status: 429,
-        headers: rl.retryAfterSeconds ? { 'Retry-After': String(rl.retryAfterSeconds) } : undefined,
-      }
+      { error: 'Too many attempts. Please wait a few minutes and try again.' },
+      { status: 429, headers: rl.retryAfterSeconds ? { 'Retry-After': String(rl.retryAfterSeconds) } : undefined }
     );
   }
 
-  let body: { topupId: string; imageBase64: string; mediaType?: string };
+  let body: { imageBase64?: string; mediaType?: string; fallbackAmount?: number };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
+  const imageBase64 = String(body.imageBase64 ?? '');
+  const mediaType = body.mediaType || 'image/jpeg';
+  if (!imageBase64) return NextResponse.json({ error: 'Slip image required' }, { status: 400 });
 
-  const { topupId, imageBase64, mediaType } = body;
-  if (!topupId || !imageBase64) {
-    return NextResponse.json({ error: 'topupId and imageBase64 required' }, { status: 400 });
+  const fallbackAmount = body.fallbackAmount != null ? Math.round(Number(body.fallbackAmount)) : null;
+  if (fallbackAmount != null && (!Number.isFinite(fallbackAmount) || fallbackAmount < MIN_TOPUP_AMOUNT || fallbackAmount > MAX_TOPUP_AMOUNT)) {
+    return NextResponse.json(
+      { error: `Amount must be between ${MIN_TOPUP_AMOUNT.toLocaleString()} and ${MAX_TOPUP_AMOUNT.toLocaleString()} Ks` },
+      { status: 400 }
+    );
   }
 
   const supabase = getServiceSupabaseClient();
 
-  const { data: topup } = await supabase
-    .from('topups')
-    .select('id,user_id,amount,last4,status,bank_account_id,method')
-    .eq('id', topupId)
-    .maybeSingle();
+  // KBZ account the customer paid to
+  const { data: banks } = await supabase
+    .from('bank_accounts')
+    .select('id,bank_name,is_active')
+    .ilike('bank_name', '%kbz%')
+    .limit(5);
+  const bank = ((banks ?? []) as any[]).find((b) => b.is_active) ?? ((banks ?? []) as any[])[0];
+  if (!bank) return NextResponse.json({ error: 'KBZ Pay is not available right now.' }, { status: 400 });
 
-  if (!topup) {
-    return NextResponse.json({ error: 'Top-up not found' }, { status: 404 });
-  }
-
-  const t = topup as any;
-  if (t.user_id !== session.user.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-  }
-  if (t.status !== 'PENDING') {
-    return NextResponse.json({ error: 'Already processed' }, { status: 400 });
-  }
-
-  // ── Duplicate check ──
+  // ── Used before? (website top-ups + slips the admin saved from Viber/Telegram) ──
   const checkDuplicate = async (tid: string): Promise<boolean> => {
-    // Slips the admin saved from Viber / Telegram customers (paid directly).
     const tidDigits = String(tid ?? '').replace(/\D/g, '');
     if (tidDigits.length >= 6) {
       const { data: blocked, error: blockedErr } = await supabase
@@ -77,236 +84,196 @@ export async function POST(req: Request) {
         .select('id')
         .eq('tid_digits', tidDigits)
         .limit(1);
-      if (!blockedErr && blocked && (blocked as any[]).length > 0) {
-        console.log(`[duplicate-check] BLOCKED: slip saved by admin (used_slips) tid=${tid}`);
-        return true;
-      }
+      if (!blockedErr && blocked && (blocked as any[]).length > 0) return true;
     }
-
-    // Duplicate transaction IDs only ever come from KBZ auto-verify slips
-    // (method='qr'), so scoping to that method keeps this query cheap and
-    // correct regardless of how many manual (non-KBZ) topups accumulate.
     const { data: rows } = await supabase
       .from('topups')
       .select('id,metadata,status')
       .eq('method', 'qr')
       .order('created_at', { ascending: false })
       .limit(5000);
-
-    if (!rows) {
-      console.log('[duplicate-check] No rows returned');
-      return false;
-    }
-
-    const allRows = rows as any[];
-    let withMeta = 0;
-
-    for (const row of allRows) {
-      if (row.id === topupId) continue;
+    for (const row of (rows ?? []) as any[]) {
       if (row.status === 'REJECTED') continue;
-
       let meta = row.metadata;
-      if (!meta) continue;
-      withMeta++;
-
       if (typeof meta === 'string') {
         try { meta = JSON.parse(meta); } catch { continue; }
       }
-      if (typeof meta !== 'object' || meta === null) continue;
-
-      const storedTid = meta.verified_transaction_id;
-      if (storedTid === tid) {
-        console.log(`[duplicate-check] DUPLICATE FOUND: topup ${row.id}`);
-        return true;
-      }
-
-      const prevDecision = meta?.slip_verification?.decision;
-      if (prevDecision === 'AUTO_APPROVE' || prevDecision === 'REJECT') {
-        const nestedTid = meta?.slip_verification?.extracted?.transactionId;
-        if (nestedTid && nestedTid.replace(/\D/g, '') === tid.replace(/\D/g, '')) {
-          console.log(`[duplicate-check] DUPLICATE FOUND (nested): topup ${row.id}`);
-          return true;
-        }
-      }
+      if (!meta || typeof meta !== 'object') continue;
+      const cands = [
+        meta.verified_transaction_id,
+        meta?.slip_verification?.qr_payload?.transactionId,
+        meta?.slip_verification?.extracted?.transactionId,
+      ];
+      if (cands.some((c: any) => c && String(c).replace(/\D/g, '') === tidDigits)) return true;
     }
-
-    console.log(`[duplicate-check] Checked ${allRows.length} rows (${withMeta} with metadata), no duplicate for tid=${tid}`);
     return false;
   };
 
-  // ── Run verification ──
-  let result;
+  let result: VerificationResult;
   try {
-    result = await verifyKbzSlip({
-      imageBase64,
-      mediaType: mediaType || 'image/jpeg',
-      claimedAmount: Number(t.amount),
-      checkDuplicate,
-    });
-  } catch (err: any) {
-    // ── AI itself is down (bad key, no credits, outage) ──
-    // Not the customer's fault: keep the top-up PENDING for manual review,
-    // alert admin on Telegram with the slip photo, and reassure the customer.
-    if (err instanceof SlipAiUnavailableError) {
-      const problem = describeAiFailure(err);
-      console.error('[verify-slip] Slip AI unavailable:', problem, '|', err.message);
-
-      await supabase.from('topups').update({
-        metadata: {
-          slip_verification: {
-            decision: 'MANUAL_REVIEW',
-            reason: `Slip AI unavailable: ${problem}`,
-            ai_error: err.message.slice(0, 500),
-            verified_at: new Date().toISOString(),
-          },
-          verified_transaction_id: null,
-        },
-      }).eq('id', topupId);
-
-      try {
-        await notifySlipAiDown({
-          topupId,
-          userEmail: (session.user as any).email || '',
-          amount: Number(t.amount),
-          problem,
-          imageBase64,
-          mediaType: mediaType || 'image/jpeg',
-        });
-      } catch (tgErr) {
-        console.error('[verify-slip] Telegram alert failed:', tgErr);
-      }
-
-      return NextResponse.json({
-        status: 'manual_review',
-        reason_mm: 'Payment Slip လက်ခံရရှိပါသည်။ စစ်ဆေးပြီးပါက အသိပေးပါမည်',
-        reason_en: 'Payment slip received. Our team will verify shortly.',
-      });
-    }
-
+    result = await verifyKbzSlip({ imageBase64, mediaType, checkDuplicate, skipAi: fallbackAmount != null });
+  } catch (err) {
     console.error('[verify-slip] error:', err);
-    return NextResponse.json(
-      { error: 'Could not verify slip. Ensure image is clear.' },
-      { status: 422 }
-    );
+    return NextResponse.json({ error: 'Could not read this slip. Please upload a clear screenshot.' }, { status: 422 });
   }
+  console.log('[verify-slip]', result.decision, '|', result.reason, '|', result.transactionId);
 
-  console.log('[verify-slip] Decision:', result.decision);
-  console.log('[verify-slip] Reason:', result.reason);
-  console.log('[verify-slip] Checks:', JSON.stringify(result.checks));
-  console.log('[verify-slip] TID:', result.transactionId);
-
-  const slipLast4 = result.slipData.transactionId?.replace(/\D/g, '').slice(-4) || t.last4;
-
-  // Store verification in metadata
-  const isFinalDecision = result.decision === 'AUTO_APPROVE' || result.decision === 'REJECT';
-
-  await supabase.from('topups').update({
-    metadata: {
-      slip_verification: {
-        decision: result.decision,
-        reason: result.reason,
-        checks: result.checks,
-        extracted: result.slipData,
-        qr_payload: result.qrPayload
-          ? { transactionId: result.qrPayload.transactionId, timestamp: result.qrPayload.timestamp }
-          : null,
-        verified_at: new Date().toISOString(),
-      },
-      verified_transaction_id: isFinalDecision ? result.transactionId : null,
+  const tid = result.transactionId;
+  const last4 = (tid ?? '').replace(/\D/g, '').slice(-4) || '0000';
+  const meta = (decision: string) => ({
+    slip_verification: {
+      decision,
+      reason: result.reason,
+      checks: result.checks,
+      extracted: result.slipData,
+      qr_payload: result.qrPayload
+        ? { transactionId: result.qrPayload.transactionId, timestamp: result.qrPayload.timestamp }
+        : null,
+      verified_at: new Date().toISOString(),
     },
-    last4: slipLast4 || t.last4,
-  }).eq('id', topupId);
+    verified_transaction_id: tid,
+  });
 
-  const userEmail = (session.user as any).email || '';
-
-  // ── AUTO APPROVE (skipEmail=true for KBZ instant) ──
-  if (result.decision === 'AUTO_APPROVE') {
-    try {
-      await approveTopup(topupId, true);
-      return NextResponse.json({
-        status: 'approved',
-        reason_mm: 'ငွေဖြည့်သွင်းမှု အောင်မြင်ပါသည်',
-        reason_en: 'Payment verified and approved.',
-      });
-    } catch (err: any) {
-      if (err instanceof TopupAlreadyProcessedError) {
-        return NextResponse.json({ status: 'manual_review', reason_mm: '', reason_en: 'Already processed.' });
-      }
-      console.error('[verify-slip] auto-approve failed:', err);
+  const insertTopup = async (amount: number, decision: string): Promise<string | null> => {
+    const { data, error } = await supabase
+      .from('topups')
+      .insert({
+        user_id: userId,
+        bank_account_id: bank.id,
+        amount,
+        last4,
+        method: 'qr',
+        status: 'PENDING',
+        metadata: meta(decision),
+      })
+      .select('id')
+      .maybeSingle();
+    if (error) {
+      console.error('[verify-slip] insert failed:', error.message);
+      return null;
     }
+    return (data as any)?.id ?? null;
+  };
+
+  const reply = (o: Out) => NextResponse.json(o);
+  const walletBalance = async () => {
+    const { data } = await supabase.from('wallets').select('balance').eq('user_id', userId).maybeSingle();
+    return Number((data as any)?.balance ?? 0);
+  };
+
+  // ── Ask again (nothing saved) ──
+  if (result.decision === 'RETRY_QR') {
+    return reply({
+      status: 'qr_not_found',
+      reason_mm: 'QR code ကို မတွေ့ပါ။ အောက်ခြေက QR code ပါတဲ့ slip အပြည့်ကို ပြန်တင်ပေးပါ',
+      reason_en: 'QR code not found. Upload the full slip including the QR code.',
+    });
+  }
+  if (result.decision === 'RETRY_UNREADABLE') {
+    return reply({
+      status: 'unreadable',
+      reason_mm: 'Slip ကို ဖတ်လို့မရပါ။ ပိုရှင်းတဲ့ screenshot နဲ့ ပြန်တင်ပေးပါ',
+      reason_en: 'We could not read this slip. Please upload a clearer screenshot.',
+    });
   }
 
-  // ── AUTO REJECT (no email for KBZ, user sees result in UI) ──
-  if (result.decision === 'REJECT') {
+  // ── Slip AI down ──
+  if (result.decision === 'AI_DOWN') {
+    if (fallbackAmount == null) {
+      if (result.aiError) {
+        try {
+          await sendTelegramMessage({
+            text: `🚨 <b>Slip AI is DOWN</b>\n⚠️ ${esc(describeAiFailure(result.aiError))}\nCustomers are asked to type the amount; their top-ups wait for your review.`,
+          });
+        } catch {}
+      }
+      return reply({
+        status: 'need_amount',
+        reason_mm: 'လွှဲထားတဲ့ ငွေပမာဏကို ရိုက်ထည့်ပေးပါ',
+        reason_en: 'Please type the amount you sent.',
+      });
+    }
+    const id = await insertTopup(fallbackAmount, 'MANUAL_REVIEW');
+    if (!id) return NextResponse.json({ error: 'Could not save your top-up. Please try again.' }, { status: 500 });
     try {
-      await rejectTopup(topupId, result.reason, true);
-    } catch (err) {
-      if (!(err instanceof TopupAlreadyProcessedError)) {
-        console.error('[verify-slip] auto-reject failed:', err);
+      await notifySlipAiDown({
+        topupId: id,
+        userEmail,
+        amount: fallbackAmount,
+        problem: 'Slip AI unavailable — amount typed by customer, QR checks passed',
+        imageBase64,
+        mediaType,
+      });
+    } catch {}
+    return reply({
+      status: 'manual_review',
+      reason_mm: 'Slip လက်ခံရရှိပါပြီ။ စစ်ပြီးတာနဲ့ wallet ထဲ ထည့်ပေးပါမယ်',
+      reason_en: 'Slip received. It will be added after a quick check.',
+      amount: fallbackAmount,
+    });
+  }
+
+  // ── Reject ──
+  if (result.decision === 'REJECT') {
+    if (result.amount && result.amount > 0) {
+      const id = await insertTopup(result.amount, 'REJECT');
+      if (id) {
+        try { await rejectTopup(id, result.reason, true); } catch (e) {
+          if (!(e instanceof TopupAlreadyProcessedError)) console.error('[verify-slip] reject failed:', e);
+        }
       }
     }
-
-    let reason_mm = 'ငွေဖြည့်သွင်းမှု မအောင်မြင်ပါ';
-    let reason_en = 'Payment verification failed.';
-
-    if (!result.checks.isKbzPay) {
-      reason_mm = 'KBZ Pay Slip မဟုတ်ပါ။ ကျေးဇူးပြု၍ KBZ Pay ဖြင့် ငွေလွှဲပါ';
-      reason_en = 'This is not a KBZ Pay slip.';
-    } else if (!result.checks.noDuplicate) {
-      reason_mm = 'ဤ Slip အား အသုံးပြုပြီး ဖြစ်ပါသည်';
-      reason_en = 'This payment slip has already been used.';
-    } else if (!result.checks.recipientMatch) {
-      reason_mm = 'ငွေလက်ခံသူ အမည် မတူညီပါ။ ကျေးဇူးပြု၍ မှန်ကန်သော Account သို့ ငွေလွှဲပါ';
-      reason_en = 'Recipient does not match our account.';
-    } else if (!result.checks.amountMatch) {
-      reason_mm = 'ငွေပမာဏ မတူညီပါ။ ထည့်သွင်းသော ပမာဏနှင့် Slip ပမာဏ တူညီရပါမည်';
-      reason_en = 'Amount mismatch between entered amount and slip.';
-    } else if (result.checks.qrFound && result.checks.qrValid && !result.checks.qrSlipTransactionMatch) {
-      reason_mm = 'Payment Slip စစ်ဆေးမှု မအောင်မြင်ပါ။ Slip အချက်အလက်များ မတူညီပါ';
-      reason_en = 'Slip verification failed. Transaction details mismatch.';
-    } else if (!result.checks.paymentSuccessful) {
-      reason_mm = 'ငွေလွှဲမှု မအောင်မြင်သော Slip ဖြစ်ပါသည်';
-      reason_en = 'This slip does not show a successful payment.';
-    }
-
-    // Notify admin via Telegram about rejection (no email to user)
     try {
-      await notifyNewTopup({
-        id: topupId,
-        userEmail,
-        amount: Number(t.amount),
-        last4: slipLast4 || t.last4,
-        bankName: 'KBZ Pay (REJECTED)',
-        method: 'kbz_auto',
+      await sendTelegramMessage({
+        text: [
+          '🚫 <b>KBZ slip rejected</b>',
+          `👤 ${esc(userEmail)}`,
+          result.amount ? `💵 ${result.amount.toLocaleString()} Ks` : '',
+          tid ? `🧾 …${esc(tid.slice(-8))}` : '',
+          `📝 ${esc(result.reason)}`,
+        ].filter(Boolean).join('\n'),
       });
     } catch {}
 
-    return NextResponse.json({ status: 'rejected', reason_mm, reason_en });
+    const msg: Record<string, [string, string]> = {
+      duplicate: ['ဒီ slip ကို အသုံးပြုပြီးသား ဖြစ်ပါတယ်', 'This slip has already been used.'],
+      not_kbz: ['KBZ Pay slip မဟုတ်ပါ', 'This is not a KBZ Pay slip.'],
+      wrong_recipient: ['ငွေလက်ခံသူ မှန်ကန်မှု မရှိပါ။ ပြထားတဲ့ account ကို လွှဲပေးပါ', 'This payment was not sent to our account.'],
+      not_successful: ['ငွေလွှဲမှု မအောင်မြင်သေးတဲ့ slip ဖြစ်ပါတယ်', 'This slip does not show a successful payment.'],
+      too_small: [`အနည်းဆုံး ${MIN_TOPUP_AMOUNT.toLocaleString()} Ks ဖြည့်ပေးပါ`, `Minimum top-up is ${MIN_TOPUP_AMOUNT.toLocaleString()} Ks.`],
+      forged: ['ဒီ slip ကို လက်မခံနိုင်ပါ', 'This slip could not be accepted.'],
+    };
+    const [mm, en] = msg[result.rejectCode ?? 'forged'] ?? msg.forged;
+    return reply({ status: 'rejected', reason_mm: mm, reason_en: en });
   }
 
-  // ── MANUAL REVIEW ──
+  // ── Approve / manual review: create the top-up with the slip amount ──
+  const amount = result.amount!;
+  const id = await insertTopup(amount, result.decision);
+  if (!id) return NextResponse.json({ error: 'Could not save your top-up. Please try again.' }, { status: 500 });
+
+  if (result.decision === 'AUTO_APPROVE') {
+    try {
+      await approveTopup(id, true);
+      return reply({
+        status: 'approved',
+        reason_mm: 'Wallet ထဲ ထည့်ပြီးပါပြီ',
+        reason_en: 'Added to your wallet.',
+        amount,
+        balance: await walletBalance(),
+      });
+    } catch (err) {
+      if (!(err instanceof TopupAlreadyProcessedError)) console.error('[verify-slip] auto-approve failed:', err);
+    }
+  }
+
   try {
-    await notifyNewTopup({
-      id: topupId,
-      userEmail,
-      amount: Number(t.amount),
-      last4: slipLast4 || t.last4,
-      bankName: 'KBZ Pay',
-      method: 'kbz_auto',
-    });
+    await notifyNewTopup({ id, userEmail, amount, last4, bankName: 'KBZ Pay (review)', method: 'kbz_auto' });
   } catch {}
-
-  if (!result.checks.qrFound) {
-    return NextResponse.json({
-      status: 'qr_not_found',
-      reason_mm: 'QR Code ကို ရှာမတွေ့ပါ။ KBZ QR Code ပါဝင်သော Screenshot အပြည့်အစုံ ထပ်မံ Upload လုပ်ပါ',
-      reason_en: 'QR code not detected. Upload a full screenshot with the QR code.',
-    });
-  }
-
-  return NextResponse.json({
+  return reply({
     status: 'manual_review',
-    reason_mm: 'Payment Slip လက်ခံရရှိပါသည်။ စစ်ဆေးပြီးပါက အသိပေးပါမည်',
-    reason_en: 'Payment slip received. Our team will verify shortly.',
+    reason_mm: 'Slip လက်ခံရရှိပါပြီ။ စစ်ပြီးတာနဲ့ wallet ထဲ ထည့်ပေးပါမယ်',
+    reason_en: 'Slip received. It will be added after a quick check.',
+    amount,
   });
 }

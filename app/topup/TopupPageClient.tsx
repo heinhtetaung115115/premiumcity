@@ -75,7 +75,7 @@ export default function TopupPageClient({ banks, reason, balance = 0 }: Props) {
   const manualBanks = banks.filter((b) => !b.bank_name.toLowerCase().includes('kbz'));
 
   return (
-    <div className={`mx-auto space-y-5 ${selected === null || selected === 'crypto' ? 'max-w-md' : 'max-w-4xl'}`}>
+    <div className={`mx-auto space-y-5 ${selected === 'manual' ? 'max-w-4xl' : 'max-w-md'}`}>
       {reason === 'insufficient_balance' && (
         <div className="rounded-xl border border-amber-500/60 bg-amber-950/50 px-4 py-3 text-sm text-amber-50">
           <p className="font-semibold">Not enough wallet balance</p>
@@ -116,7 +116,7 @@ export default function TopupPageClient({ banks, reason, balance = 0 }: Props) {
                     <p className="text-sm font-semibold text-slate-100">KBZ Pay</p>
                     <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">AUTO</span>
                   </div>
-                  <p className="mt-0.5 text-[11px] text-slate-400">Instant verification under 50,000 KS</p>
+                  <p className="mt-0.5 text-[11px] text-slate-400">Slip တင်ရုံပဲ · 50,000 Ks အထိ ချက်ချင်းဝင်</p>
                 </div>
                 <svg className="h-5 w-5 flex-shrink-0 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                   <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
@@ -173,12 +173,7 @@ export default function TopupPageClient({ banks, reason, balance = 0 }: Props) {
 
       {selected === 'crypto' && <CryptoTopupForm onBack={() => setSelected(null)} />}
 
-      {selected === 'kbz' && kbzBank && (
-        <div>
-          <button onClick={() => setSelected(null)} className="mb-4 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-300">← Back to payment methods</button>
-          <KbzTopupForm bank={kbzBank} />
-        </div>
-      )}
+      {selected === 'kbz' && kbzBank && <KbzTopupForm bank={kbzBank} onBack={() => setSelected(null)} />}
 
       {selected === 'manual' && (
         <div>

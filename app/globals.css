@@ -90,3 +90,52 @@ button {
   100% { top: 4%; }
 }
 .pc-scan { animation: pcScan 1.6s ease-in-out infinite; }
+
+/* ── City Bot mascot (components/CityBot.tsx) ── */
+@keyframes cbFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes cbFloatSlow{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes cbJump{0%,100%{transform:translateY(0) scale(1,1)}10%{transform:translateY(4px) scale(1.06,.92)}35%{transform:translateY(-22px) scale(.96,1.05)}55%{transform:translateY(0) scale(1.04,.95)}70%{transform:translateY(0) scale(1,1)}}
+@keyframes cbShadow{0%,100%{transform:scale(1);opacity:.45}50%{transform:scale(.82);opacity:.3}}
+@keyframes cbTilt{0%,100%{transform:rotate(0)}30%{transform:rotate(-7deg)}70%{transform:rotate(6deg)}}
+@keyframes cbTiltS{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+@keyframes cbDroop{0%,100%{transform:rotate(8deg)}50%{transform:rotate(11deg)}}
+@keyframes cbAnt{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}}
+@keyframes cbAntD{0%,100%{transform:rotate(38deg)}50%{transform:rotate(44deg)}}
+@keyframes cbBulb{0%,100%{opacity:1}50%{opacity:.55}}
+@keyframes cbBlink{0%,88%,100%{transform:scaleY(1)}92%{transform:scaleY(.1)}}
+@keyframes cbLook{0%,20%,100%{transform:translateX(0)}35%,50%{transform:translateX(-5px)}65%,80%{transform:translateX(5px)}}
+@keyframes cbWave{0%,100%{transform:rotate(0)}50%{transform:rotate(-28deg)}}
+@keyframes cbSwing{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}
+@keyframes cbCheer{0%,100%{transform:rotate(0)}50%{transform:rotate(12deg)}}
+@keyframes cbFlame{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.6)}}
+@keyframes cbCore{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes cbBeam{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}
+@keyframes cbConf{0%{transform:translateY(-10px);opacity:0}20%{opacity:1}100%{transform:translateY(60px) rotate(40deg);opacity:0}}
+@keyframes cbCoin{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes cbDrop{0%{transform:translateY(0);opacity:0}30%{opacity:1}100%{transform:translateY(14px);opacity:0}}
+.cb-float{animation:cbFloat 2s ease-in-out infinite}
+.cb-float-slow{animation:cbFloatSlow 3s ease-in-out infinite}
+.cb-jump{animation:cbJump 1.2s cubic-bezier(.3,.7,.4,1) infinite}
+.cb-shadow{animation:cbShadow 2s ease-in-out infinite}
+.cb-tilt{animation:cbTilt 3.2s ease-in-out infinite}
+.cb-tilt-small{animation:cbTiltS 1.6s ease-in-out infinite}
+.cb-droop{animation:cbDroop 3s ease-in-out infinite}
+.cb-ant{animation:cbAnt 1.1s ease-in-out infinite}
+.cb-ant-droop{animation:cbAntD 2.4s ease-in-out infinite}
+.cb-bulb{animation:cbBulb 1.2s ease-in-out infinite}
+.cb-blink{animation:cbBlink 3.6s infinite}
+.cb-look{animation:cbLook 4s ease-in-out infinite}
+.cb-wave{animation:cbWave .7s ease-in-out infinite}
+.cb-swing{animation:cbSwing 2s ease-in-out infinite}
+.cb-cheer{animation:cbCheer .6s ease-in-out infinite}
+.cb-flame{animation:cbFlame .25s ease-in-out infinite}
+.cb-core{animation:cbCore 1.4s ease-in-out infinite}
+.cb-beam{animation:cbBeam 1.6s ease-in-out infinite}
+.cb-conf{animation:cbConf 1.6s linear infinite}
+.cb-coin{animation:cbCoin 1s ease-in-out infinite}
+.cb-drop{animation:cbDrop 1.8s ease-in infinite}
+@keyframes cbDots{0%,20%{opacity:.2}50%{opacity:1}100%{opacity:.2}}
+.cb-dot{animation:cbDots 1.2s infinite}
+@media (prefers-reduced-motion: reduce){
+  .cb-float,.cb-float-slow,.cb-jump,.cb-shadow,.cb-tilt,.cb-tilt-small,.cb-droop,.cb-ant,.cb-ant-droop,.cb-bulb,.cb-blink,.cb-look,.cb-wave,.cb-swing,.cb-cheer,.cb-flame,.cb-core,.cb-beam,.cb-conf,.cb-coin,.cb-drop,.cb-dot{animation:none}
+}

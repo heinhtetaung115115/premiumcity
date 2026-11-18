@@ -41,6 +41,11 @@ export async function POST(req: Request) {
 
   const { amount, last4, bankAccountId, method, bankName, accountNo } = body;
 
+  // KBZ Pay top-ups are created only by /api/topups/verify-slip (amount from the slip).
+  if (method === 'qr') {
+    return NextResponse.json({ error: 'Please use the KBZ Pay slip upload.' }, { status: 400 });
+  }
+
   if (
     !amount ||
     !Number.isFinite(amount) ||
@@ -115,7 +120,7 @@ export async function POST(req: Request) {
 
   // For KBZ auto-verify (method='qr'), skip ALL notifications.
   // The verify-slip route handles everything for KBZ.
-  const isKbzAuto = method === 'qr';
+  const isKbzAuto = (method as string) === 'qr';
 
   if (!isKbzAuto) {
     // ----- USER EMAIL (manual topups only) -----

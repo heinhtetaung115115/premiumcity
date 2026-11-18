@@ -154,6 +154,8 @@ export type SlipData = {
   amount: number | null; transactionId: string | null; recipientName: string | null;
   recipientAccount: string | null; senderName: string | null; bankName: string | null;
   dateTime: string | null; status: string | null;
+  /** AI thinks the screenshot may have been edited (fonts/alignment/patches). */
+  looksEdited: boolean;
 };
 
 export async function extractSlipData(imageBase64: string, mediaType: string = 'image/jpeg'): Promise<SlipData> {
@@ -198,7 +200,8 @@ Return ONLY a JSON object, no backticks:
   "senderName": "<sender name or null>",
   "bankName": "<the PAYMENT APP that generated this slip: KBZPay, WavePay, AYAPay, CBPay, or null>",
   "dateTime": "<transaction date and time or null>",
-  "status": "<set 'success' if this is an E-Receipt or shows completed payment. 'failed' only if explicitly failed. null if not a payment slip>"
+  "status": "<set 'success' if this is an E-Receipt or shows completed payment. 'failed' only if explicitly failed. null if not a payment slip>",
+  "looksEdited": <true ONLY if you see clear signs the screenshot was digitally edited: a number in a different font, size, weight or colour from the text around it, misaligned or uneven digits, smudged or patched areas, mismatched backgrounds behind text. false otherwise>
 }` },
         ],
       }],
@@ -227,7 +230,7 @@ Return ONLY a JSON object, no backticks:
 
   // If AI says it's not a payment slip, mark bankName as null
   if (parsed.isPaymentSlip === false) {
-    return { amount: null, transactionId: null, recipientName: null, recipientAccount: null, senderName: null, bankName: null, dateTime: null, status: null };
+    return { amount: null, transactionId: null, recipientName: null, recipientAccount: null, senderName: null, bankName: null, dateTime: null, status: null, looksEdited: false };
   }
 
   return {
@@ -239,153 +242,239 @@ Return ONLY a JSON object, no backticks:
     bankName: parsed.bankName ?? null,
     dateTime: parsed.dateTime ?? null,
     status: parsed.status ?? null,
+    looksEdited: parsed.looksEdited === true,
   };
+}
+
+// ── KBZ QR structure checks ─────────────────────────────
+//
+// What a real KBZPay e-receipt QR contains (checked on real slips):
+//   KPRSC.<base64 JSON>.<base64 64-byte signature>
+//   JSON: { v, exp, tid, ts, typ }
+//   - tid: 20 digits; digits 5-8 = days since 1 Jan 2015 (Myanmar date)
+//   - ts:  payment time in ms (matches the slip time to the second)
+//   - exp: ts + 30 days
+// KBZ's signing key is not public, so the signature itself cannot be
+// verified; these cross-checks make a hand-made QR very hard to get right.
+
+const YANGON_OFFSET_MS = 6.5 * 3600 * 1000;
+const KBZ_TID_EPOCH_MS = Date.UTC(2015, 0, 1);
+const DAY_MS = 86_400_000;
+
+export const AUTO_APPROVE_RECENT_HOURS = 48;
+export const MIN_SLIP_AMOUNT = 500;
+
+/** Returns a reason string if the QR does not look like a genuine KBZ receipt QR. */
+export function checkKbzQrStructure(qr: KbzQrPayload, raw: string): string | null {
+  if (!/^\d{20}$/.test(qr.transactionId)) return 'QR transaction number has the wrong format';
+  if (!qr.timestamp || !qr.expiry) return 'QR has no time';
+  const sig = raw.trim().split('.')[2] ?? '';
+  let sigLen = 0;
+  try { sigLen = Buffer.from(sig, 'base64').length; } catch { sigLen = 0; }
+  if (sigLen !== 64) return 'QR signature has the wrong size';
+  if (Math.abs(qr.expiry - qr.timestamp - 30 * DAY_MS) > 10 * 60 * 1000) return 'QR expiry does not follow KBZ pattern';
+  if (qr.timestamp > Date.now() + 10 * 60 * 1000) return 'QR time is in the future';
+  const qrDay = Math.floor((qr.timestamp + YANGON_OFFSET_MS - KBZ_TID_EPOCH_MS) / DAY_MS);
+  const tidDay = Number(qr.transactionId.slice(4, 8));
+  if (Math.abs(tidDay - qrDay) > 1) return `Transaction number date (${tidDay}) does not match QR date (${qrDay})`;
+  return null;
+}
+
+/** Parse "18/11/2026 07:49:01" (Myanmar time) → epoch ms, or null. */
+export function parseSlipTime(text: string | null | undefined): number | null {
+  if (!text) return null;
+  const m = String(text).match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})[^\d]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if (!m) return null;
+  const [, d, mo, y, h, mi, se, ap] = m;
+  let hour = Number(h);
+  if (ap) {
+    const pm = ap.toLowerCase() === 'pm';
+    if (pm && hour < 12) hour += 12;
+    if (!pm && hour === 12) hour = 0;
+  }
+  const utc = Date.UTC(Number(y), Number(mo) - 1, Number(d), hour, Number(mi), Number(se ?? 0)) - YANGON_OFFSET_MS;
+  return Number.isFinite(utc) ? utc : null;
 }
 
 // ── Verification ────────────────────────────────────────
 
 export type VerificationChecks = {
-  paymentSuccessful: boolean; amountMatch: boolean; recipientMatch: boolean;
-  qrFound: boolean; qrValid: boolean; qrSlipTransactionMatch: boolean;
-  noDuplicate: boolean; withinAutoApproveLimit: boolean; isKbzPay: boolean;
+  qrFound: boolean; qrValid: boolean; qrStructureOk: boolean; noDuplicate: boolean;
+  isKbzPay: boolean; paymentSuccessful: boolean; amountRead: boolean;
+  recipientNameMatch: boolean; recipientAccountMatch: boolean;
+  qrSlipTransactionMatch: boolean | null; qrSlipTimeMatch: boolean | null;
+  recent: boolean; notEdited: boolean; withinAutoApproveLimit: boolean;
 };
+
+export type VerificationDecision =
+  | 'AUTO_APPROVE'
+  | 'MANUAL_REVIEW'
+  | 'REJECT'
+  | 'RETRY_QR'          // no QR found → ask for the full screenshot (no AI used)
+  | 'RETRY_UNREADABLE'  // amount could not be read → ask for a clearer screenshot
+  | 'AI_DOWN';          // slip AI unavailable → caller falls back to typed amount + manual review
+
+export type RejectCode = 'not_kbz' | 'forged' | 'duplicate' | 'wrong_recipient' | 'not_successful' | 'too_small' | null;
 
 export type VerificationResult = {
-  qrPayload: KbzQrPayload | null; slipData: SlipData; checks: VerificationChecks;
-  decision: 'AUTO_APPROVE' | 'MANUAL_REVIEW' | 'REJECT'; reason: string; transactionId: string | null;
+  qrPayload: KbzQrPayload | null;
+  slipData: SlipData | null;
+  checks: VerificationChecks;
+  decision: VerificationDecision;
+  rejectCode: RejectCode;
+  reason: string;
+  transactionId: string | null;
+  amount: number | null;
+  aiError?: SlipAiUnavailableError;
 };
 
+/**
+ * Order (cheap and hard-to-fake first):
+ *  1. QR scan + KBZ structure checks       (free)
+ *  2. duplicate / admin-blocked slip check (free)
+ *  3. AI reads the slip                    (paid)
+ *  4. cross-checks: KBZ, success, recipient name AND last digits,
+ *     QR tid = slip tid, QR time ≈ slip time, recent, not edited, limit
+ */
 export async function verifyKbzSlip(opts: {
-  imageBase64: string; mediaType: string; claimedAmount: number;
+  imageBase64: string;
+  mediaType: string;
   checkDuplicate: (tid: string) => Promise<boolean>;
+  /** Skip the AI (used for the typed-amount fallback while the AI is down). */
+  skipAi?: boolean;
 }): Promise<VerificationResult> {
-  const { imageBase64, mediaType, claimedAmount, checkDuplicate } = opts;
+  const { imageBase64, mediaType, checkDuplicate } = opts;
   const reasons: string[] = [];
   const checks: VerificationChecks = {
-    paymentSuccessful: false, amountMatch: false, recipientMatch: false,
-    qrFound: false, qrValid: false, qrSlipTransactionMatch: false,
-    noDuplicate: true, withinAutoApproveLimit: false, isKbzPay: false,
+    qrFound: false, qrValid: false, qrStructureOk: false, noDuplicate: true,
+    isKbzPay: false, paymentSuccessful: false, amountRead: false,
+    recipientNameMatch: false, recipientAccountMatch: false,
+    qrSlipTransactionMatch: null, qrSlipTimeMatch: null,
+    recent: false, notEdited: true, withinAutoApproveLimit: false,
   };
+  const done = (
+    decision: VerificationDecision,
+    rejectCode: RejectCode,
+    extra: Partial<VerificationResult> = {}
+  ): VerificationResult => ({
+    qrPayload: null, slipData: null, checks, decision, rejectCode,
+    reason: reasons.join('; ') || 'All checks passed', transactionId: null, amount: null, ...extra,
+  });
 
-  // ── Step 1: AI reads slip FIRST ──
-  const slipData = await extractSlipData(imageBase64, mediaType);
-
-  // ── Step 2: Is this KBZ Pay? Check immediately ──
-  if (slipData.bankName) {
-    const bn = slipData.bankName.toLowerCase().replace(/\s+/g, '');
-    checks.isKbzPay = bn.includes('kbzpay') || bn.includes('kbzbank') || bn === 'kbz';
-  }
-  if (!slipData.bankName && !slipData.amount && !slipData.recipientName) {
-    checks.isKbzPay = false;
-    reasons.push('Not a payment slip');
-  } else if (!checks.isKbzPay) {
-    reasons.push(`Not KBZ Pay (detected: ${slipData.bankName ?? 'unknown'})`);
-  }
-
-  // If NOT KBZ → reject immediately, skip QR scan and all other checks
-  if (!checks.isKbzPay) {
-    return {
-      qrPayload: null, slipData, checks,
-      decision: 'REJECT',
-      reason: reasons.join('; ') || 'Not a KBZ Pay slip',
-      transactionId: null,
-    };
-  }
-
-  // ── Step 3: Scan QR (only for KBZ slips) ──
-  let qrPayload: KbzQrPayload | null = null;
+  // 1) QR first
   const qrRaw = await scanQrFromImage(imageBase64);
-  if (qrRaw) {
-    checks.qrFound = true;
-    qrPayload = decodeKbzQr(qrRaw);
-    if (qrPayload) checks.qrValid = true;
-    else reasons.push('QR found but not valid KBZ format');
+  if (!qrRaw) { reasons.push('No QR code found'); return done('RETRY_QR', null); }
+  checks.qrFound = true;
+  const qr = decodeKbzQr(qrRaw);
+  if (!qr) { reasons.push('QR is not a KBZPay receipt QR'); return done('REJECT', 'not_kbz'); }
+  checks.qrValid = true;
+  const structErr = checkKbzQrStructure(qr, qrRaw);
+  if (structErr) {
+    reasons.push(`FORGERY: ${structErr}`);
+    return done('REJECT', 'forged', { qrPayload: qr, transactionId: qr.transactionId });
+  }
+  checks.qrStructureOk = true;
+  checks.recent = Date.now() - qr.timestamp <= AUTO_APPROVE_RECENT_HOURS * 3600 * 1000;
+
+  // 2) Used before / blocked by admin?
+  if (await checkDuplicate(qr.transactionId)) {
+    checks.noDuplicate = false;
+    reasons.push('Duplicate transaction ID');
+    return done('REJECT', 'duplicate', { qrPayload: qr, transactionId: qr.transactionId });
+  }
+
+  if (opts.skipAi) return done('AI_DOWN', null, { qrPayload: qr, transactionId: qr.transactionId });
+
+  // 3) AI reads the slip
+  let slip: SlipData;
+  try {
+    slip = await extractSlipData(imageBase64, mediaType);
+  } catch (err) {
+    if (err instanceof SlipAiUnavailableError) {
+      reasons.push('Slip AI unavailable');
+      return done('AI_DOWN', null, { qrPayload: qr, transactionId: qr.transactionId, aiError: err });
+    }
+    throw err;
+  }
+  const base = { qrPayload: qr, slipData: slip, transactionId: qr.transactionId };
+
+  // 4a) KBZ + successful
+  const bn = (slip.bankName ?? '').toLowerCase().replace(/\s+/g, '');
+  checks.isKbzPay = bn.includes('kbz');
+  if (!checks.isKbzPay) {
+    reasons.push(`Not KBZ Pay (detected: ${slip.bankName ?? 'unknown'})`);
+    return done('REJECT', 'not_kbz', base);
+  }
+  const st = (slip.status ?? '').toLowerCase();
+  checks.paymentSuccessful =
+    /success|complete|approved|confirm|receipt|paid/.test(st) ||
+    (!!slip.amount && !!slip.recipientName && st !== 'failed');
+  if (!checks.paymentSuccessful) {
+    reasons.push('Payment not successful');
+    return done('REJECT', 'not_successful', base);
+  }
+
+  // 4b) Amount from the slip
+  const amount = slip.amount != null && Number.isFinite(slip.amount) ? Math.round(Math.abs(slip.amount)) : null;
+  checks.amountRead = !!amount && amount > 0;
+  if (!checks.amountRead || amount == null) {
+    reasons.push('Amount not readable');
+    return done('RETRY_UNREADABLE', null, base);
+  }
+  if (amount < MIN_SLIP_AMOUNT) {
+    reasons.push(`Amount below ${MIN_SLIP_AMOUNT}`);
+    return done('REJECT', 'too_small', { ...base, amount });
+  }
+  checks.withinAutoApproveLimit = amount <= AUTO_APPROVE_MAX;
+
+  // 4c) Recipient: name AND last digits
+  const rName = (slip.recipientName ?? '').trim().toLowerCase();
+  const rAcct = (slip.recipientAccount ?? '').replace(/\D/g, '');
+  for (const admin of ADMIN_ACCOUNTS) {
+    const an = admin.name.toLowerCase();
+    if (rName.length >= 3 && (rName.includes(an) || an.includes(rName))) checks.recipientNameMatch = true;
+    if (rAcct.endsWith(admin.lastDigits)) checks.recipientAccountMatch = true;
+  }
+  if (!checks.recipientNameMatch && !checks.recipientAccountMatch) {
+    reasons.push(`Recipient mismatch: "${slip.recipientName}" / "${slip.recipientAccount}"`);
+    return done('REJECT', 'wrong_recipient', { ...base, amount });
+  }
+  if (!checks.recipientNameMatch || !checks.recipientAccountMatch) reasons.push('Recipient only partly matches');
+
+  // 4d) QR vs slip: transaction number + time
+  const slipTid = (slip.transactionId ?? '').replace(/\D/g, '');
+  if (slipTid) {
+    checks.qrSlipTransactionMatch = slipTid === qr.transactionId;
+    if (!checks.qrSlipTransactionMatch) {
+      reasons.push('FORGERY: QR tid ≠ slip tid');
+      return done('REJECT', 'forged', { ...base, amount });
+    }
   } else {
-    reasons.push('No QR code found');
+    reasons.push('Slip transaction number not read');
   }
-
-  // ── Step 4: Run all other checks ──
-  if (slipData.status) {
-    const s = slipData.status.toLowerCase();
-    checks.paymentSuccessful = s.includes('success') || s.includes('complete') || s.includes('approved') ||
-      s.includes('confirm') || s.includes('receipt') || s === 'paid' ||
-      s.includes('ငွေပေးချေ') || s.includes('ငွေလွဲ') || s.includes('အောင်မြင်') || s.includes('ပြီးစီး');
-  }
-  if (!checks.paymentSuccessful && slipData.amount && slipData.recipientName) {
-    checks.paymentSuccessful = true;
-  }
-  if (!checks.paymentSuccessful) reasons.push('Payment not confirmed successful');
-
-  // 3c. Amount matches?
-  if (slipData.amount != null) {
-    const diff = Math.abs(slipData.amount - claimedAmount);
-    checks.amountMatch = diff <= claimedAmount * 0.02;
-  }
-  if (!checks.amountMatch) {
-    reasons.push(`Amount mismatch: slip=${slipData.amount ?? '?'}, entered=${claimedAmount}`);
-  }
-
-  // 3d. Recipient matches admin?
-  if (slipData.recipientName || slipData.recipientAccount) {
-    for (const admin of ADMIN_ACCOUNTS) {
-      const nameOk = slipData.recipientName?.toLowerCase().includes(admin.name.toLowerCase()) ||
-        admin.name.toLowerCase().includes(slipData.recipientName?.toLowerCase() ?? '');
-      const acctOk = slipData.recipientAccount?.includes(admin.lastDigits);
-      if (nameOk || acctOk) { checks.recipientMatch = true; break; }
+  const slipMs = parseSlipTime(slip.dateTime);
+  if (slipMs != null) {
+    checks.qrSlipTimeMatch = Math.abs(slipMs - qr.timestamp) <= 3 * 60 * 1000;
+    if (!checks.qrSlipTimeMatch) {
+      reasons.push('FORGERY: slip time ≠ QR time');
+      return done('REJECT', 'forged', { ...base, amount });
     }
   }
-  if (!checks.recipientMatch) reasons.push(`Recipient mismatch: "${slipData.recipientName}" / "${slipData.recipientAccount}"`);
 
-  // 3e. QR vs slip cross-check
-  if (qrPayload && slipData.transactionId) {
-    const qrTid = qrPayload.transactionId.replace(/\D/g, '');
-    const slipTid = slipData.transactionId.replace(/\D/g, '');
-    checks.qrSlipTransactionMatch = qrTid === slipTid && qrTid.length > 0;
-    if (!checks.qrSlipTransactionMatch) reasons.push(`FORGERY: QR tid≠slip tid`);
-  }
+  // 4e) Edited? old? big?
+  checks.notEdited = !slip.looksEdited;
+  if (!checks.notEdited) reasons.push('Slip may be edited');
+  if (!checks.recent) reasons.push(`Payment older than ${AUTO_APPROVE_RECENT_HOURS}h`);
+  if (!checks.withinAutoApproveLimit) reasons.push(`Over auto-approve limit (${AUTO_APPROVE_MAX})`);
 
-  // 3f. Duplicate check — ONLY run if it looks like a real KBZ slip
-  const verifiedTid = qrPayload?.transactionId || slipData.transactionId;
-  if (checks.isKbzPay && verifiedTid) {
-    if (await checkDuplicate(verifiedTid)) { checks.noDuplicate = false; reasons.push('Duplicate transaction ID'); }
-  } else if (checks.isKbzPay && !verifiedTid) {
-    checks.noDuplicate = false;
-    reasons.push('No transaction ID found');
-  }
-  // If not KBZ pay, leave noDuplicate as true (irrelevant, isKbzPay check will reject first)
+  const auto =
+    checks.recipientNameMatch &&
+    checks.recipientAccountMatch &&
+    checks.qrSlipTransactionMatch === true &&
+    checks.qrSlipTimeMatch !== false &&
+    checks.notEdited &&
+    checks.recent &&
+    checks.withinAutoApproveLimit;
 
-  // 3g. Under limit?
-  checks.withinAutoApproveLimit = slipData.amount != null && slipData.amount <= AUTO_APPROVE_MAX;
-
-  // ── Decision ──
-  // REJECT: strong evidence of fraud or invalid slip
-  let decision: VerificationResult['decision'];
-
-  if (!checks.isKbzPay) {
-    decision = 'REJECT'; // Not a KBZ slip or not a payment slip at all
-  } else if (!checks.noDuplicate) {
-    decision = 'REJECT'; // Duplicate
-  } else if (!checks.recipientMatch) {
-    decision = 'REJECT'; // Wrong recipient
-  } else if (!checks.amountMatch) {
-    decision = 'REJECT'; // Amount mismatch
-  } else if (!checks.paymentSuccessful) {
-    decision = 'REJECT'; // Not successful
-  } else if (checks.qrFound && checks.qrValid && !checks.qrSlipTransactionMatch) {
-    decision = 'REJECT'; // Forged slip
-  }
-  // QR not found → user must retry
-  else if (!checks.qrFound) {
-    decision = 'MANUAL_REVIEW';
-  }
-  // All pass → approve
-  else if (checks.qrFound && checks.qrValid && checks.qrSlipTransactionMatch &&
-    checks.noDuplicate && checks.withinAutoApproveLimit) {
-    decision = 'AUTO_APPROVE';
-  }
-  else {
-    decision = 'MANUAL_REVIEW';
-  }
-
-  return { qrPayload, slipData, checks, decision, reason: reasons.length > 0 ? reasons.join('; ') : 'All checks passed', transactionId: verifiedTid ?? null };
+  return done(auto ? 'AUTO_APPROVE' : 'MANUAL_REVIEW', null, { ...base, amount });
 }

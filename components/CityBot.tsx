@@ -5,10 +5,11 @@ import { useId } from 'react';
 /**
  * City Bot — PremiumCity's mascot.
  * Poses: hello (waves), scan (checks a slip), done (cheers), oops (error),
- *        deliver (flies in carrying an order box), cart (pushes a shopping cart).
+ *        deliver (flies in carrying an order box), cart (pushes a shopping cart),
+ *        seal (tapes a parcel shut and stamps it READY).
  * Animations live in app/globals.css (classes starting with "cb-").
  */
-export type CityBotPose = 'hello' | 'scan' | 'done' | 'oops' | 'deliver' | 'cart';
+export type CityBotPose = 'hello' | 'scan' | 'done' | 'oops' | 'deliver' | 'cart' | 'seal';
 
 const C = {
   body: ['#a7f3d0', '#34d399', '#047857'],
@@ -30,8 +31,9 @@ export default function CityBot({
   const u = (n: string) => `url(#${n}${s})`;
 
   const floatCls =
-    pose === 'done' ? 'cb-jump' : pose === 'oops' ? 'cb-float-slow' : pose === 'deliver' ? 'cb-fly' : pose === 'cart' ? 'cb-push' : 'cb-float';
+    pose === 'done' ? 'cb-jump' : pose === 'oops' ? 'cb-float-slow' : pose === 'deliver' ? 'cb-fly' : pose === 'cart' ? 'cb-push' : pose === 'seal' ? 'cb-steady' : 'cb-float';
   const wide = pose === 'cart';
+  const sealW = pose === 'seal';
   const headCls = pose === 'oops' ? 'cb-droop' : pose === 'scan' ? 'cb-tilt-small' : 'cb-tilt';
 
   const arm = (side: 'L' | 'R', cls: string, angle: number) => {
@@ -58,6 +60,8 @@ export default function CityBot({
       <>{arm('L', '', 55)}{arm('R', '', -55)}</>
     ) : pose === 'cart' ? (
       <>{arm('L', '', -60)}{arm('R', '', -70)}</>
+    ) : pose === 'seal' ? (
+      <>{arm('L', 'cb-swing', 10)}{arm('R', 'cb-tape', -45)}</>
     ) : (
       <>{arm('L', '', -10)}{arm('R', '', 10)}</>
     );
@@ -70,7 +74,7 @@ export default function CityBot({
   );
 
   const eyes =
-    pose === 'hello' || pose === 'deliver' || pose === 'cart' ? (
+    pose === 'hello' || pose === 'deliver' || pose === 'cart' || pose === 'seal' ? (
       <g className="cb-look">{blinkEye(85)}{blinkEye(115)}</g>
     ) : pose === 'scan' ? (
       <><rect x={76} y={84} width={18} height={6} rx={3} fill="#a5f3fc" />{blinkEye(115)}</>
@@ -87,7 +91,7 @@ export default function CityBot({
     );
 
   const mouth =
-    pose === 'hello' || pose === 'deliver' || pose === 'cart' ? <path d="M92 103 Q100 109 108 103" stroke="#a5f3fc" strokeWidth={3.5} fill="none" strokeLinecap="round" />
+    pose === 'hello' || pose === 'deliver' || pose === 'cart' || pose === 'seal' ? <path d="M92 103 Q100 109 108 103" stroke="#a5f3fc" strokeWidth={3.5} fill="none" strokeLinecap="round" />
     : pose === 'scan' ? <path d="M94 105 L106 105" stroke="#a5f3fc" strokeWidth={3.5} strokeLinecap="round" />
     : pose === 'done' ? <path d="M90 100 Q100 112 110 100 Z" fill="#a5f3fc" />
     : <path d="M92 107 Q100 101 108 107" stroke="#a5f3fc" strokeWidth={3.5} fill="none" strokeLinecap="round" />;
@@ -95,9 +99,9 @@ export default function CityBot({
   return (
     <svg
       className={className}
-      width={wide ? (size * 300) / 200 : size}
+      width={wide ? (size * 300) / 200 : sealW ? (size * 240) / 200 : size}
       height={(size * 240) / 200}
-      viewBox={wide ? '-40 0 300 240' : '0 0 200 240'}
+      viewBox={wide ? '-40 0 300 240' : sealW ? '0 0 240 240' : '0 0 200 240'}
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
@@ -214,6 +218,24 @@ export default function CityBot({
           </g>
         )}
       </g>
+
+      {pose === 'seal' && (
+        <g>
+          <rect x={138} y={168} width={66} height={54} rx={6} fill="#d97706" />
+          <rect x={138} y={168} width={66} height={14} rx={5} fill="#b45309" />
+          <rect x={138} y={180} width={66} height={2} fill="#92400e" opacity={0.5} />
+          <ellipse cx={150} cy={196} rx={5} ry={9} fill="#ffffff" opacity={0.18} />
+          <g className="cb-tapeline" style={{ transformOrigin: '138px 175px' }}>
+            <rect x={138} y={171} width={66} height={8} fill="#fde68a" opacity={0.9} />
+          </g>
+          <g className="cb-stamp" style={{ transformOrigin: '171px 202px' }}>
+            <g transform="rotate(-8 171 201)">
+              <rect x={150} y={192} width={42} height={18} rx={4} fill="none" stroke="#10b981" strokeWidth={2.5} />
+              <text x={171} y={205} textAnchor="middle" fontSize={9} fontWeight={800} fill="#10b981" fontFamily="Inter, system-ui, sans-serif">READY</text>
+            </g>
+          </g>
+        </g>
+      )}
 
       {pose === 'cart' && (
         <>

@@ -150,8 +150,16 @@ button {
 .cb-wheel{animation:cbWheel .8s linear infinite}
 .cb-items{animation:cbItems .6s ease-in-out infinite}
 .cb-trail{animation:cbTrail .8s linear infinite}
+@keyframes cbSteady{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes cbTape{0%,100%{transform:rotate(0)}50%{transform:rotate(-12deg)}}
+@keyframes cbTapeLine{0%{transform:scaleX(0)}40%,100%{transform:scaleX(1)}}
+@keyframes cbStamp{0%,50%{transform:scale(1.6);opacity:0}60%{transform:scale(.95);opacity:1}70%,100%{transform:scale(1);opacity:1}}
+.cb-steady{animation:cbSteady 1.6s ease-in-out infinite}
+.cb-tape{animation:cbTape .8s ease-in-out infinite}
+.cb-tapeline{animation:cbTapeLine 2.6s ease-out infinite}
+.cb-stamp{animation:cbStamp 2.6s ease-out infinite}
 @keyframes cbDots{0%,20%{opacity:.2}50%{opacity:1}100%{opacity:.2}}
 .cb-dot{animation:cbDots 1.2s infinite}
 @media (prefers-reduced-motion: reduce){
-  .cb-float,.cb-float-slow,.cb-jump,.cb-shadow,.cb-tilt,.cb-tilt-small,.cb-droop,.cb-ant,.cb-ant-droop,.cb-bulb,.cb-blink,.cb-look,.cb-wave,.cb-swing,.cb-cheer,.cb-flame,.cb-core,.cb-beam,.cb-conf,.cb-coin,.cb-drop,.cb-dot,.cb-fly,.cb-speed,.cb-box,.cb-bar,.cb-push,.cb-cart,.cb-wheel,.cb-items,.cb-trail{animation:none}
+  .cb-float,.cb-float-slow,.cb-jump,.cb-shadow,.cb-tilt,.cb-tilt-small,.cb-droop,.cb-ant,.cb-ant-droop,.cb-bulb,.cb-blink,.cb-look,.cb-wave,.cb-swing,.cb-cheer,.cb-flame,.cb-core,.cb-beam,.cb-conf,.cb-coin,.cb-drop,.cb-dot,.cb-fly,.cb-speed,.cb-box,.cb-bar,.cb-push,.cb-cart,.cb-wheel,.cb-items,.cb-trail,.cb-steady,.cb-tape,.cb-tapeline,.cb-stamp{animation:none}
 }

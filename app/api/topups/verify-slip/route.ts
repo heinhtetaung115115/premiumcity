@@ -31,6 +31,20 @@ type Out = {
 
 const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] as string));
 
+// Admin alerts for anything that breaks on OUR side. Each kind is sent at most
+// once per 10 minutes per server instance so a broken step can't flood Telegram.
+const lastAlert = new Map<string, number>();
+async function alertAdmin(kind: string, lines: string[]) {
+  const now = Date.now();
+  if (now - (lastAlert.get(kind) ?? 0) < 10 * 60 * 1000) return;
+  lastAlert.set(kind, now);
+  try {
+    await sendTelegramMessage({ text: ['⚠️ <b>KBZ auto top-up problem</b>', ...lines].join('\n') });
+  } catch (e) {
+    console.error('[verify-slip] alert failed:', e);
+  }
+}
+
 export async function POST(req: Request) {
   const session = await getServerSession(authConfig);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -112,9 +126,22 @@ export async function POST(req: Request) {
   let result: VerificationResult;
   try {
     result = await verifyKbzSlip({ imageBase64, mediaType, checkDuplicate, skipAi: fallbackAmount != null });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[verify-slip] error:', err);
+    await alertAdmin('verify-crash', [
+      'Slip check crashed — nothing was added to any wallet.',
+      `👤 ${esc(userEmail)}`,
+      `📝 ${esc(String(err?.message ?? err).slice(0, 300))}`,
+    ]);
     return NextResponse.json({ error: 'Could not read this slip. Please upload a clear screenshot.' }, { status: 422 });
+  }
+
+  if (result.systemError) {
+    await alertAdmin('system', [
+      'A check step failed on our side — customer was asked to upload again.',
+      `👤 ${esc(userEmail)}`,
+      `📝 ${esc(result.systemError)}`,
+    ]);
   }
   console.log('[verify-slip]', result.decision, '|', result.reason, '|', result.transactionId);
 
@@ -150,6 +177,13 @@ export async function POST(req: Request) {
       .maybeSingle();
     if (error) {
       console.error('[verify-slip] insert failed:', error.message);
+      await alertAdmin('insert', [
+        'Could not save a KBZ top-up — nothing was added to the wallet.',
+        `👤 ${esc(userEmail)}`,
+        `💵 ${amount.toLocaleString()} Ks · ${esc(decision)}`,
+        tid ? `🧾 …${esc(tid.slice(-8))}` : '',
+        `📝 ${esc(error.message)}`,
+      ].filter(Boolean));
       return null;
     }
     return (data as any)?.id ?? null;
@@ -181,11 +215,11 @@ export async function POST(req: Request) {
   if (result.decision === 'AI_DOWN') {
     if (fallbackAmount == null) {
       if (result.aiError) {
-        try {
-          await sendTelegramMessage({
-            text: `🚨 <b>Slip AI is DOWN</b>\n⚠️ ${esc(describeAiFailure(result.aiError))}\nCustomers are asked to type the amount; their top-ups wait for your review.`,
-          });
-        } catch {}
+        await alertAdmin('ai-down', [
+          '🚨 <b>Slip AI is DOWN</b>',
+          `⚠️ ${esc(describeAiFailure(result.aiError))}`,
+          'Customers are asked to type the amount; their top-ups wait for your review.',
+        ]);
       }
       return reply({
         status: 'need_amount',
@@ -262,8 +296,16 @@ export async function POST(req: Request) {
         amount,
         balance: await walletBalance(),
       });
-    } catch (err) {
-      if (!(err instanceof TopupAlreadyProcessedError)) console.error('[verify-slip] auto-approve failed:', err);
+    } catch (err: any) {
+      if (!(err instanceof TopupAlreadyProcessedError)) {
+        console.error('[verify-slip] auto-approve failed:', err);
+        await alertAdmin('approve', [
+          'Auto-approve FAILED — the top-up is waiting for you in admin. Check the wallet before approving.',
+          `👤 ${esc(userEmail)}`,
+          `💵 ${amount.toLocaleString()} Ks`,
+          `📝 ${esc(String(err?.message ?? err).slice(0, 300))}`,
+        ]);
+      }
     }
   }
 

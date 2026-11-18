@@ -4,10 +4,11 @@ import { useId } from 'react';
 
 /**
  * City Bot — PremiumCity's mascot.
- * Poses: hello (waves), scan (checks a slip), done (cheers), oops (error).
+ * Poses: hello (waves), scan (checks a slip), done (cheers), oops (error),
+ *        deliver (flies in carrying an order box).
  * Animations live in app/globals.css (classes starting with "cb-").
  */
-export type CityBotPose = 'hello' | 'scan' | 'done' | 'oops';
+export type CityBotPose = 'hello' | 'scan' | 'done' | 'oops' | 'deliver';
 
 const C = {
   body: ['#a7f3d0', '#34d399', '#047857'],
@@ -28,7 +29,7 @@ export default function CityBot({
   const s = useId().replace(/[^a-zA-Z0-9]/g, '');
   const u = (n: string) => `url(#${n}${s})`;
 
-  const floatCls = pose === 'done' ? 'cb-jump' : pose === 'oops' ? 'cb-float-slow' : 'cb-float';
+  const floatCls = pose === 'done' ? 'cb-jump' : pose === 'oops' ? 'cb-float-slow' : pose === 'deliver' ? 'cb-fly' : 'cb-float';
   const headCls = pose === 'oops' ? 'cb-droop' : pose === 'scan' ? 'cb-tilt-small' : 'cb-tilt';
 
   const arm = (side: 'L' | 'R', cls: string, angle: number) => {
@@ -51,6 +52,8 @@ export default function CityBot({
       <>{arm('L', 'cb-swing', 10)}{arm('R', 'cb-swing', 0)}</>
     ) : pose === 'done' ? (
       <>{arm('L', 'cb-cheer', 100)}{arm('R', 'cb-cheer', -100)}</>
+    ) : pose === 'deliver' ? (
+      <>{arm('L', '', 55)}{arm('R', '', -55)}</>
     ) : (
       <>{arm('L', '', -10)}{arm('R', '', 10)}</>
     );
@@ -63,7 +66,7 @@ export default function CityBot({
   );
 
   const eyes =
-    pose === 'hello' ? (
+    pose === 'hello' || pose === 'deliver' ? (
       <g className="cb-look">{blinkEye(85)}{blinkEye(115)}</g>
     ) : pose === 'scan' ? (
       <><rect x={76} y={84} width={18} height={6} rx={3} fill="#a5f3fc" />{blinkEye(115)}</>
@@ -80,7 +83,7 @@ export default function CityBot({
     );
 
   const mouth =
-    pose === 'hello' ? <path d="M92 103 Q100 109 108 103" stroke="#a5f3fc" strokeWidth={3.5} fill="none" strokeLinecap="round" />
+    pose === 'hello' || pose === 'deliver' ? <path d="M92 103 Q100 109 108 103" stroke="#a5f3fc" strokeWidth={3.5} fill="none" strokeLinecap="round" />
     : pose === 'scan' ? <path d="M94 105 L106 105" stroke="#a5f3fc" strokeWidth={3.5} strokeLinecap="round" />
     : pose === 'done' ? <path d="M90 100 Q100 112 110 100 Z" fill="#a5f3fc" />
     : <path d="M92 107 Q100 101 108 107" stroke="#a5f3fc" strokeWidth={3.5} fill="none" strokeLinecap="round" />;
@@ -117,6 +120,9 @@ export default function CityBot({
         <linearGradient id={`bm${s}`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#67e8f9" stopOpacity="0.75" /><stop offset="1" stopColor="#67e8f9" stopOpacity="0" />
         </linearGradient>
+        <linearGradient id={`bx${s}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#34d399" /><stop offset="1" stopColor="#065f46" />
+        </linearGradient>
         <filter id={`gl${s}`} x="-50%" y="-50%" width="200%" height="200%">
           <feGaussianBlur stdDeviation="2.4" />
         </filter>
@@ -137,6 +143,14 @@ export default function CityBot({
             <rect x={40} y={198} width={16} height={16} rx={2} fill="#0f172a" />
           </g>
         </>
+      )}
+
+      {pose === 'deliver' && (
+        <g className="cb-speed">
+          <rect x={4} y={92} width={34} height={4} rx={2} fill="#67e8f9" opacity={0.7} />
+          <rect x={12} y={126} width={26} height={4} rx={2} fill="#a7f3d0" opacity={0.6} />
+          <rect x={0} y={160} width={30} height={4} rx={2} fill="#67e8f9" opacity={0.5} />
+        </g>
       )}
 
       <g className={floatCls} style={pose === 'done' ? { transformOrigin: '100px 198px' } : undefined}>
@@ -184,6 +198,17 @@ export default function CityBot({
           <ellipse cx={72} cy={104} rx={5} ry={3} fill="#f472b6" opacity={0.65} />
           <ellipse cx={128} cy={104} rx={5} ry={3} fill="#f472b6" opacity={0.65} />
         </g>
+
+        {pose === 'deliver' && (
+          <g className="cb-box" style={{ transformOrigin: '100px 200px' }}>
+            {/* order box carried under the body */}
+            <rect x={70} y={182} width={60} height={40} rx={8} fill={u('bx')} />
+            <rect x={70} y={182} width={60} height={11} rx={6} fill="#047857" />
+            <rect x={95} y={182} width={10} height={40} fill={u('gd')} />
+            <path d="M100 182 Q86 168 92 164 Q99 162 100 178 Q101 162 108 164 Q114 168 100 182 Z" fill={u('gd')} />
+            <ellipse cx={82} cy={200} rx={6} ry={3} fill="#ffffff" opacity={0.35} />
+          </g>
+        )}
       </g>
 
       {pose === 'done' && (

@@ -42,6 +42,11 @@ export function describeAiFailure(err: SlipAiUnavailableError): string {
 // ── QR Scanning ─────────────────────────────────────────
 
 export async function scanQrFromImage(imageBase64: string): Promise<string | null> {
+  return (await scanQrFromImageDetailed(imageBase64)).data;
+}
+
+/** Like scanQrFromImage, but also reports if the scanner itself crashed. */
+export async function scanQrFromImageDetailed(imageBase64: string): Promise<{ data: string | null; error: string | null }> {
   try {
     const buf = Buffer.from(imageBase64, 'base64');
 
@@ -67,18 +72,18 @@ export async function scanQrFromImage(imageBase64: string): Promise<string | nul
 
     // Attempt 1: original image
     const r1 = tryQr(await toRgba(sharp(buf)));
-    if (r1) return r1;
+    if (r1) return { data: r1, error: null };
 
     // Attempt 2: normalised
     const r2 = tryQr(await toRgba(sharp(buf).normalise()));
-    if (r2) return r2;
+    if (r2) return { data: r2, error: null };
 
     // Attempt 3: bottom 35% (saved slip / e-receipt format)
     const crop3Top = Math.floor(origH * 0.65);
     const crop3H = origH - crop3Top;
     if (crop3H > 100) {
       const r3 = tryQr(await toRgba(sharp(buf).extract({ left: 0, top: crop3Top, width: origW, height: crop3H }).normalise()));
-      if (r3) return r3;
+      if (r3) return { data: r3, error: null };
     }
 
     // Attempt 4: middle 40-75% region (app screenshot — QR is in middle-bottom area)
@@ -86,7 +91,7 @@ export async function scanQrFromImage(imageBase64: string): Promise<string | nul
     const crop4H = Math.floor(origH * 0.35);
     if (crop4H > 100) {
       const r4 = tryQr(await toRgba(sharp(buf).extract({ left: 0, top: crop4Top, width: origW, height: crop4H }).normalise()));
-      if (r4) return r4;
+      if (r4) return { data: r4, error: null };
     }
 
     // Attempt 5: bottom 50% (wider crop for tall phone screenshots)
@@ -94,7 +99,7 @@ export async function scanQrFromImage(imageBase64: string): Promise<string | nul
     const crop5H = origH - crop5Top;
     if (crop5H > 100) {
       const r5 = tryQr(await toRgba(sharp(buf).extract({ left: 0, top: crop5Top, width: origW, height: crop5H }).normalise()));
-      if (r5) return r5;
+      if (r5) return { data: r5, error: null };
     }
 
     // Attempt 6: bottom 50% upscaled (small QR in tall screenshot)
@@ -105,7 +110,7 @@ export async function scanQrFromImage(imageBase64: string): Promise<string | nul
           .normalise()
           .resize({ width: Math.max(origW * 2, 1400), withoutEnlargement: false })
       ));
-      if (r6) return r6;
+      if (r6) return { data: r6, error: null };
     }
 
     // Attempt 7: center crop (50-80% height, center 80% width)
@@ -120,18 +125,18 @@ export async function scanQrFromImage(imageBase64: string): Promise<string | nul
           .normalise()
           .resize({ width: Math.max(crop7W * 2, 1000), withoutEnlargement: false })
       ));
-      if (r7) return r7;
+      if (r7) return { data: r7, error: null };
     }
 
     // Attempt 8: full image upscaled 2x
     const r8 = tryQr(await toRgba(sharp(buf).normalise().resize({ width: Math.max(origW * 2, 1600), withoutEnlargement: false })));
-    if (r8) return r8;
+    if (r8) return { data: r8, error: null };
 
     console.log('[slip-verify] QR: not found after 8 attempts');
-    return null;
+    return { data: null, error: null };
   } catch (err) {
     console.error('[slip-verify] QR scan error:', err);
-    return null;
+    return { data: null, error: String((err as any)?.message ?? err).slice(0, 300) };
   }
 }
 
@@ -326,6 +331,8 @@ export type VerificationResult = {
   transactionId: string | null;
   amount: number | null;
   aiError?: SlipAiUnavailableError;
+  /** Something on our side broke (not the customer's slip) — alert the admin. */
+  systemError?: string;
 };
 
 /**
@@ -362,8 +369,12 @@ export async function verifyKbzSlip(opts: {
   });
 
   // 1) QR first
-  const qrRaw = await scanQrFromImage(imageBase64);
-  if (!qrRaw) { reasons.push('No QR code found'); return done('RETRY_QR', null); }
+  const scan = await scanQrFromImageDetailed(imageBase64);
+  const qrRaw = scan.data;
+  if (!qrRaw) {
+    reasons.push(scan.error ? 'QR scanner error' : 'No QR code found');
+    return done('RETRY_QR', null, scan.error ? { systemError: `QR scanner crashed: ${scan.error}` } : {});
+  }
   checks.qrFound = true;
   const qr = decodeKbzQr(qrRaw);
   if (!qr) { reasons.push('QR is not a KBZPay receipt QR'); return done('REJECT', 'not_kbz'); }

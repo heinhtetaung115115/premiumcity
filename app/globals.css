@@ -134,8 +134,16 @@ button {
 .cb-conf{animation:cbConf 1.6s linear infinite}
 .cb-coin{animation:cbCoin 1s ease-in-out infinite}
 .cb-drop{animation:cbDrop 1.8s ease-in infinite}
+@keyframes cbFly{0%,100%{transform:translate(0,0) rotate(-4deg)}50%{transform:translate(6px,-8px) rotate(-6deg)}}
+@keyframes cbSpeed{0%{transform:translateX(30px);opacity:0}30%{opacity:1}100%{transform:translateX(-30px);opacity:0}}
+@keyframes cbBox{0%,100%{transform:rotate(0)}50%{transform:rotate(-3deg)}}
+.cb-fly{animation:cbFly 1.4s ease-in-out infinite}
+.cb-speed{animation:cbSpeed .7s linear infinite}
+.cb-box{animation:cbBox 1.4s ease-in-out infinite}
+@keyframes cbBar{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+.cb-bar{animation:cbBar 1.4s ease-in-out infinite}
 @keyframes cbDots{0%,20%{opacity:.2}50%{opacity:1}100%{opacity:.2}}
 .cb-dot{animation:cbDots 1.2s infinite}
 @media (prefers-reduced-motion: reduce){
-  .cb-float,.cb-float-slow,.cb-jump,.cb-shadow,.cb-tilt,.cb-tilt-small,.cb-droop,.cb-ant,.cb-ant-droop,.cb-bulb,.cb-blink,.cb-look,.cb-wave,.cb-swing,.cb-cheer,.cb-flame,.cb-core,.cb-beam,.cb-conf,.cb-coin,.cb-drop,.cb-dot{animation:none}
+  .cb-float,.cb-float-slow,.cb-jump,.cb-shadow,.cb-tilt,.cb-tilt-small,.cb-droop,.cb-ant,.cb-ant-droop,.cb-bulb,.cb-blink,.cb-look,.cb-wave,.cb-swing,.cb-cheer,.cb-flame,.cb-core,.cb-beam,.cb-conf,.cb-coin,.cb-drop,.cb-dot,.cb-fly,.cb-speed,.cb-box,.cb-bar{animation:none}
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useFormStatus } from 'react-dom';
+import OrderProcessingOverlay from '@/components/OrderProcessingOverlay';
 import { useMemo, useState, useEffect } from 'react';
 import { purchaseProductAction } from './actions';
 
@@ -304,18 +305,8 @@ function PurchaseFormInner({
 
   return (
     <>
-      {/* Full-screen loading overlay when purchase is processing */}
-      {pending && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900 px-6 py-5 shadow-lg">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
-            <p className="text-sm text-slate-100">Processing your order…</p>
-            <p className="text-[11px] text-slate-400">
-              Please don&apos;t close the page or click again.
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Full-screen order animation while the purchase is processing */}
+      {pending && <OrderProcessingOverlay productName={product?.name} />}
 
       {/* hidden ids */}
       <input type="hidden" name="productId" value={product.id} />
